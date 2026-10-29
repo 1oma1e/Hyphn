@@ -1,0 +1,57 @@
+# Roadmap
+
+Une phase à la fois, chacune avec une porte de sortie **mesurable**. On passe à la suivante seulement avec la preuve et l'accord écrit d'Evan. Android seulement quand toute la partie iPhone est finie. Source : [[CAHIER]] section 8, corrigée par les ADR.
+
+**Phase actuelle : 0 — Fondations.**
+
+## Phase 0 — Fondations
+Porte : un « Hello » SwiftUI construit par xtool tourne sur l'iPhone et se rafraîchit **tout seul** pendant 14 jours. Étape intermédiaire proposée : la phase 1 commence au premier rafraîchissement automatique réussi ([[ADR-0007 Porte de la phase 0]]).
+
+- [x] Recherche : Claude Code, concurrents, points à tester ([[Points a tester]]) — 2026-10-29
+- [x] Règles, docs, skills, hooks, reviewer — 2026-10-29
+- [x] Maquettes texte + Mermaid ([[Maquettes - Index]]) — 2026-10-29, **à valider par Evan**
+- [ ] Nom validé par Evan ([[ADR-0004 Nom Hyphn]])
+- [ ] Serveur : état relevé en lecture seule (OS, architecture, disque, RAM, Docker)
+- [ ] Serveur : `anisette-v3-server` en Docker, réseau local seulement, `--restart always` ; preuve : réponse de `curl http://<ip-serveur>:6969`
+- [ ] Apple ID secondaire dédié créé par Evan (jamais dans le repo)
+- [ ] Serveur : Swift + xtool + usbmuxd ; SDK iOS tiré de `Xcode.xip` (téléchargé par Evan) ; preuve : `xtool --help` et `xtool sdk` OK
+- [ ] iPhone : mode développeur, code de verrouillage, LocalDevVPN (App Store)
+- [ ] PC : iloader installe SideStore une fois, avec l'Apple ID secondaire ; SideStore pointe vers l'anisette du serveur
+- [ ] « Hello » SwiftUI construit par xtool, installé par SideStore ; preuve : capture de l'app ouverte
+- [ ] Raccourci quotidien « Refresh All » (avec LocalDevVPN connecté)
+- [ ] Plan B testé une fois : AltServer-Linux + netmuxd
+- [ ] Premier rafraîchissement automatique réussi (J+7)
+- [ ] 14 jours sans action manuelle ; journal des rafraîchissements
+
+## Phase 1 — Socle
+Bonjour, appairage QR, TLS épinglé, Pulse (batterie, thermique). Mesure de la consommation au repos (budget). Lecture batterie par câble ([[ADR-0006 Sante batterie par cable]]). Ajout du hook `Stop` « build et tests verts ».
+Porte : l'iPhone apparaît sur le PC **en moins de 3 s** après le scan, et sans re-scan au lancement suivant.
+
+## Phase 2 — Drop v1
+Photothèque, envoi vers le PC, progression et temps restant, tri Année/Mois. Essai de l'envoi en arrière-plan ([[ADR-0005 Drop par HTTPS et blocs]]).
+Porte : **10 Go** transférés sans erreur, hash vérifiés.
+
+## Phase 3 — Drop v2
+Câble (libimobiledevice), PC → iPhone, reprise après coupure, doublons, sauvegarde auto.
+Porte : coupure Wi-Fi en plein transfert, **reprise sans rien renvoyer**.
+
+## Phase 4 — Cam v1
+1080p30 HEVC vers une fenêtre sur le PC, mesure de latence.
+Porte : latence de bout en bout mesurée et notée, **30 min** sans décrochage.
+
+## Phase 5 — Cam v2
+Webcam virtuelle Windows, plugin OBS, tous les réglages, 4K60, adaptation thermique.
+Porte : Discord et OBS voient la caméra, **1 h** de stream sans arrêt thermique.
+
+## Phase 6 — Finition
+Budget batterie respecté, tests, UX, doc utilisateur.
+Porte : tous les budgets de [[RULES]] (section Énergie) tenus.
+
+## Phase 7 — Android (Samsung)
+App Kotlin sur le même protocole et la même app PC.
+Porte : mêmes portes que les phases 1 à 5.
+
+## Plus tard
+Partage d'écran iPhone (extension ReplayKit) : quand xtool construit les extensions de façon fiable (voir [[Points a tester]]). Idées classées : [[IDEES]].
+
+Liens : [[STATE]], [[00-Accueil]]

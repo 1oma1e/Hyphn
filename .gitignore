@@ -1,0 +1,28 @@
+# Secrets (Apple ID, données anisette, certificats)
+.env
+.env.*
+!.env.example
+secrets/
+*.p12
+*.mobileprovision
+
+# Builds
+target/
+.build/
+build/
+dist/
+node_modules/
+*.ipa
+
+# Obsidian : réglages personnels du vault
+docs/.obsidian/workspace*.json
+docs/.obsidian/cache
+
+# Claude Code : réglages personnels
+.claude/settings.local.json
+CLAUDE.local.md
+
+# Système
+Thumbs.db
+desktop.ini
+.DS_Store

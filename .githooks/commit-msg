@@ -1,0 +1,6 @@
+#!/bin/sh
+# Evan signs his commits alone: refuse any attribution trailer to Claude.
+if grep -qiE '^co-authored-by:.*(claude|anthropic)' "$1"; then
+  echo "Commit refused: remove the Co-Authored-By line (Evan's rule, see docs/RULES.md)." >&2
+  exit 1
+fi

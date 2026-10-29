@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Read(./**/*.p12)",
+      "Read(./**/*.mobileprovision)",
+      "Edit(./docs/CAHIER.md)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "PowerShell(git push *)",
+      "Bash(git reset --hard *)",
+      "PowerShell(git reset --hard *)",
+      "Bash(rm -rf *)",
+      "PowerShell(Remove-Item *)",
+      "Bash(docker system prune *)",
+      "Bash(docker volume rm *)",
+      "Bash(ssh * docker rm *)",
+      "Bash(ssh * docker volume rm *)",
+      "Bash(ssh * docker system prune *)",
+      "Bash(ssh * sudo *)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.ps1\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
