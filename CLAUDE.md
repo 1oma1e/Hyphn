@@ -29,7 +29,7 @@ L'état exact et la prochaine étape sont dans `docs/STATE.md` (affiché au dém
 - Une étape manuelle sur l'iPhone ou le serveur : lui dire exactement où cliquer et quoi regarder, puis attendre sa confirmation.
 
 ## Serveur Linux (build et infra)
-- Les builds iOS, le serveur anisette et AltServer tournent sur le serveur Linux 24/7 d'Evan, en Docker. Le PC et l'iPhone n'en dépendent jamais pour streamer ou transférer.
+- Les builds iOS, le serveur anisette et AltServer tournent sur le serveur Linux 24/7 d'Evan (Debian 13, `ssh evan@192.168.1.63`), en Docker. Evan a un Mac, mais Xcode ne sert qu'à la fin (ADR-0009). Le PC et l'iPhone n'en dépendent jamais pour streamer ou transférer.
 - Sur ce serveur tournent aussi d'autres conteneurs d'Evan (Home Assistant, Nginx Proxy Manager…) : ne jamais les toucher, ni le pare-feu ; rien d'ouvert sur internet.
 - Aucun identifiant Apple dans le repo, les logs ou les réponses : il vit dans un fichier ignoré par git sur le serveur.
 

@@ -52,6 +52,6 @@ App Kotlin sur le même protocole et la même app PC.
 Porte : mêmes portes que les phases 1 à 5.
 
 ## Plus tard
-Partage d'écran iPhone (extension ReplayKit) : quand xtool construit les extensions de façon fiable (voir [[Points a tester]]). Idées classées : [[IDEES]].
+Partage d'écran iPhone (extension ReplayKit) : quand xtool construit les extensions de façon fiable (voir [[Points a tester]]), sinon avec Xcode sur le Mac d'Evan, en dernier ([[ADR-0009 Serveur et Mac]]). Idées classées : [[IDEES]].
 
 Liens : [[STATE]], [[00-Accueil]]
