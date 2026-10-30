@@ -20,6 +20,6 @@ Pour se connecter avec un Apple ID hors d'un appareil Apple, iloader, SideStore 
 
 ## Conséquences
 - Une panne de `mac-ani.jkcoxson.com` bloque connexion et rafraîchissement : surveiller les rafraîchissements (porte de la phase 0).
-- `xtool setup` sur le serveur utilisera la même anisette (non vérifié).
+- xtool 1.24.0 utilise la même anisette : `mac-ani.jkcoxson.com` est codée en dur (`OmnisetteADIProvider.swift`, sans réglage), et l'identité de l'appareil vient du même serveur. `xtool ds anisette` sur le serveur : OK le 2026-10-30, identité annoncée « Mac OS X 10.12.6 ». `xtool setup` avec l'Apple ID secondaire : connecté le 2026-10-30 (jeton valable 1 an), après le contournement 2FA de xtool-org/xtool#368 (code affiché sur l'iPhone via le compte ajouté dans Mail).
 - À revoir à chaque version de SideStore, iloader et xtool ; décider plus tard d'arrêter ou non `hyphn-anisette`.
 - Sources : blog Ixion « sideloading error -80046 » (2026-10-24), nab138/iloader#859, README d'iPASide.
