@@ -9,7 +9,7 @@ Ce que Hyphn fait tourner sur le serveur Linux d'Evan, et comment c'est rangé. 
 - Autres conteneurs d'Evan (on n'y touche **jamais**) : Home Assistant, Nginx Proxy Manager (seul à écouter sur 80/443 publics), cloudflare-ddns, pairdrop, ollama, tv-accueil, apphome.
 
 ## Rangement
-- Tout Hyphn vit dans `~/hyphn/` (droits 700), **un dossier par service** : `~/hyphn/anisette/`, plus tard `~/hyphn/xtool/`, `~/hyphn/altserver/`.
+- Tout Hyphn vit dans `~/hyphn/` (droits 700), **un dossier par service** : `~/hyphn/anisette/`, `~/hyphn/xtool/`, plus tard `~/hyphn/altserver/`.
 - Chaque dossier contient le `docker-compose.yml` copié depuis `infra/<service>/` du repo. Le repo est la source : on modifie dans le repo, puis on copie.
 - Noms Docker préfixés `hyphn-` (projet, conteneur, volume, réseau) pour les reconnaître d'un coup d'œil.
 - Ports liés à `192.168.1.63` seulement, jamais `0.0.0.0` : rien n'est joignable depuis internet, même si un port était transféré sur la box.
@@ -30,5 +30,21 @@ Ce que Hyphn fait tourner sur le serveur Linux d'Evan, et comment c'est rangé. 
 | Tester depuis le PC | `curl http://192.168.1.63:6969` → JSON avec `X-Apple-I-MD` et `X-Apple-I-MD-M` |
 
 À ne **pas** faire : `docker compose down -v` (efface l'identité ; SideStore devrait se reconnecter).
+
+## xtool
+- Image officielle `ghcr.io/xtool-org/xtool:1.24.0` (Swift 6.4.1 + xtool, 4,4 Go), version **figée** dans le compose : on la monte exprès. Pas un service permanent : un conteneur jetable par commande (`docker compose run --rm`).
+- Pourquoi Docker plutôt qu'une installation directe : rien n'est installé sur le système du serveur (Swift reste dans l'image), on supprime tout en une commande, et c'est le même rangement que l'anisette ([[ADR-0010 Rangement du serveur]]).
+- Volume `hyphn-xtool_home` monté sur `/root` : le SDK iOS (`/root/.swiftpm/swift-sdks/darwin.artifactbundle`, ≈ 7 Go) et plus tard la session Apple de xtool. **Secret** dès qu'on s'y connecte.
+- `~/hyphn/xtool/` est monté sur `/work` : il contient `Xcode_27.2.xip` (SHA-256 `c28b0552…f01978`, gardé pour reconstruire le SDK) et contiendra les sources de l'app.
+- SDK installé le 2026-10-30 depuis Xcode 27.2 (iPhoneOS 27.2, mode `normal`, donc `xtool sdk update` possible), sans connexion Apple, en 2 min 38 s. L'installation télécharge aussi `OpenAppleMacros` sur internet.
+- usbmuxd de l'hôte (1.1.1) n'est **pas** relié au conteneur : inutile tant que l'installation sur l'iPhone passe par SideStore.
+
+### Commandes (dans `~/hyphn/xtool/`)
+| But | Commande |
+|---|---|
+| Aide | `docker compose run --rm xtool --help` |
+| État du SDK | `docker compose run --rm xtool sdk status` |
+| SDK visible par Swift | `docker compose run --rm --entrypoint swift xtool sdk list` → `darwin` |
+| Mettre à jour xtool | changer le tag dans `infra/xtool/docker-compose.yml`, copier, `docker compose pull` |
 
 Liens : [[ARCHITECTURE]], [[ROADMAP]], [[00-Accueil]]

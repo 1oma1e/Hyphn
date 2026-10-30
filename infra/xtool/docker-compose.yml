@@ -1,0 +1,24 @@
+# xtool (Swift 6.4.1 + xtool) for building the iOS app (phase 0).
+# Deployed on the build server in ~/hyphn/xtool/ (see docs/Serveur.md).
+# Not a daemon: run one command at a time, e.g.
+#   docker compose run --rm xtool --help
+#   docker compose run --rm xtool sdk install /work/Xcode_27.2.xip
+name: hyphn-xtool
+
+services:
+  xtool:
+    # Official image built by xtool's release workflow; pinned, bump on purpose.
+    image: ghcr.io/xtool-org/xtool:1.24.0
+    entrypoint: ["xtool"]
+    working_dir: /work
+    volumes:
+      # The installed Darwin SDK (~/.swiftpm) and xtool's login/config live in
+      # /root: keep them across runs. Secret (Apple session), stays here.
+      - home:/root
+      # This folder: Xcode.xip now, the app sources later.
+      - .:/work
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  home:

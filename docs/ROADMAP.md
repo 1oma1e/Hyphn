@@ -14,7 +14,7 @@ Porte : un « Hello » SwiftUI construit par xtool tourne sur l'iPhone et se raf
 - [x] Serveur : état relevé en lecture seule (OS, architecture, disque, RAM, Docker) ([[Serveur]]) — 2026-10-30
 - [x] Serveur : `anisette-v3-server` en Docker, réseau local seulement, `--restart always` ; preuve : réponse de `curl http://<ip-serveur>:6969` — 2026-10-30
 - [ ] Apple ID secondaire dédié créé par Evan (jamais dans le repo)
-- [ ] Serveur : Swift + xtool + usbmuxd ; SDK iOS tiré de `Xcode.xip` (téléchargé par Evan) ; preuve : `xtool --help` et `xtool sdk` OK
+- [x] Serveur : xtool 1.24.0 + Swift 6.4.1 en Docker ([[Serveur]]) ; SDK iOS 27.2 tiré de `Xcode.xip` (téléchargé par Evan) ; preuve : `xtool --help` et `xtool sdk status` OK — 2026-10-30
 - [ ] iPhone : mode développeur, code de verrouillage, LocalDevVPN (App Store)
 - [ ] PC : iloader installe SideStore une fois, avec l'Apple ID secondaire ; SideStore pointe vers l'anisette du serveur
 - [ ] « Hello » SwiftUI construit par xtool, installé par SideStore ; preuve : capture de l'app ouverte

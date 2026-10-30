@@ -12,7 +12,8 @@ Toutes les sources consultées le 2026-10-29 pour préparer le projet. Chaque no
 
 ## Build et installation sans Mac
 - [xtool — GitHub](https://github.com/xtool-org/xtool)
-- [xtool — installation Linux](https://xtool.sh/documentation/xtooldocs/installation-linux) (page à relire en phase 0 : son contenu n'a pas pu être lu automatiquement)
+- [xtool — installation Linux](https://xtool.sh/documentation/xtool/installation-linux) (lue le 2026-10-30 : Swift 6.4, usbmuxd, Xcode 27)
+- [xtool — Dockerfile et image `ghcr.io/xtool-org/xtool`](https://github.com/xtool-org/xtool/blob/main/Dockerfile)
 - [xtool #313 — extension widget vide puis plantage](https://github.com/xtool-org/xtool/issues/313)
 - [xtool #379 — signature des extensions qui échoue (xtool 1.21.0)](https://github.com/xtool-org/xtool/issues/379)
 - [xtool #353 — clés mal écrites de xtool.yml ignorées sans erreur](https://github.com/xtool-org/xtool/issues/353)
