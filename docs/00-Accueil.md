@@ -30,4 +30,4 @@ Le trait d'union entre l'iPhone et le PC : **Cam** (webcam 4K), **Drop** (transf
 
 ## Specs et journal
 - [[Specs - Index]] — une spec par fonctionnalité (à partir de la phase 1)
-- `sessions/` — un journal par session, le plus récent : [[2026-10-29]]
+- `sessions/` — un journal par session, le plus récent : [[2026-10-30]]

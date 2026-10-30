@@ -13,5 +13,6 @@ Une décision par fichier, numérotée. Modèle : `_modele.md`. Statuts : `propo
 | [[ADR-0007 Porte de la phase 0]] | Phase 1 dès le premier rafraîchissement auto réussi | propose |
 | [[ADR-0008 Une spec par fonctionnalite]] | Spec avant code, relue par le reviewer | propose |
 | [[ADR-0009 Serveur et Mac]] | Build sur le Debian 192.168.1.63 ; Mac + Xcode seulement à la fin | accepte (2026-10-29) |
+| [[ADR-0010 Rangement du serveur]] | `~/hyphn/<service>`, noms `hyphn-`, ports LAN seulement | propose |
 
 Liens : [[00-Accueil]]
