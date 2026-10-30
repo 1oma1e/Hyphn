@@ -11,6 +11,7 @@ Le trait d'union entre l'iPhone et le PC : **Cam** (webcam 4K), **Drop** (transf
 - [[CAHIER]] — cahier de conception d'origine (figé)
 - [[VISION]] — vision vivante, ce qu'on promet et ce qu'on ne promet pas
 - [[ARCHITECTURE]] — machines, stack, build sans Mac
+- [[Serveur]] — ce qui tourne sur le serveur de build et comment c'est rangé
 - [[IDEES]] — idées classées par phase, valeur et effort
 
 ## Maquettes

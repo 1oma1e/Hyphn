@@ -11,8 +11,8 @@ Porte : un « Hello » SwiftUI construit par xtool tourne sur l'iPhone et se raf
 - [x] Règles, docs, skills, hooks, reviewer — 2026-10-29
 - [x] Maquettes texte + Mermaid ([[Maquettes - Index]]) — 2026-10-29, **à valider par Evan**
 - [ ] Nom validé par Evan ([[ADR-0004 Nom Hyphn]])
-- [ ] Serveur : état relevé en lecture seule (OS, architecture, disque, RAM, Docker)
-- [ ] Serveur : `anisette-v3-server` en Docker, réseau local seulement, `--restart always` ; preuve : réponse de `curl http://<ip-serveur>:6969`
+- [x] Serveur : état relevé en lecture seule (OS, architecture, disque, RAM, Docker) ([[Serveur]]) — 2026-10-30
+- [x] Serveur : `anisette-v3-server` en Docker, réseau local seulement, `--restart always` ; preuve : réponse de `curl http://<ip-serveur>:6969` — 2026-10-30
 - [ ] Apple ID secondaire dédié créé par Evan (jamais dans le repo)
 - [ ] Serveur : Swift + xtool + usbmuxd ; SDK iOS tiré de `Xcode.xip` (téléchargé par Evan) ; preuve : `xtool --help` et `xtool sdk` OK
 - [ ] iPhone : mode développeur, code de verrouillage, LocalDevVPN (App Store)

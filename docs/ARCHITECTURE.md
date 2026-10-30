@@ -77,7 +77,7 @@ apps/ios/      SwiftPM + xtool.yml            (phase 0 : Hello)
 apps/desktop/  Rust + Tauri                   (phase 1)
 apps/desktop-vcam/  DLL C++ webcam virtuelle  (phase 5)
 apps/obs-plugin/                              (phase 5)
-infra/         docker-compose : anisette, altserver  (phase 0)
+infra/         un docker-compose par service : anisette/, altserver/  (phase 0, voir Serveur.md)
 apps/android/                                 (phase 7)
 ```
 Les dossiers n'existent qu'à partir de la phase indiquée : pas de dossier vide.

@@ -1,0 +1,30 @@
+# Anisette server for SideStore / xtool (phase 0).
+# Deployed on the build server in ~/hyphn/anisette/ (see docs/Serveur.md).
+# LAN only: the port is bound to the server's LAN IP, never 0.0.0.0.
+name: hyphn-anisette
+
+services:
+  anisette:
+    image: dadoum/anisette-v3-server:latest
+    container_name: hyphn-anisette
+    restart: always
+    ports:
+      - "192.168.1.63:6969:6969"
+    volumes:
+      # Whole config dir, not only lib/ as in the upstream README: adi.pb and
+      # device.json (the device identity) live next to lib/ and must survive
+      # a recreate, or Apple sees a new device each time. Secret, stays here.
+      - data:/home/Alcoholic/.config/anisette-v3/
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  data:
