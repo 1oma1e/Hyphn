@@ -8,6 +8,8 @@ Idées à ajouter petit à petit. **Aucune n'est validée** : Evan choisit, puis
 | Journal automatique des rafraîchissements SideStore (date + réussi) sur le serveur | ★★★ | S | Preuve de la porte de phase 0 sans compter à la main |
 | Healthcheck Docker de l'anisette + alerte (ntfy ou e-mail) si elle tombe | ★★ | S | Une anisette morte = plus de rafraîchissement |
 | Script `infra/` qui reconstruit et sert le `.ipa` sur le réseau local | ★★ | S | Installer une nouvelle version en 2 touches dans SideStore |
+| Raccourci iOS : couper WireGuard → LocalDevVPN → Refresh All → remettre WireGuard (action « Set VPN », non vérifiée) | ★★ | S | iOS n'accepte qu'un VPN à la fois |
+| Revenir à une anisette locale dès qu'un outil annonce Android pour la connexion et Mac pour le jeton (méthode Apparition) | ★★ | M | Ne plus dépendre de `mac-ani.jkcoxson.com` ([[ADR-0012 Anisette Mac publique]]) |
 
 ## Phase 1 — Socle
 | Idée | Valeur | Effort | Pourquoi |

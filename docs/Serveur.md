@@ -16,7 +16,8 @@ Ce que Hyphn fait tourner sur le serveur Linux d'Evan, et comment c'est rangé. 
 
 ## Anisette
 - Conteneur `hyphn-anisette`, image `dadoum/anisette-v3-server:latest` (v2.2.2, image du 2026-10-01), port `192.168.1.63:6969`, `restart: always`.
-- Rôle : fournir les en-têtes `X-Apple-I-MD*` qu'Apple exige pour se connecter avec un Apple ID hors d'un appareil Apple. xtool et SideStore les demandent ici.
+- Rôle prévu : fournir les en-têtes `X-Apple-I-MD*` qu'Apple exige pour se connecter avec un Apple ID hors d'un appareil Apple.
+- **Inutilisé depuis le 2026-10-30** : c'est une anisette « Android », et Apple la refuse (`-80045`). iloader et SideStore passent par `mac-ani.jkcoxson.com` ([[ADR-0012 Anisette Mac publique]]). Le conteneur tourne encore ; l'arrêter ou non reste à décider.
 - Volume `hyphn-anisette_data` monté sur **tout** `~/.config/anisette-v3/` du conteneur. Le README officiel ne monte que `lib/` : l'identité (`adi.pb`, `device.json`) serait alors perdue à chaque recréation et Apple verrait un nouvel appareil. Vérifié : identité identique après `restart` et après `up -d --force-recreate`.
 - Ce volume et les logs du conteneur contiennent des données anisette : **secrets**, ils ne quittent jamais le serveur. Logs limités à 3 × 10 Mo.
 - Durcissement : `no-new-privileges`, toutes les capacités Linux retirées, mémoire limitée à 512 Mo (≈ 155 Mo utilisés).

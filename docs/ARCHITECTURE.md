@@ -58,7 +58,7 @@ flowchart LR
   Code[Repo Hyphn] --> X[Serveur : xtool build + signature avec l'Apple ID secondaire]
   X --> IPA[.ipa]
   IPA --> SS[SideStore sur l'iPhone, via LocalDevVPN]
-  ANI[anisette-v3-server Docker] --> SS
+  ANI[anisette Mac publique mac-ani.jkcoxson.com - ADR-0012] --> SS
   SS --> APP[Hyphn installé]
   SC[Raccourci quotidien Refresh All] --> SS
   ALT[Plan B : AltServer-Linux + netmuxd] -.-> APP
