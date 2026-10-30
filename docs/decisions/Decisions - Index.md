@@ -14,5 +14,6 @@ Une décision par fichier, numérotée. Modèle : `_modele.md`. Statuts : `propo
 | [[ADR-0008 Une spec par fonctionnalite]] | Spec avant code, relue par le reviewer | propose |
 | [[ADR-0009 Serveur et Mac]] | Build sur le Debian 192.168.1.63 ; Mac + Xcode seulement à la fin | accepte (2026-10-29) |
 | [[ADR-0010 Rangement du serveur]] | `~/hyphn/<service>`, noms `hyphn-`, ports LAN seulement | propose |
+| [[ADR-0011 xtool en Docker]] | Image officielle xtool 1.24.0 figée, `~/hyphn/xtool`, SDK dans un volume | accepte (2026-10-30) |
 
 Liens : [[00-Accueil]]
