@@ -35,8 +35,12 @@ Ce que Hyphn fait tourner sur le serveur Linux d'Evan, et comment c'est rangé. 
 ## xtool
 - Image officielle `ghcr.io/xtool-org/xtool:1.24.0` (Swift 6.4.1 + xtool, 4,4 Go), version **figée** dans le compose : on la monte exprès. Pas un service permanent : un conteneur jetable par commande (`docker compose run --rm`).
 - Pourquoi Docker plutôt qu'une installation directe : rien n'est installé sur le système du serveur (Swift reste dans l'image), on supprime tout en une commande, et c'est le même rangement que l'anisette ([[ADR-0010 Rangement du serveur]], [[ADR-0011 xtool en Docker]]).
-- Volume `hyphn-xtool_home` monté sur `/root` : le SDK iOS (`/root/.swiftpm/swift-sdks/darwin.artifactbundle`, ≈ 7 Go) et plus tard la session Apple de xtool. **Secret** dès qu'on s'y connecte.
-- `~/hyphn/xtool/` est monté sur `/work` : il contient `Xcode_27.2.xip` (SHA-256 `c28b0552…f01978`, gardé pour reconstruire le SDK) et contiendra les sources de l'app.
+- Volume `hyphn-xtool_home` monté sur `/root` : le SDK iOS (`/root/.swiftpm/swift-sdks/darwin.artifactbundle`, ≈ 7 Go) et la session Apple de xtool (Apple ID secondaire, connectée le 2026-10-30, jeton valable 1 an). **Secret.**
+- `~/hyphn/xtool/` est monté sur `/work` : `Xcode_27.2.xip` (SHA-256 `c28b0552…f01978`, gardé pour reconstruire le SDK), `src/` (clone du repo) et `out/` (le `.ipa`).
+- Accès au repo privé : clé de déploiement **lecture seule** dans `~/hyphn/git/` (`deploy_hyphn`, `known_hosts`), utilisée par `core.sshCommand` du clone ; rien dans `~/.ssh` ([[ADR-0013 Build iOS par clone Git]]).
+- xtool utilise toujours l'anisette `mac-ani.jkcoxson.com` (codée en dur), pas `hyphn-anisette` ([[ADR-0012 Anisette Mac publique]]).
+- Connexion (`xtool setup`, par Evan) : si aucun code 2FA n'arrive, ajouter l'Apple ID secondaire dans Mail sur l'iPhone, déclencher une connexion sur account.apple.com et recopier dans xtool le code affiché sur l'iPhone (xtool-org/xtool#368).
+- Pare-feu du serveur : un port non ouvert (ex. un `http.server` de test) n'est pas joignable depuis le PC. On n'y touche pas.
 - SDK installé le 2026-10-30 depuis Xcode 27.2 (iPhoneOS 27.2, mode `normal`, donc `xtool sdk update` possible), sans connexion Apple, en 2 min 38 s. L'installation télécharge aussi `OpenAppleMacros` sur internet.
 - usbmuxd de l'hôte (1.1.1) n'est **pas** relié au conteneur : inutile tant que l'installation sur l'iPhone passe par SideStore.
 
@@ -47,5 +51,13 @@ Ce que Hyphn fait tourner sur le serveur Linux d'Evan, et comment c'est rangé. 
 | État du SDK | `docker compose run --rm xtool sdk status` |
 | SDK visible par Swift | `docker compose run --rm --entrypoint swift xtool sdk list` → `darwin` |
 | Mettre à jour xtool | changer le tag dans `infra/xtool/docker-compose.yml`, copier, `docker compose pull` |
+| Tester l'anisette (sans identifiants) | `docker compose run --rm -T xtool ds anisette` → en-têtes `X-Apple-I-MD*` (secrets : ne pas les afficher) |
+| Se connecter à Apple (Evan) | `docker compose run --rm -it xtool setup` |
+| Récupérer le code | `git -C src pull` |
+| Builder le `.app` | `docker compose run --rm -T -w /work/src/apps/ios xtool dev build` → `src/apps/ios/xtool/Hyphn.app` |
+| Faire le `.ipa` | `T=$(mktemp -d); mkdir $T/Payload; cp -a src/apps/ios/xtool/Hyphn.app $T/Payload/; (cd $T && python3 -m zipfile -c ~/hyphn/xtool/out/Hyphn.ipa Payload/); rm -rf $T` |
+| Copier le `.ipa` sur le PC | `scp evan@192.168.1.63:hyphn/xtool/out/Hyphn.ipa F:/Hyphn/out/` (depuis le PC) |
+
+Pas de `xtool dev build --ipa` : l'image n'a pas `zip`, la commande échoue et efface le `.app`.
 
 Liens : [[ARCHITECTURE]], [[ROADMAP]], [[00-Accueil]]

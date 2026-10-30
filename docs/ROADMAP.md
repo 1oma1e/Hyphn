@@ -17,8 +17,8 @@ Porte : un « Hello » SwiftUI construit par xtool tourne sur l'iPhone et se raf
 - [x] Serveur : xtool 1.24.0 + Swift 6.4.1 en Docker ([[Serveur]]) ; SDK iOS 27.2 tiré de `Xcode.xip` (téléchargé par Evan) ; preuve : `xtool --help` et `xtool sdk status` OK — 2026-10-30
 - [x] iPhone : mode développeur, code de verrouillage, LocalDevVPN (App Store) — 2026-10-30
 - [x] PC : iloader installe SideStore une fois, avec l'Apple ID secondaire ; anisette `mac-ani.jkcoxson.com` ([[ADR-0012 Anisette Mac publique]]) ; preuve : « Refresh All » réussi (confirmé par Evan) — 2026-10-30
-- [ ] « Hello » SwiftUI construit par xtool, installé par SideStore ; preuve : capture de l'app ouverte
-- [ ] Raccourci quotidien « Refresh All » (avec LocalDevVPN connecté)
+- [x] « Hello » SwiftUI construit par xtool, installé par SideStore ; preuve : capture de l'app ouverte (confirmé par Evan, sans capture) — 2026-10-31
+- [x] Raccourci « Refresh All » (avec LocalDevVPN connecté) : `Refresh SideStore` (Connect VPN → Refresh All Apps → Disconnect), automatisation lundi et jeudi à 20 h ; test à la main OK (confirmé par Evan) — 2026-10-31
 - [ ] Plan B testé une fois : AltServer-Linux + netmuxd
 - [ ] Premier rafraîchissement automatique réussi (J+7)
 - [ ] 14 jours sans action manuelle ; journal des rafraîchissements

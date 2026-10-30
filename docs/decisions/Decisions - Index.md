@@ -16,5 +16,6 @@ Une décision par fichier, numérotée. Modèle : `_modele.md`. Statuts : `propo
 | [[ADR-0010 Rangement du serveur]] | `~/hyphn/<service>`, noms `hyphn-`, ports LAN seulement | propose |
 | [[ADR-0011 xtool en Docker]] | Image officielle xtool 1.24.0 figée, `~/hyphn/xtool`, SDK dans un volume | accepte (2026-10-30) |
 | [[ADR-0012 Anisette Mac publique]] | Anisette `mac-ani.jkcoxson.com` (Apple refuse l'anisette Android), exception au « tout local » | accepte (2026-10-30) |
+| [[ADR-0013 Build iOS par clone Git]] | Clone du repo sur le serveur (clé de déploiement lecture seule), bundle ID `io.github.1oma1e.hyphn`, `.ipa` zippé en Python | accepte (2026-10-31) |
 
 Liens : [[00-Accueil]]
