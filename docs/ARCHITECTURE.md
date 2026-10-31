@@ -40,7 +40,7 @@ Le QR code affiché par le PC contient : IP, port, empreinte du certificat du PC
 | App iPhone | Swift 6, SwiftUI, AVFoundation, VideoToolbox, PhotoKit, Network.framework | Natif = pleine qualité caméra et meilleure efficacité énergétique |
 | Build iPhone | xtool (paquet SwiftPM + `xtool.yml`) sur le serveur Linux | Pas de Mac |
 | App PC | Rust + Tauri, FFmpeg (ou Media Foundation) pour le décodage GPU | Léger, rapide, bon pour le réseau ; Evan connaît déjà Tauri (SafeSweep) |
-| Webcam virtuelle | DLL C++ Media Foundation, à partir de VCamSample | Seule API officielle sous Windows 11 |
+| Webcam virtuelle | DLL C++ Media Foundation, à partir de VCamSample ; reçoit le flux compressé par tuyau nommé et décode sur la carte graphique ([[ADR-0022 Webcam Windows par DLL qui decode]]) | Seule API officielle sous Windows 11 ; sobre (rien n'est décodé si personne ne regarde) |
 | Protocole | Protobuf versionné dans `protocol/` | Un seul contrat pour iPhone, PC et plus tard Android |
 | Infra | Docker Compose sur le serveur, dans `infra/` | Tout redémarre seul |
 
@@ -69,13 +69,13 @@ Règles : toujours le même Apple ID secondaire (sinon les données du Keychain 
 CLAUDE.md · README.md
 .claude/       skills, hooks, agents, rules
 .githooks/     commit-msg
-tools/         check-docs.ps1
+tools/         check-docs.ps1, build-native.ps1 (DLL webcam + plugin OBS)
 docs/          vault Obsidian (ADR-0002)
 protocol/      .proto + doc du protocole      (phase 1)
 apps/ios/      SwiftPM + xtool.yml            (phase 0 : Hello)
 apps/desktop/  Rust + Tauri, iPhone simulé    (avant la phase 1, ADR-0019)
-apps/desktop-vcam/  DLL C++ webcam virtuelle  (phase 5)
-apps/obs-plugin/                              (phase 5)
+apps/desktop-vcam/  DLL C++ webcam virtuelle + install-native.ps1  (phase 5, en avance)
+apps/obs-plugin/    source OBS « Hyphn (iPhone) »                (phase 5, en avance)
 infra/         un docker-compose par service : anisette/, xtool/  (phase 0, voir Serveur.md)
 apps/android/                                 (phase 7)
 ```

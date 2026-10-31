@@ -2,7 +2,7 @@
 
 Une phase à la fois, chacune avec une porte de sortie **mesurable**. On passe à la suivante seulement avec la preuve et l'accord écrit d'Evan. Android seulement quand toute la partie iPhone est finie. Source : [[CAHIER]] section 8, corrigée par les ADR.
 
-**Phase actuelle : 1 — Socle** (depuis le 2026-10-31, [[ADR-0020 Phase 1 sans attendre le rafraichissement]]). Cam v1 commencée en avance.
+**Phase actuelle : 1 — Socle** (depuis le 2026-10-31, [[ADR-0020 Phase 1 sans attendre le rafraichissement]]). Cam v1 et Cam v2 (webcam Windows, OBS) commencées en avance ([[ADR-0022 Webcam Windows par DLL qui decode]]).
 
 ## Phase 0 — Fondations (close le 2026-10-31)
 Porte d'origine : un « Hello » SwiftUI qui se rafraîchit **tout seul** pendant 14 jours ([[ADR-0007 Porte de la phase 0]]). Oubliée par Evan : on avisera si le rafraîchissement rate ([[ADR-0020 Phase 1 sans attendre le rafraichissement]]).
@@ -42,6 +42,7 @@ Commencée en avance pendant la phase 1 ([[Cam - Flux v1]]).
 Porte : latence de bout en bout mesurée et notée, **30 min** sans décrochage.
 
 ## Phase 5 — Cam v2
+Commencée en avance ([[ADR-0022 Webcam Windows par DLL qui decode]], [[Cam - Webcam Windows et OBS]]).
 Webcam virtuelle Windows, plugin OBS, tous les réglages, 4K60, adaptation thermique.
 Porte : Discord et OBS voient la caméra, **1 h** de stream sans arrêt thermique.
 

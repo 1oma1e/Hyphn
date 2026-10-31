@@ -25,5 +25,6 @@ Une décision par fichier, numérotée. Modèle : `_modele.md`. Statuts : `propo
 | [[ADR-0019 App PC en premier avec iPhone simule]] | App PC complète avant la phase 1, iPhone simulé dans un module `demo` | accepte (2026-10-31), simulation retirée par ADR-0020 |
 | [[ADR-0020 Phase 1 sans attendre le rafraichissement]] | Phase 1 tout de suite ; appairage validé sur l'iPhone seul ; ordre appairage, Accueil, Cam ; Drop vide | accepte (2026-10-31) |
 | [[ADR-0021 Plus de module Pulse]] | Le nom Pulse disparaît : deux modules (Cam, Drop) + les infos de l'iPhone | accepte (2026-10-31) |
+| [[ADR-0022 Webcam Windows par DLL qui decode]] | Phase 5 en avance : DLL Media Foundation qui décode le flux compressé reçu par tuyau nommé ; plugin OBS ; écran d'attente Animé ou Minimal | accepte (2026-10-31) |
 
 Liens : [[00-Accueil]]
