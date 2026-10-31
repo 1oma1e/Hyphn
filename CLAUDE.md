@@ -17,7 +17,7 @@ L'état exact et la prochaine étape sont dans `docs/STATE.md` (affiché au dém
 
 ## Commandes
 - Contrôle des docs : `powershell -NoProfile -File tools/check-docs.ps1` (doit afficher `check-docs: OK`).
-- Pas encore de code : les commandes de build et de test (xtool, cargo, tauri) arrivent avec la phase 0 et la phase 1.
+- App PC (`apps/desktop/`, iPhone simulé, ADR-0019) : `npm install` une fois, puis `npm run dev` pour la lancer ; tests : `cargo test` dans `apps/desktop/src-tauri/`. Le build Rust va dans `CARGO_TARGET_DIR` (F:).
 - Après un clone : `git config core.hooksPath .githooks` (active le refus des lignes `Co-Authored-By`).
 
 ## Façon de travailler avec Evan

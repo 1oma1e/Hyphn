@@ -74,7 +74,7 @@ tools/         check-docs.ps1
 docs/          vault Obsidian (ADR-0002)
 protocol/      .proto + doc du protocole      (phase 1)
 apps/ios/      SwiftPM + xtool.yml            (phase 0 : Hello)
-apps/desktop/  Rust + Tauri                   (phase 1)
+apps/desktop/  Rust + Tauri, iPhone simulé    (avant la phase 1, ADR-0019)
 apps/desktop-vcam/  DLL C++ webcam virtuelle  (phase 5)
 apps/obs-plugin/                              (phase 5)
 infra/         un docker-compose par service : anisette/, xtool/  (phase 0, voir Serveur.md)
