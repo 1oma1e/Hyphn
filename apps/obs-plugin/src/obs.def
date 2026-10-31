@@ -1,0 +1,6 @@
+LIBRARY obs
+EXPORTS
+    obs_register_source_s
+    obs_source_output_video2
+    video_format_get_parameters_for_format
+    os_gettime_ns

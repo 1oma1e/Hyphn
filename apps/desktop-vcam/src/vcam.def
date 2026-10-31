@@ -1,0 +1,8 @@
+LIBRARY hyphn_vcam
+EXPORTS
+    DllCanUnloadNow PRIVATE
+    DllGetClassObject PRIVATE
+    DllRegisterServer PRIVATE
+    DllUnregisterServer PRIVATE
+    HyphnVCamCreate
+    HyphnVCamRemove
