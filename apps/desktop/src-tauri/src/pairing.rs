@@ -5,8 +5,6 @@
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
-use base64::Engine;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 
@@ -15,8 +13,14 @@ use crate::identity::fingerprint_of;
 use crate::identity::Fingerprint;
 
 pub const PROTOCOL_VERSION: u32 = 1;
-pub const URI_PREFIX: &str = "hyphn://pair?";
+/// Uppercase only, so the whole QR fits the compact alphanumeric mode.
+pub const URI_PREFIX: &str = "HYPHN:";
 pub const TOKEN_TTL: Duration = Duration::from_secs(120);
+/// The QR carries the first half of the PC fingerprint (128 bits, still
+/// impossible to forge); the iPhone keeps the full one after the handshake.
+pub const QR_FINGERPRINT_LEN: usize = 16;
+pub const TOKEN_LEN: usize = 8;
+pub type Token = [u8; TOKEN_LEN];
 
 /// The QR-reading variants are produced by the iPhone; the PC keeps them for its tests.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -45,50 +49,86 @@ pub struct PairOffer {
     pub host: IpAddr,
     pub port: u16,
     pub pc_fingerprint: Fingerprint,
-    pub token: [u8; 16],
+    pub token: Token,
+}
+
+/// What the iPhone reads from the QR (`PairOffer.parse` in Swift).
+#[cfg(test)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScannedQr {
+    pub host: IpAddr,
+    pub port: u16,
+    pub fingerprint_prefix: [u8; QR_FINGERPRINT_LEN],
+    pub token: Token,
 }
 
 impl PairOffer {
+    /// `HYPHN:1/192.168.1.20/47800/<fingerprint half>/<token>`, base32 (E2).
     pub fn to_uri(&self) -> String {
         format!(
-            "{URI_PREFIX}v={}&h={}&p={}&fp={}&t={}",
+            "{URI_PREFIX}{}/{}/{}/{}/{}",
             self.version,
             self.host,
             self.port,
-            B64.encode(self.pc_fingerprint),
-            B64.encode(self.token)
+            base32(&self.pc_fingerprint[..QR_FINGERPRINT_LEN]),
+            base32(&self.token)
         )
+        .to_uppercase()
     }
 
-    /// Parsing done by the iPhone after the scan (`PairOffer.swift`), kept here
-    /// to test the format from both ends.
+    /// Parsing done by the iPhone after the scan, kept here to test the format
+    /// from both ends.
     #[cfg(test)]
-    pub fn parse(uri: &str) -> Result<Self, PairError> {
-        let query = uri.strip_prefix(URI_PREFIX).ok_or(PairError::NotHyphn)?;
-        let (mut v, mut h, mut p, mut fp, mut t) = (None, None, None, None, None);
-        for pair in query.split('&') {
-            let (k, val) = pair.split_once('=').ok_or(PairError::Malformed)?;
-            match k {
-                "v" => v = val.parse::<u32>().ok(),
-                "h" => h = val.parse::<IpAddr>().ok(),
-                "p" => p = val.parse::<u16>().ok(),
-                "fp" => fp = B64.decode(val).ok().and_then(|b| b.try_into().ok()),
-                "t" => t = B64.decode(val).ok().and_then(|b| b.try_into().ok()),
-                _ => {}
-            }
-        }
-        let version = v.ok_or(PairError::Malformed)?;
+    pub fn parse(uri: &str) -> Result<ScannedQr, PairError> {
+        let uri = uri.to_uppercase();
+        let rest = uri.strip_prefix(URI_PREFIX).ok_or(PairError::NotHyphn)?;
+        let parts: Vec<&str> = rest.split('/').collect();
+        let version = parts.first().and_then(|v| v.parse::<u32>().ok()).ok_or(PairError::Malformed)?;
         if version != PROTOCOL_VERSION {
             return Err(PairError::WrongVersion);
         }
-        Ok(Self {
-            version,
-            host: h.ok_or(PairError::Malformed)?,
-            port: p.ok_or(PairError::Malformed)?,
-            pc_fingerprint: fp.ok_or(PairError::Malformed)?,
-            token: t.ok_or(PairError::Malformed)?,
+        let [_, h, p, fp, t] = parts.as_slice() else { return Err(PairError::Malformed) };
+        Ok(ScannedQr {
+            host: h.parse().map_err(|_| PairError::Malformed)?,
+            port: p.parse().map_err(|_| PairError::Malformed)?,
+            fingerprint_prefix: unbase32(fp).and_then(|b| b.try_into().ok()).ok_or(PairError::Malformed)?,
+            token: unbase32(t).and_then(|b| b.try_into().ok()).ok_or(PairError::Malformed)?,
         })
     }
+}
+
+const BASE32: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+/// RFC 4648 base32 without padding: only characters of the QR alphanumeric mode.
+fn base32(data: &[u8]) -> String {
+    let (mut out, mut acc, mut bits) = (String::new(), 0u32, 0);
+    for &b in data {
+        acc = (acc << 8) | b as u32;
+        bits += 8;
+        while bits >= 5 {
+            bits -= 5;
+            out.push(BASE32[((acc >> bits) & 31) as usize] as char);
+        }
+    }
+    if bits > 0 {
+        out.push(BASE32[((acc << (5 - bits)) & 31) as usize] as char);
+    }
+    out
+}
+
+#[cfg(test)]
+fn unbase32(s: &str) -> Option<Vec<u8>> {
+    let (mut out, mut acc, mut bits) = (Vec::new(), 0u32, 0);
+    for c in s.bytes() {
+        let v = BASE32.iter().position(|&x| x == c)? as u32;
+        acc = (acc << 5) | v;
+        bits += 5;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+        }
+    }
+    Some(out)
 }
 
 /// Sent by the iPhone inside the TLS tunnel (E5). The device fingerprint comes
@@ -96,7 +136,7 @@ impl PairOffer {
 #[derive(Debug, Clone)]
 pub struct PairRequest {
     pub protocol_version: u32,
-    pub token: [u8; 16],
+    pub token: Token,
     pub device_name: String,
     pub model: String,
     /// Logged by the real receiver, not checked.
@@ -113,7 +153,7 @@ pub struct PendingPair {
 }
 
 struct ActiveToken {
-    value: [u8; 16],
+    value: Token,
     issued: Instant,
     used: bool,
 }
@@ -129,7 +169,7 @@ pub struct PairingSession {
 impl PairingSession {
     /// Creates a new QR offer and cancels the previous token (E3, « Nouveau QR »).
     pub fn issue(&mut self, host: IpAddr, port: u16, pc_fingerprint: Fingerprint, now: Instant) -> PairOffer {
-        let mut token = [0u8; 16];
+        let mut token = [0u8; TOKEN_LEN];
         rand::rngs::OsRng.fill_bytes(&mut token);
         self.token = Some(ActiveToken { value: token, issued: now, used: false });
         self.pending = None;
@@ -194,10 +234,12 @@ pub fn pairing_code(a: &Fingerprint, b: &Fingerprint) -> String {
     format!("{n:04}")
 }
 
-/// iPhone side of E4: the PC certificate is accepted only if its fingerprint is the QR one.
+/// iPhone side of E4: the PC certificate is accepted only if its fingerprint
+/// starts with the QR half (or equals the full one kept after pairing).
 #[cfg(test)]
-pub fn check_pinned(expected: &Fingerprint, presented_cert_der: &[u8]) -> Result<(), PairError> {
-    if constant_time_eq(expected, &fingerprint_of(presented_cert_der)) {
+pub fn check_pinned(expected: &[u8], presented_cert_der: &[u8]) -> Result<(), PairError> {
+    let fp = fingerprint_of(presented_cert_der);
+    if expected.len() >= QR_FINGERPRINT_LEN && constant_time_eq(expected, &fp[..expected.len().min(fp.len())]) {
         Ok(())
     } else {
         Err(PairError::WrongFingerprint)
@@ -223,7 +265,7 @@ mod tests {
         (s, offer, pc, phone, now)
     }
 
-    fn request(token: [u8; 16]) -> PairRequest {
+    fn request(token: Token) -> PairRequest {
         PairRequest {
             protocol_version: PROTOCOL_VERSION,
             token,
@@ -237,20 +279,35 @@ mod tests {
     fn uri_round_trip() {
         let (_, offer, ..) = setup();
         let uri = offer.to_uri();
-        assert!(uri.starts_with("hyphn://pair?v=1&h=192.168.1.20&p=47800&"));
-        assert_eq!(PairOffer::parse(&uri).unwrap(), offer);
+        assert!(uri.starts_with("HYPHN:1/192.168.1.20/47800/"));
+        // Small enough for a 29x29 QR (version 3, low correction, alphanumeric).
+        assert!(uri.len() <= 77, "{} chars: {uri}", uri.len());
+        assert!(uri.bytes().all(|c| b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:".contains(&c)));
+        let q = PairOffer::parse(&uri).unwrap();
+        assert_eq!((q.host, q.port, q.token), (offer.host, offer.port, offer.token));
+        assert_eq!(q.fingerprint_prefix[..], offer.pc_fingerprint[..QR_FINGERPRINT_LEN]);
+        assert_eq!(base32(b"foobar"), "MZXW6YTBOI");
+    }
+
+    #[test]
+    fn qr_is_29_by_29_even_with_the_longest_ipv4() {
+        let pc = Identity::generate("pc").unwrap();
+        let mut s = PairingSession::default();
+        let offer = s.issue(IpAddr::V4(Ipv4Addr::new(192, 168, 255, 255)), 65535, pc.fingerprint, Instant::now());
+        let code = qrcode::QrCode::with_error_correction_level(offer.to_uri().as_bytes(), qrcode::EcLevel::L).unwrap();
+        assert_eq!(code.width(), 29);
     }
 
     #[test]
     fn foreign_qr_is_refused() {
         assert_eq!(PairOffer::parse("https://example.com"), Err(PairError::NotHyphn));
-        assert_eq!(PairOffer::parse("hyphn://pair?v=1&h=nope"), Err(PairError::Malformed));
+        assert_eq!(PairOffer::parse("HYPHN:1/nope"), Err(PairError::Malformed));
     }
 
     #[test]
     fn wrong_version_is_refused() {
         let (mut s, offer, pc, phone, now) = setup();
-        let uri = offer.to_uri().replace("v=1", "v=2");
+        let uri = offer.to_uri().replace("HYPHN:1/", "HYPHN:2/");
         assert_eq!(PairOffer::parse(&uri), Err(PairError::WrongVersion));
         let mut req = request(offer.token);
         req.protocol_version = 2;
@@ -309,11 +366,12 @@ mod tests {
     #[test]
     fn wrong_fingerprint_is_refused() {
         let (_, offer, pc, phone, _) = setup();
+        let half = &offer.pc_fingerprint[..QR_FINGERPRINT_LEN];
+        assert!(check_pinned(half, &pc.cert_der).is_ok());
         assert!(check_pinned(&offer.pc_fingerprint, &pc.cert_der).is_ok());
-        assert_eq!(
-            check_pinned(&offer.pc_fingerprint, &phone.cert_der),
-            Err(PairError::WrongFingerprint)
-        );
+        assert_eq!(check_pinned(half, &phone.cert_der), Err(PairError::WrongFingerprint));
+        // A shorter prefix would be too easy to forge.
+        assert_eq!(check_pinned(&half[..8], &pc.cert_der), Err(PairError::WrongFingerprint));
     }
 
     #[test]

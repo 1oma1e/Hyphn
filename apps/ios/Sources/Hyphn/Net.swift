@@ -20,9 +20,15 @@ final class PinnedConnection {
     let queue: DispatchQueue
     private let nw: NWConnection
     /// Set by the TLS verify block, which runs before the connection object exists.
-    private final class PinState { var failed = false }
+    private final class PinState {
+        var failed = false
+        var peer: Data?
+    }
     private let pinState: PinState
     private var pinFailed: Bool { pinState.failed }
+    /// Full SHA-256 of the PC certificate, known once the handshake passed
+    /// (the QR only carries its first half).
+    var peerFingerprint: Data? { pinState.peer }
     private var finished = false
 
     /// All callbacks run on the main queue.
@@ -43,8 +49,10 @@ final class PinnedConnection {
         let pin = PinState()
         let queue = DispatchQueue(label: "hyphn.net")
         sec_protocol_options_set_verify_block(sec, { _, trust, complete in
-            let ok = PinnedConnection.leafMatches(trust: trust, pinned: pinned)
-            if !ok { pin.failed = true }
+            let leaf = PinnedConnection.leafFingerprint(trust)
+            // `pinned` is the QR half (16 bytes) or the full fingerprint kept after pairing.
+            let ok = pinned.count >= 16 && leaf.map { $0.prefix(pinned.count) == pinned } == true
+            if ok { pin.peer = leaf } else { pin.failed = true }
             complete(ok)
         }, queue)
         self.pinState = pin
@@ -69,11 +77,11 @@ final class PinnedConnection {
         return NWParameters(tls: tls, tcp: tcp)
     }
 
-    private static func leafMatches(trust: sec_trust_t, pinned: Data) -> Bool {
+    private static func leafFingerprint(_ trust: sec_trust_t) -> Data? {
         let t = sec_trust_copy_ref(trust).takeRetainedValue()
-        guard let chain = SecTrustCopyCertificateChain(t) as? [SecCertificate], let leaf = chain.first else { return false }
+        guard let chain = SecTrustCopyCertificateChain(t) as? [SecCertificate], let leaf = chain.first else { return nil }
         let der = SecCertificateCopyData(leaf) as Data
-        return Data(SHA256.hash(data: der)) == pinned
+        return Data(SHA256.hash(data: der))
     }
 
     /// Address and port of the PC once connected.
@@ -105,6 +113,13 @@ final class PinnedConnection {
                     self.finish(.wrongFingerprint)
                 } else if case .tls = err {
                     self.finish(.network(err.localizedDescription))
+                } else {
+                    // Waiting (e.g. right after « Allow » on the Local Network
+                    // prompt): iOS retries slowly on its own, so retry after 1 s.
+                    self.queue.asyncAfter(deadline: .now() + 1) { [weak self] in
+                        guard let self, !self.finished, case .waiting = self.nw.state else { return }
+                        self.nw.restart()
+                    }
                 }
             case let .failed(err):
                 self.finish(self.pinFailed ? .wrongFingerprint : .network(err.localizedDescription))

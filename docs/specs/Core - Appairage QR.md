@@ -20,7 +20,9 @@ Relier l'iPhone d'Evan à son PC en scannant un QR code, sans compte, en local, 
 
 ## Exigences
 - **E1 — Identités.** Au premier lancement, chaque app crée une paire de clés et un certificat auto-signé, gardés pour toujours : dans le Keychain sur l'iPhone, dans un fichier lisible seulement par l'utilisateur sur le PC. L'empreinte, c'est le SHA-256 du certificat.
-- **E2 — QR.** Le PC affiche un QR qui contient : version du protocole, IP et port du PC, empreinte du PC, jeton aléatoire de 128 bits. Préfixe `hyphn://pair?` pour reconnaître un QR Hyphn. Rien de secret à long terme.
+- **E2 — QR.** Le PC affiche un QR qui contient : version du protocole, IP et port du PC, la première moitié de l'empreinte du PC (128 bits), un jeton aléatoire de 64 bits. Format `HYPHN:1/192.168.1.20/47800/<empreinte>/<jeton>`, en base32 et en majuscules. Rien de secret à long terme.
+  - Pourquoi si court (2026-10-31, le scan était lent) : que des majuscules, des chiffres et `:/.`, c'est le mode « alphanumérique » du QR, plus compact. Avec la correction d'erreur basse (un écran ne s'abîme pas), le QR fait 29×29 cases au lieu de 45×45, donc des cases plus grosses, lues plus vite.
+  - 128 bits d'empreinte restent impossibles à falsifier, et l'iPhone garde l'empreinte complète, lue dans la poignée de main TLS. Le jeton de 64 bits ne sert qu'une fois et pendant 2 minutes : impossible à deviner par le réseau.
 - **E3 — Jeton.** Il sert une seule fois et expire au bout de 2 minutes. « Nouveau QR » l'annule et en crée un autre.
 - **E4 — Connexion.** L'iPhone ouvre un TCP + TLS 1.3 vers l'IP et le port du QR. Il accepte le certificat du PC **seulement** si son empreinte est celle du QR, et présente son propre certificat (TLS mutuel).
 - **E5 — Échange.** Dans le tunnel, l'iPhone envoie `PairRequest` (jeton, nom de l'appareil, modèle, version de l'app). Le PC vérifie le jeton. Format : Protobuf préfixé par sa longueur, fichier `protocol/hyphn.proto`.
@@ -35,7 +37,7 @@ Relier l'iPhone d'Evan à son PC en scannant un QR code, sans compte, en local, 
 | Cas | Ce qui se passe |
 |---|---|
 | Caméra ou réseau local refusé | Messages de [[iPhone - Scan QR]] + bouton qui ouvre Réglages |
-| QR qui ne commence pas par `hyphn://` | « Ce QR code ne vient pas de Hyphn. » |
+| QR qui ne commence pas par `HYPHN:` | « Ce QR code ne vient pas de Hyphn. » |
 | Jeton expiré ou déjà utilisé | Le PC refuse ; l'iPhone affiche « Ce QR a expiré… » |
 | Empreinte du PC ≠ celle du QR | Connexion coupée avant tout envoi ; « PC introuvable ou faux QR » |
 | Version du protocole différente | « Mets à jour Hyphn sur le PC / l'iPhone » |

@@ -159,7 +159,9 @@ fn pair_offer(h: State<'_, Hyphn>) -> OfferView {
     };
     let port = h.lock().port;
     let uri = h.hub.issue_offer(ip, port).to_uri();
-    let svg = qrcode::QrCode::new(uri.as_bytes()).ok().map(|code| {
+    // Low correction is enough on a screen (nothing scratches it) and keeps
+    // the code at 29x29: big squares, read at once by the iPhone.
+    let svg = qrcode::QrCode::with_error_correction_level(uri.as_bytes(), qrcode::EcLevel::L).ok().map(|code| {
         code.render::<qrcode::render::svg::Color>()
             .quiet_zone(false)
             .dark_color(qrcode::render::svg::Color("#0A0D08"))

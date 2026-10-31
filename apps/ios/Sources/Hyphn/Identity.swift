@@ -178,10 +178,13 @@ struct PairedPC: Codable, Equatable {
 }
 
 /// What the QR carries (E2), same format as `PairOffer` on the PC.
+/// `HYPHN:1/<host>/<port>/<PC fingerprint half>/<token>`, base32, uppercase so
+/// the QR stays small (29x29). The full fingerprint is learnt in the handshake.
 struct PairOffer {
     let host: String
     let port: UInt16
-    let pcFingerprint: Data
+    /// First 16 bytes of the PC certificate SHA-256.
+    let fingerprintPrefix: Data
     let token: Data
 
     enum Problem: Error {
@@ -197,31 +200,32 @@ struct PairOffer {
     }
 
     static func parse(_ text: String) throws -> PairOffer {
-        let prefix = "hyphn://pair?"
+        let text = text.uppercased()
+        let prefix = "HYPHN:"
         guard text.hasPrefix(prefix) else { throw Problem.notHyphn }
-        var v: String?, h: String?, p: UInt16?, fp: Data?, t: Data?
-        for pair in text.dropFirst(prefix.count).split(separator: "&") {
-            let kv = pair.split(separator: "=", maxSplits: 1).map(String.init)
-            guard kv.count == 2 else { throw Problem.malformed }
-            switch kv[0] {
-            case "v": v = kv[1]
-            case "h": h = kv[1]
-            case "p": p = UInt16(kv[1])
-            case "fp": fp = base64URL(kv[1])
-            case "t": t = base64URL(kv[1])
-            default: break
-            }
-        }
-        guard let v else { throw Problem.malformed }
+        let parts = text.dropFirst(prefix.count).split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard let v = parts.first, UInt32(v) != nil else { throw Problem.malformed }
         guard v == String(protocolVersion) else { throw Problem.wrongVersion }
-        guard let h, let p, let fp, fp.count == 32, let t, t.count == 16 else { throw Problem.malformed }
-        return PairOffer(host: h, port: p, pcFingerprint: fp, token: t)
+        guard parts.count == 5, let p = UInt16(parts[2]),
+              let fp = base32(parts[3]), fp.count == 16,
+              let t = base32(parts[4]), t.count == 8 else { throw Problem.malformed }
+        return PairOffer(host: parts[1].lowercased(), port: p, fingerprintPrefix: fp, token: t)
     }
 
-    private static func base64URL(_ s: String) -> Data? {
-        var b = s.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
-        while b.count % 4 != 0 { b += "=" }
-        return Data(base64Encoded: b)
+    /// RFC 4648 base32 without padding (same as `base32` on the PC).
+    private static func base32(_ s: String) -> Data? {
+        let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
+        var out = Data(), acc: UInt32 = 0, bits = 0
+        for c in s {
+            guard let v = alphabet.firstIndex(of: c) else { return nil }
+            acc = (acc << 5) | UInt32(v)
+            bits += 5
+            if bits >= 8 {
+                bits -= 8
+                out.append(UInt8(truncatingIfNeeded: acc >> UInt32(bits)))
+            }
+        }
+        return out
     }
 }
 

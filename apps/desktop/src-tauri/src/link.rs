@@ -292,7 +292,7 @@ impl Hub {
         fp: Fingerprint,
         r: proto::PairRequest,
     ) -> std::io::Result<()> {
-        let Ok(token) = <[u8; 16]>::try_from(r.token.as_slice()) else {
+        let Ok(token) = <pairing::Token>::try_from(r.token.as_slice()) else {
             return Self::refuse(&mut io, Reason::UnknownToken, PairError::UnknownToken.to_string()).await;
         };
         let req = pairing::PairRequest {
@@ -653,7 +653,7 @@ mod tests {
     async fn unknown_token_is_refused() {
         let r = rig().await;
         let mut offer = r.hub.issue_offer(IpAddr::V4(Ipv4Addr::LOCALHOST), r.addr.port());
-        offer.token = [0; 16];
+        offer.token = [0; pairing::TOKEN_LEN];
         let phone = Identity::generate("phone").unwrap();
         let mut io = connect(r.addr, &phone, offer.pc_fingerprint).await.unwrap();
         send(&mut io, request(&offer)).await;

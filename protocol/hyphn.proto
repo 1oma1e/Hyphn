@@ -40,7 +40,7 @@ message Envelope {
 
 message PairRequest {
   uint32 protocol_version = 1;
-  bytes token = 2;        // 16 bytes, from the QR
+  bytes token = 2;        // 8 bytes, from the QR
   string device_name = 3;
   string model = 4;
   string app_version = 5;

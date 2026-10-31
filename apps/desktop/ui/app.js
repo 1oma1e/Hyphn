@@ -341,7 +341,6 @@ const Pair = {
         <div class="qrbox">
           <span class="corner a"></span><span class="corner b"></span><span class="corner c"></span><span class="corner e"></span>
           <div class="qr" role="img" aria-label="QR code d’appairage">${this.offer.svg}</div>
-          <span class="beam"></span>
         </div>
         <div>
           <span class="lbl">Étape 1 sur 2</span>

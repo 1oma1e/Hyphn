@@ -1,3 +1,5 @@
 version: 1
 bundleID: io.github.1oma1e.hyphn
 infoPath: Info.plist
+# Same logo as the PC app (apps/desktop/src-tauri/icons/source.svg), full-bleed: iOS rounds the corners.
+iconPath: AppIcon.png

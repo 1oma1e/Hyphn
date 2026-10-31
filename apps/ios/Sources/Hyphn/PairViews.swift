@@ -164,6 +164,8 @@ struct ScanView: View {
                     .animation(.spring(duration: 0.45), value: link.pairStep)
             }
         }
+        .onAppear { link.primeLocalNetwork() }
+        .onDisappear { link.stopPriming() }
     }
 
     @ViewBuilder private var panel: some View {
@@ -178,10 +180,14 @@ struct ScanView: View {
                         .font(.geist(14)).foregroundStyle(Ink.tx2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-            case .connecting:
-                HStack(spacing: 12) {
-                    ProgressView().tint(Ink.li)
-                    Text("Connexion au PC…").font(.geist(17, .semibold))
+            case let .connecting(host, secured):
+                VStack(alignment: .leading, spacing: 12) {
+                    PairStepRow(text: "QR lu", state: .done)
+                    PairStepRow(text: "Connexion au PC (\(host))", state: secured ? .done : .active)
+                    PairStepRow(text: "Code de vérification", state: secured ? .active : .todo)
+                    Button("Annuler") { link.cancelPairing() }
+                        .buttonStyle(GhostButtonStyle())
+                        .padding(.top, 4)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             case let .code(code, pcName):
@@ -201,6 +207,30 @@ struct ScanView: View {
                 EmptyView()
             }
         }
+    }
+}
+
+/// One line of the « connexion » checklist under the scanner.
+struct PairStepRow: View {
+    enum Status { case done, active, todo }
+    let text: String
+    let state: Status
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Group {
+                switch state {
+                case .done: Image(systemName: "checkmark.circle.fill").foregroundStyle(Ink.li)
+                case .active: ProgressView().tint(Ink.li)
+                case .todo: Image(systemName: "circle").foregroundStyle(Ink.tx2)
+                }
+            }
+            .frame(width: 22, height: 22)
+            Text(text)
+                .font(.geist(16, state == .active ? .semibold : .regular))
+                .foregroundStyle(state == .todo ? Ink.tx2 : Ink.tx)
+        }
+        .animation(.easeOut(duration: 0.25), value: state)
     }
 }
 
@@ -352,9 +382,19 @@ struct QRScanner: UIViewRepresentable {
         }
 
         func start() {
-            guard let dev = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+            // A multi-camera device switches to the ultra wide (macro) by itself
+            // when the iPhone is close to the screen; older iPhones use the wide one.
+            let types: [AVCaptureDevice.DeviceType] = [.builtInTripleCamera, .builtInDualWideCamera, .builtInWideAngleCamera]
+            guard let dev = types.lazy.compactMap({ AVCaptureDevice.default($0, for: .video, position: .back) }).first,
                   let input = try? AVCaptureDeviceInput(device: dev) else { return }
+            if (try? dev.lockForConfiguration()) != nil {
+                if dev.isFocusModeSupported(.continuousAutoFocus) { dev.focusMode = .continuousAutoFocus }
+                // The QR is a screen a few tens of centimetres away.
+                if dev.isAutoFocusRangeRestrictionSupported { dev.autoFocusRangeRestriction = .near }
+                dev.unlockForConfiguration()
+            }
             session.beginConfiguration()
+            if session.canSetSessionPreset(.hd1920x1080) { session.sessionPreset = .hd1920x1080 }
             if session.canAddInput(input) { session.addInput(input) }
             let out = AVCaptureMetadataOutput()
             if session.canAddOutput(out) {

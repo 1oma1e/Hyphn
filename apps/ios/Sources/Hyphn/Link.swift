@@ -20,7 +20,8 @@ final class PCLink: ObservableObject {
 
     enum PairStep: Equatable {
         case idle
-        case connecting
+        /// QR read; `secured` once the TLS tunnel to the PC is up.
+        case connecting(host: String, secured: Bool)
         case code(code: String, pcName: String)
         case confirming
         case linked(pcName: String)
@@ -46,6 +47,8 @@ final class PCLink: ObservableObject {
     private var pairing: (conn: PinnedConnection, offer: PairOffer)?
     private var browser: NWBrowser?
     private var giveUp: Task<Void, Never>?
+    private var pairTimeout: Task<Void, Never>?
+    private var prime: NWBrowser?
     private var foreground = false
 
     init() {
@@ -76,6 +79,20 @@ final class PCLink: ObservableObject {
 
     // MARK: Pairing
 
+    /// Opens the scan screen: browsing Bonjour makes iOS ask for the Local
+    /// Network now, while Evan aims the camera, not after the scan.
+    func primeLocalNetwork() {
+        guard prime == nil else { return }
+        let b = NWBrowser(for: .bonjour(type: "_hyphn._tcp", domain: nil), using: NWParameters())
+        b.start(queue: .main)
+        prime = b
+    }
+
+    func stopPriming() {
+        prime?.cancel()
+        prime = nil
+    }
+
     func scanned(_ text: String) {
         guard case .idle = pairStep else { return }
         let offer: PairOffer
@@ -91,10 +108,11 @@ final class PCLink: ObservableObject {
             pairStep = .failed("Hyphn n’a pas pu créer son certificat sur cet iPhone.")
             return
         }
-        pairStep = .connecting
-        let c = PinnedConnection(host: offer.host, port: offer.port, pinned: offer.pcFingerprint, identity: identity)
+        pairStep = .connecting(host: offer.host, secured: false)
+        let c = PinnedConnection(host: offer.host, port: offer.port, pinned: offer.fingerprintPrefix, identity: identity)
         pairing = (c, offer)
-        c.onReady = {
+        c.onReady = { [weak self] in
+            if case .connecting = self?.pairStep { self?.pairStep = .connecting(host: offer.host, secured: true) }
             c.send(.pairRequest(token: offer.token, deviceName: UIDevice.current.name, model: DeviceInfo.model, appVersion: DeviceInfo.appVersion))
         }
         c.onMessage = { [weak self] m in self?.onPairMessage(m, c, offer) }
@@ -108,16 +126,27 @@ final class PCLink: ObservableObject {
             }
         }
         c.start()
+        // Never « Connexion au PC… » for long: no code within 10 s → a clear message.
+        pairTimeout?.cancel()
+        pairTimeout = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+            guard !Task.isCancelled, let self, self.pairing?.conn === c, case .connecting = self.pairStep else { return }
+            self.pairing = nil
+            c.close()
+            self.pairStep = .failed("Le PC ne répond pas. Vérifie que Hyphn est ouvert sur le PC et que les deux sont sur le même Wi-Fi.")
+        }
     }
 
     private func onPairMessage(_ m: Msg, _ c: PinnedConnection, _ offer: PairOffer) {
         switch m {
         case let .pairPending(pcName):
-            guard let identity else { return }
-            pairStep = .code(code: pairingCode(offer.pcFingerprint, identity.fingerprint), pcName: pcName)
+            pairTimeout?.cancel()
+            guard let identity, let pcFingerprint = c.peerFingerprint else { return }
+            pairStep = .code(code: pairingCode(pcFingerprint, identity.fingerprint), pcName: pcName)
         case .pairDone:
-            guard case let .code(_, name) = pairStepBeforeConfirm ?? pairStep else { return }
-            let paired = PairedPC(name: name, fingerprint: offer.pcFingerprint, host: offer.host, port: offer.port, pairedAt: Date())
+            guard case let .code(_, name) = pairStepBeforeConfirm ?? pairStep, let pcFingerprint = c.peerFingerprint else { return }
+            stopPriming()
+            let paired = PairedPC(name: name, fingerprint: pcFingerprint, host: offer.host, port: offer.port, pairedAt: Date())
             paired.save()
             pc = paired
             pairing = nil
@@ -149,6 +178,7 @@ final class PCLink: ObservableObject {
     }
 
     func cancelPairing() {
+        pairTimeout?.cancel()
         pairing?.conn.close()
         pairing = nil
         pairStepBeforeConfirm = nil
