@@ -29,7 +29,6 @@ local-ip-address = "0.6"
 thiserror = "2"
 prost = "0.13"
 bytes = "1"
-base64 = "0.22"
 tokio-tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 tokio = { version = "1.54.1", features = ["net", "io-util", "sync", "time", "macros", "rt-multi-thread"] }

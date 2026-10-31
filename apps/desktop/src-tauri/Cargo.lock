@@ -1667,7 +1667,6 @@ dependencies = [
 name = "hyphn-desktop"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
  "bytes",
  "futures-util",
  "local-ip-address",

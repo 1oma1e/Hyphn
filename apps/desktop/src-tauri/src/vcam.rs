@@ -180,10 +180,6 @@ async fn reader(
 pub const VCAM_SHA256: &str = env!("HYPHN_VCAM_SHA256");
 pub const OBS_SHA256: &str = env!("HYPHN_OBS_SHA256");
 
-/// The install script, built into the app: never read from a folder the
-/// user could change before it runs as admin.
-#[cfg(windows)]
-const INSTALL_SCRIPT: &str = include_str!("../../../desktop-vcam/install-native.ps1");
 
 fn sha256_hex(path: &Path) -> Option<String> {
     use sha2::{Digest, Sha256};
@@ -196,25 +192,6 @@ pub fn native_is_genuine(dir: &Path) -> bool {
     !VCAM_SHA256.is_empty() && sha256_hex(&dir.join(DLL)).as_deref() == Some(VCAM_SHA256)
 }
 
-/// PowerShell arguments for the install (or removal), script included.
-#[cfg(windows)]
-pub fn install_command(native: &Path, uninstall: bool) -> String {
-    use base64::Engine;
-    let quote = |s: &str| format!("'{}'", s.replace('\'', "''"));
-    let obs = if sha256_hex(&native.join(OBS_DLL)).as_deref() == Some(OBS_SHA256) { OBS_SHA256 } else { "" };
-    let cmd = format!(
-        "& {{\n{INSTALL_SCRIPT}\n}} -Source {} -VcamSha256 {} -ObsSha256 {}{}",
-        quote(&native.display().to_string()),
-        quote(VCAM_SHA256),
-        quote(obs),
-        if uninstall { " -Uninstall" } else { "" }
-    );
-    let utf16: Vec<u8> = cmd.encode_utf16().flat_map(|c| c.to_le_bytes()).collect();
-    format!(
-        "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {}",
-        base64::engine::general_purpose::STANDARD.encode(utf16)
-    )
-}
 
 /// Where the built DLLs are: next to the app once installed, `src-tauri/native`
 /// while developing.
@@ -383,12 +360,12 @@ mod sys {
         }
     }
 
-    /// Runs Windows PowerShell as admin (one UAC prompt) and waits. Ok(code).
-    /// Full path: never a powershell.exe found in the current folder.
+    /// Relaunches this very exe as admin (one UAC prompt) with `params`, and
+    /// waits for it (install.rs does the work). Ok(exit code).
     pub fn run_elevated(params: &str) -> Result<u32, String> {
         let verb = wide("runas");
-        let root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
-        let file = wide(Path::new(&root).join(r"System32\WindowsPowerShell\v1.0\powershell.exe"));
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let file = wide(&exe);
         let params = wide(params);
         unsafe {
             let mut info: SHELLEXECUTEINFOW = std::mem::zeroed();

@@ -1,8 +1,8 @@
 # Builds the native parts of the PC app (ADR-0022):
 #   hyphn_vcam.dll  - the Windows webcam (apps/desktop-vcam)
 #   hyphn-obs.dll   - the OBS source (apps/obs-plugin)
-# into apps/desktop/src-tauri/native/ (the app embeds install-native.ps1 and
-# the SHA-256 of these DLLs at build time, see build.rs).
+# into apps/desktop/src-tauri/native/ (the app embeds the SHA-256 of these
+# DLLs at build time, see build.rs, and installs them itself: install.rs).
 # Needs the MSVC Build Tools (F:\BuildTools) and the Windows SDK.
 # Usage: powershell -NoProfile -File tools/build-native.ps1
 param([switch]$NoObs)

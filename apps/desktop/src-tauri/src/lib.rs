@@ -5,6 +5,7 @@ mod cam;
 #[allow(dead_code)] // Drop comes back in the next session (ADR-0020).
 mod drop;
 mod identity;
+mod install;
 mod link;
 mod net;
 mod pairing;
@@ -381,11 +382,13 @@ fn install_native(app: &AppHandle, uninstall: bool) -> Result<(), String> {
     if uninstall {
         vcam::remove_camera();
     }
-    let code = vcam::run_elevated(&vcam::install_command(&native, uninstall))?;
+    // The admin copy of Hyphn writes why it failed here.
+    let report = std::env::temp_dir().join("hyphn-install.log");
+    let _ = std::fs::remove_file(&report);
+    let code = vcam::run_elevated(&install::elevated_args(&native, &report, uninstall))?;
     if code != 0 {
-        // The script wrote why (same user, elevated): %TEMP%\hyphn-install.log.
-        let why = std::fs::read_to_string(std::env::temp_dir().join("hyphn-install.log")).unwrap_or_default();
-        let why = why.trim().trim_start_matches('\u{feff}');
+        let why = std::fs::read_to_string(&report).unwrap_or_default();
+        let why = why.trim();
         return Err(if why.is_empty() { format!("L’installation a échoué (code {code}).") } else { format!("L’installation a échoué : {why}") });
     }
     if uninstall {
@@ -539,6 +542,10 @@ fn saved_cam(settings: &Settings) -> CamWanted {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Relaunched as admin to install the webcam: do it and leave, no window.
+    if let Some(code) = install::elevated_main(&std::env::args().collect::<Vec<_>>()) {
+        std::process::exit(code);
+    }
     tauri::Builder::default()
         // One Hyphn at a time: a second launch shows the first one's window
         // (two would fight over the port, the pipe and the webcam).
