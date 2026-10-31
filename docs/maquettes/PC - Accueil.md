@@ -9,7 +9,7 @@ Fenêtre principale de l'app Tauri. Menu à gauche, contenu à droite. L'app vit
 │ ▣ Accueil │ ┌──────────────────────────────────────────────┐ │
 │ ◉ Cam     │ │ iPhone d'Evan · iPhone 16 Pro · iOS 26.1     │ │
 │ ⇅ Drop    │ │ ● Wi-Fi · 4 ms · 82 % · normal · 41 Go libres │ │
-│ ♥ Pulse   │ │ [Démarrer Cam] [Recevoir] [Voir Pulse]        │ │
+│           │ │ [Démarrer Cam] [Recevoir] [ Infos    ]        │ │
 │           │ └──────────────────────────────────────────────┘ │
 │           │                                                  │
 │           │ Activité récente                                 │
@@ -26,4 +26,4 @@ Fenêtre principale de l'app Tauri. Menu à gauche, contenu à droite. L'app vit
 | iPhone hors ligne | Carte grisée « Vu il y a 2 h » ; si un câble est branché : « Câble : DCIM et batterie disponibles » |
 | Câble seul (app iPhone fermée) | Carte « iPhone par câble » : Drop (DCIM) et santé batterie seulement |
 
-Écrans : [[PC - Cam]], [[PC - Drop]], [[PC - Pulse]], [[PC - Reglages]] · Index : [[Maquettes - Index]]
+Écrans : [[PC - Cam]], [[PC - Drop]], [[PC - Accueil]], [[PC - Reglages]] · Index : [[Maquettes - Index]]

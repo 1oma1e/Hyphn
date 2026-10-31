@@ -18,5 +18,5 @@ Le cahier veut la santé de la batterie et les cycles par câble (« à tester s
 Proposé : valeurs brutes, avec un texte « estimation à partir des capacités » si on montre un rapport. Lecture du premier niveau **puis** de `BatteryData`. À tester en phase 1 avec `idevicediagnostics ioregentry AppleSmartBattery` sur l'iPhone d'Evan.
 
 ## Conséquences
-- Écran Pulse PC : bloc « Batterie (câble) » séparé du bloc « Batterie (app) » : voir [[PC - Pulse]].
+- Écran Pulse PC : bloc « Batterie (câble) » séparé du bloc « Batterie (app) » : voir [[PC - Accueil]].
 - Si iOS 26 ne donne plus ces valeurs par câble : on retire la ligne et on note la date dans [[Points a tester]].

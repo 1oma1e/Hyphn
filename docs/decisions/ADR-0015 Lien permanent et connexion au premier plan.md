@@ -22,5 +22,5 @@ Choix d'Evan (2026-10-31) :
 
 ## Conséquences
 - [[RULES]] Énergie 2 précisée.
-- Specs : [[Core - Appairage QR]] (E10), [[Core - Reconnexion]] (E6), [[Pulse - Batterie et thermique]].
+- Specs : [[Core - Appairage QR]] (E10), [[Core - Reconnexion]] (E6), [[Infos iPhone - Batterie et chaleur]].
 - Bon choix si la mesure de budget (Pulse E7) ne montre pas de surcoût notable de l'app ouverte.

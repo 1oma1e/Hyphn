@@ -11,7 +11,7 @@ flowchart LR
     ICore[Core : Bonjour, appairage, TLS]
     ICam[Cam : AVFoundation + VideoToolbox HEVC]
     IDrop[Drop : PhotoKit, fichiers]
-    IPulse[Pulse : batterie, thermique]
+    IInfo[Infos : batterie, thermique]
   end
   subgraph PC[PC Windows 11 - Rust + Tauri]
     PCore[Core : découverte, appairage]
@@ -19,7 +19,6 @@ flowchart LR
     VCam[Webcam virtuelle - DLL C++ MF]
     OBS[Plugin OBS]
     PDrop[Drop : serveur HTTPS, tri, doublons, historique]
-    PPulse[Pulse : tableau de bord]
     LIMD[libimobiledevice : DCIM, infos, batterie]
   end
   ICore -- contrôle TCP + TLS épinglé --> PCore
@@ -27,13 +26,13 @@ flowchart LR
   PCam --> VCam
   PCam --> OBS
   IDrop -- HTTPS par blocs, ADR-0005 --> PDrop
-  IPulse -- événements --> PPulse
+  IInfo -- DeviceStatus, événements --> PCore
   LIMD -. câble USB .- IPH
   SRV[(Serveur Linux 24/7 - Docker : xtool, anisette, sauvegarde)]
   SRV -. build + installation .- IPH
 ```
 
-Le QR code affiché par le PC contient : IP, port, empreinte du certificat du PC, jeton à usage unique. L'iPhone le scanne, se connecte, vérifie l'empreinte, puis les deux gardent l'empreinte de l'autre (comme LocalSend et KDE Connect, mais sans PIN dans l'URL). Un code de vérification à 4 chiffres, affiché des deux côtés, est proposé ([[Core - Appairage QR]], à confirmer par Evan).
+Le QR code affiché par le PC contient : IP, port, empreinte du certificat du PC, jeton à usage unique. L'iPhone le scanne, se connecte, vérifie l'empreinte, puis les deux gardent l'empreinte de l'autre (comme LocalSend et KDE Connect, mais sans PIN dans l'URL). Un code de vérification à 4 chiffres s’affiche des deux côtés ; on valide seulement sur l’iPhone ([[Core - Appairage QR]], [[ADR-0020 Phase 1 sans attendre le rafraichissement]]). Messages : `protocol/hyphn.proto`, sur un seul port TLS (contrôle et vidéo).
 
 ## Stack
 | Partie | Choix | Pourquoi |
@@ -50,7 +49,7 @@ Le QR code affiché par le PC contient : IP, port, empreinte du certificat du PC
 - **Cam** : recette de scrcpy pour la latence — pas de tampon côté PC par défaut, paquets avec leur taille en tête, un fil par socket. Pas d'audio ([[ADR-0018 Cam image seule et demarrage en pause]]).
 - **Webcam virtuelle** : `MFCreateVirtualCamera` exige Windows 11 (build 22000+) et le type `SoftwareCameraSource`. La DLL s'enregistre dans HKLM, donc **admin une fois** à l'installation ; la caméra est créée pour l'utilisateur courant, donc l'app tourne sans admin. Windows ajoute « Windows Virtual Camera » au nom.
 - **xtool** : app en **un seul binaire, sans extension** (les extensions sont encore cassées) ; vérifier `xtool.yml` à la main, car une clé mal écrite est ignorée sans erreur.
-- **Pulse par câble** : IORegistry `AppleSmartBattery`, lire aussi `BatteryData` ([[ADR-0006 Sante batterie par cable]]).
+- **Batterie par câble** : IORegistry `AppleSmartBattery`, lire aussi `BatteryData` ([[ADR-0006 Sante batterie par cable]]).
 
 ## Build et installation (phase 0)
 ```mermaid

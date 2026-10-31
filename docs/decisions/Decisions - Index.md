@@ -18,10 +18,12 @@ Une décision par fichier, numérotée. Modèle : `_modele.md`. Statuts : `propo
 | [[ADR-0012 Anisette Mac publique]] | Anisette `mac-ani.jkcoxson.com` (Apple refuse l'anisette Android), exception au « tout local » | accepte (2026-10-30) |
 | [[ADR-0013 Build iOS par clone Git]] | Clone du repo sur le serveur (clé de déploiement lecture seule), bundle ID `io.github.1oma1e.hyphn`, `.ipa` zippé en Python | accepte (2026-10-31) |
 | [[ADR-0014 Pas de plan B AltServer]] | Pas d'AltServer-Linux + netmuxd ; on surveille le rafraîchissement SideStore | accepte (2026-10-31) |
-| [[ADR-0015 Lien permanent et connexion au premier plan]] | Appairage permanent jusqu'à « Oublier » ; connexion et Pulse seulement quand l'app iPhone est ouverte | accepte (2026-10-31) |
+| [[ADR-0015 Lien permanent et connexion au premier plan]] | Appairage permanent jusqu'à « Oublier » ; connexion et infos de l'iPhone seulement quand l'app iPhone est ouverte | accepte (2026-10-31) |
 | [[ADR-0016 Design visuel V2]] | Maquettes visuelles cliquables ; fond « trame », couleurs, Geist, menus ; écrans concis | accepte (2026-10-31) |
 | [[ADR-0017 Pulse integre sans page]] | Pas de page Pulse : infos sur l'Accueil PC et sur l'aperçu Cam | accepte (2026-10-31) |
 | [[ADR-0018 Cam image seule et demarrage en pause]] | Pas de son ; Cam démarre en pause (écran d'attente) ; aperçu plein écran sur l'iPhone + écran noir | accepte (2026-10-31) |
-| [[ADR-0019 App PC en premier avec iPhone simule]] | App PC complète avant la phase 1, iPhone simulé dans un module `demo` | accepte (2026-10-31) |
+| [[ADR-0019 App PC en premier avec iPhone simule]] | App PC complète avant la phase 1, iPhone simulé dans un module `demo` | accepte (2026-10-31), simulation retirée par ADR-0020 |
+| [[ADR-0020 Phase 1 sans attendre le rafraichissement]] | Phase 1 tout de suite ; appairage validé sur l'iPhone seul ; ordre appairage, Accueil, Cam ; Drop vide | accepte (2026-10-31) |
+| [[ADR-0021 Plus de module Pulse]] | Le nom Pulse disparaît : deux modules (Cam, Drop) + les infos de l'iPhone | accepte (2026-10-31) |
 
 Liens : [[00-Accueil]]

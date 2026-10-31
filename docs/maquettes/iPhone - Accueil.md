@@ -31,7 +31,7 @@ Premier écran à l'ouverture. Fond sombre (OLED = moins de batterie).
 │ │ Démarrer │ │ Envoyer  │    │
 │ └──────────┘ └──────────┘    │
 │ ┌───────────────────────┐    │
-│ │ Pulse : partagé ✓     │    │
+│ │ Infos de l’iPhone     │    │
 │ │ 82 % · normal · 41 Go │    │
 │ └───────────────────────┘    │
 │                              │

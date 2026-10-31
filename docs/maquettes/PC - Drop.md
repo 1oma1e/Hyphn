@@ -10,7 +10,7 @@ Recevoir, trier, suivre la progression et retrouver l'historique. Même écran p
 │ ▣ Accueil │ 11,8 / 18,4 Go · 812 / 1 240 éléments            │
 │ ◉ Cam     │ 38 Mo/s (moyenne 30 s) · reste ≈ 3 min           │
 │ ⇅ Drop    │ En cours : IMG_4821.HEIC (iCloud → iPhone…)      │
-│ ♥ Pulse   │ [Pause] [Annuler]                                │
+│           │ [Pause] [Annuler]                                │
 │           │──────────────────────────────────────────────────│
 │           │ Destination : D:\Photos\iPhone   [Changer]       │
 │           │ Rangement : Année / Mois  (date réelle de prise) │

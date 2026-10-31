@@ -7,7 +7,7 @@
 │ ▣ Accueil │ [✓] Lancer Hyphn au démarrage de Windows         │
 │ ◉ Cam     │ [✓] Rester dans la zone de notification          │
 │ ⇅ Drop    │                                                  │
-│ ♥ Pulse   │ APPAREILS                                        │
+│           │ APPAREILS                                        │
 │           │ iPhone d'Evan · relié le 30/10      [Oublier]    │
 │           │                                                  │
 │           │ CAM                                              │

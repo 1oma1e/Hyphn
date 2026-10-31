@@ -1,6 +1,6 @@
 # Hyphn — consignes du projet
 
-App iPhone + app PC Windows 11 qui s'appairent par QR code et se parlent en local, sans compte ni cloud. Trois modules : **Cam** (webcam virtuelle Wi-Fi jusqu'à 4K60 HEVC + plugin OBS), **Drop** (transfert trié avec reprise), **Pulse** (état de l'iPhone sur le PC). Priorité iPhone ; Android seulement quand l'iPhone est fini.
+App iPhone + app PC Windows 11 qui s'appairent par QR code et se parlent en local, sans compte ni cloud. Deux modules : **Cam** (webcam virtuelle Wi-Fi jusqu'à 4K60 HEVC + plugin OBS) et **Drop** (transfert trié avec reprise), plus les infos de l'iPhone (batterie, chaleur, stockage) affichées partout sur le PC. Priorité iPhone ; Android seulement quand l'iPhone est fini.
 
 Evan est étudiant en BUT Informatique (préfère le réseau et la virtualisation). Réponds en **français simple et court**, y compris les petits messages pendant le travail ; explique chaque choix technique en 2-3 phrases (le pourquoi). Code, noms de fichiers de code et messages de commit en anglais ; docs en français.
 

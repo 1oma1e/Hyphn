@@ -5,7 +5,7 @@ Maquettes cliquables, avec animations et états (bouton Play, réglage « Tweaks
 - **PC** (Accueil, Cam, Drop, Appairage, Réglages) : https://claude.ai/artifact/STaU5yYjqD5DsSy6vdATmr
 - **iPhone** (Bienvenue, Scan QR, Accueil, Cam, Drop, Envoi, Réglages) : https://claude.ai/artifact/1etdZqrAwQWpN31xwQMYFN
 
-Changements de fond par rapport aux notes ci-dessous : pas de page Pulse ([[ADR-0017 Pulse integre sans page]]) ; pas de micro, Cam démarre en pause, aperçu plein écran sur l'iPhone ([[ADR-0018 Cam image seule et demarrage en pause]]) ; Drop iPhone en 3 onglets (Tout, Photos, Fichiers) ; menu du haut sur le PC, onglets sur l'iPhone.
+Changements de fond par rapport aux notes ci-dessous : pas de page pour les infos de l’iPhone ([[ADR-0017 Pulse integre sans page]], [[ADR-0021 Plus de module Pulse]]) ; pas de micro, Cam démarre en pause, aperçu plein écran sur l'iPhone ([[ADR-0018 Cam image seule et demarrage en pause]]) ; Drop iPhone en 3 onglets (Tout, Photos, Fichiers) ; menu du haut sur le PC, onglets sur l'iPhone.
 
 ## V1 texte (phase 0) — à remettre à jour d'après la V2
 Maquettes en texte et Mermaid. Elles fixent le contenu et l'ordre des écrans. Une note par écran, plus les parcours. Quand une note contredit la V2, la V2 a raison.
@@ -29,17 +29,16 @@ flowchart TB
     PA[PC - Accueil] --> PP[PC - Appairage]
     PA --> PC2[PC - Cam]
     PA --> PD[PC - Drop]
-    PA --> PU[PC - Pulse]
     PA --> PR[PC - Reglages]
   end
   IS -. scanne le QR de .-> PP
   IC == flux vidéo ==> PC2
   ID == fichiers ==> PD
-  IA -. état batterie, chaleur .-> PU
+  IA -. état batterie, chaleur .-> PA
 ```
 
 ## Écrans iPhone
-- [[iPhone - Accueil]] — trois tuiles Cam / Drop / Pulse, PC connecté ou non
+- [[iPhone - Accueil]] — Cam et Drop, PC connecté ou non
 - [[iPhone - Scan QR]] — appairage
 - [[iPhone - Cam]] — avant le stream, puis écran noir
 - [[iPhone - Drop]] — choisir et envoyer
@@ -50,7 +49,6 @@ flowchart TB
 - [[PC - Appairage]] — le QR code
 - [[PC - Cam]] — aperçu, réglages, télémétrie
 - [[PC - Drop]] — réception, tri, progression, historique
-- [[PC - Pulse]] — tableau de bord de l'iPhone
 - [[PC - Reglages]] — dossiers, webcam, démarrage
 
 ## Parcours

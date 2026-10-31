@@ -8,7 +8,7 @@ Exception : l'app PC est déjà codée avec un iPhone simulé ([[ADR-0019 App PC
 
 ## Fait
 - Préparation, serveur, xtool en Docker, SideStore, « Hello » SwiftUI, raccourci `Refresh SideStore` lundi et jeudi 20 h : voir [[Serveur]], ADR 0011 à 0014, [[Journal des rafraichissements]].
-- Specs phase 1 en brouillon : [[Core - Appairage QR]], [[Core - Reconnexion]], [[Pulse - Batterie et thermique]].
+- Specs phase 1 en brouillon : [[Core - Appairage QR]], [[Core - Reconnexion]], [[Infos iPhone - Batterie et chaleur]].
 - Maquettes visuelles V2 validées ([[Maquettes - Index]], ADR 0016 à 0018).
 - **App PC** `apps/desktop/` (Rust + Tauri 2, commit `c34222f`) : 5 pages au design V2 (Accueil, Appairage, Cam, Drop, Réglages).
   - Réel : identité et certificat du PC, QR `hyphn://pair?` (jeton 2 min, usage unique), code à 4 chiffres, appareil gardé jusqu'à « Oublier », réglages, règle thermique de Cam, dossiers année/mois de Drop.

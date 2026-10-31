@@ -58,6 +58,8 @@ Ce que Hyphn fait tourner sur le serveur Linux d'Evan, et comment c'est rangé. 
 | Faire le `.ipa` | `T=$(mktemp -d); mkdir $T/Payload; cp -a src/apps/ios/xtool/Hyphn.app $T/Payload/; (cd $T && python3 -m zipfile -c ~/hyphn/xtool/out/Hyphn.ipa Payload/); rm -rf $T` |
 | Copier le `.ipa` sur le PC | `scp evan@192.168.1.63:hyphn/xtool/out/Hyphn.ipa F:/Hyphn/out/` (depuis le PC) |
 
+Essai de compilation sans pousser : le code de `apps/ios` est copié dans `~/hyphn/xtool/try/ios` (tar par SSH), puis `docker compose run --rm -T -w /work/try/ios xtool dev build`. Ce dossier sert seulement à corriger les erreurs ; l’app installée vient toujours du clone Git ([[ADR-0013 Build iOS par clone Git]]).
+
 Pas de `xtool dev build --ipa` : l'image n'a pas `zip`, la commande échoue et efface le `.app`.
 
 Liens : [[ARCHITECTURE]], [[ROADMAP]], [[00-Accueil]]

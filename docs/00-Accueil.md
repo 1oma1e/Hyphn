@@ -1,6 +1,6 @@
 # Hyphn — Accueil
 
-Le trait d'union entre l'iPhone et le PC : **Cam** (webcam 4K), **Drop** (transferts triés), **Pulse** (état du téléphone). Local, sans compte, sans abonnement.
+Le trait d'union entre l'iPhone et le PC : **Cam** (webcam 4K), **Drop** (transferts triés), et l'état du téléphone (batterie, chaleur) toujours visible sur le PC. Local, sans compte, sans abonnement.
 
 ## Commencer ici
 - [[STATE]] — où on en est et la prochaine étape exacte

@@ -7,10 +7,6 @@
 │ PC-EVAN · Wi-Fi     [Oublier]│
 │ + Ajouter un PC              │
 │                              │
-│ PULSE                        │
-│ [✓] Partager batterie,       │
-│     chaleur, stockage        │
-│                              │
 │ ÉNERGIE                      │
 │ [✓] Écran noir pendant Cam   │
 │ [✓] Qualité auto (chaleur)   │

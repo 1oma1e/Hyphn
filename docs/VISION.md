@@ -5,12 +5,11 @@ Version vivante de la vision. Le texte de départ est figé dans [[CAHIER]] (sec
 ## En une phrase
 **Hyphn** est le trait d'union entre l'iPhone et le PC : on scanne un QR code une fois, et le PC a une webcam 4K, reçoit les photos triées et voit l'état du téléphone, sans compte, sans cloud, sans abonnement.
 
-## Les trois modules
+## Les deux modules
 | Module | Ce que ça fait | Pour qui / quand |
 |---|---|---|
 | **Hyphn Cam** | L'iPhone devient une webcam virtuelle Windows (et une source OBS) jusqu'à 4K60 HEVC, avec tous les réglages | Appels, cours, stream |
 | **Hyphn Drop** | Photos, vidéos et fichiers iPhone ↔ PC, en Wi-Fi ou câble, triés par Année/Mois et type, avec taille, vitesse, temps restant et reprise | Vider le téléphone, sauvegarder |
-| **Hyphn Pulse** | Batterie, chauffe, stockage et réseau de l'iPhone affichés sur le PC | Toujours, en fond, sans coûter de batterie |
 
 ## Ce qui nous rend meilleurs
 1. **Appairage en 2 secondes** par QR, 100 % local, chiffré, certificat épinglé.
