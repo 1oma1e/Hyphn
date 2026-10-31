@@ -58,6 +58,8 @@ pub struct CamWanted {
     pub codec: Codec,
     pub front: bool,
     pub lens: u32,
+    /// Picture flipped left-right (Cam dock button); the waiting screen never is.
+    pub mirror: bool,
     pub tune: Tune,
 }
 
@@ -622,6 +624,7 @@ impl State {
             wb_kelvin: self.cam.tune.wb.unwrap_or(5600).clamp(2500, 8000),
             torch: self.cam.tune.torch,
             stabilization: self.cam.tune.stab.min(2),
+            mirror: self.cam.mirror,
         }
     }
 }
@@ -668,6 +671,7 @@ mod tests {
                 codec: Codec::Hevc,
                 front: false,
                 lens: 1,
+                mirror: false,
                 tune: Tune::default(),
             },
             Box::new(move |e| ev.lock().unwrap().push(e)),

@@ -37,6 +37,7 @@ const I = {
   lock: svg('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'),
   shield: svg('<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>'),
   alert: svg('<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/>'),
+  mirror: svg('<path d="M12 3v18" stroke-dasharray="2 2.5"/><path d="M9 6L3 18h6zM15 6l6 12h-6z"/>'),
   swap: svg('<path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/>'),
 };
 
@@ -450,7 +451,7 @@ const PROFILES = [['Appel', 2, 2], ['Stream', 0, 3], ['Cours', 3, 2]];
 const CAM_DEFAULTS = {
   res: 0, fps: 3, codec: 0, rate: 0, autoq: true,
   ev: 0, focus: 50, wb: 5600, afA: true, wbA: true, torch: false, stab: 0,
-  msg: 'Je reviens bientôt', multi: true, wst: 0, prof: 1, lens: 1, front: false,
+  msg: 'Je reviens bientôt', multi: true, wst: 0, prof: 1, lens: 1, front: false, mirror: false,
 };
 const LANGS = ['Je reviens bientôt', 'Be right back', 'Vuelvo enseguida', 'Bin gleich zurück', 'Torno subito', 'Volto já', 'すぐ戻ります', '곧 돌아올게요'];
 
@@ -666,7 +667,7 @@ const Cam = {
   // « live » lives in Rust (snapshot); the window only asks to change it.
   isLive: () => !!(S && S.cam.live),
   pushLens() {
-    invoke('cam_lens', { front: this.cs.front, lens: this.cs.lens });
+    invoke('cam_lens', { front: this.cs.front, lens: this.cs.lens, mirror: !!this.cs.mirror });
   },
   push() {
     const c = this.cs;
@@ -710,6 +711,7 @@ const Cam = {
     $('#c-dock').innerHTML = `
       <button class="pz ${live ? 'live' : 'paused'}" type="button" data-act="pause" ${conn ? '' : 'disabled'}>${live ? I.pause + 'Pause' : I.play + 'Afficher la caméra'}</button>
       <div class="lens" role="group" aria-label="Objectif">${LENS_L.map((n, i) => `<button type="button" class="${i === c.lens && !c.front ? 'on' : ''}" data-act="set" data-k="lens" data-v="${i}" ${c.front ? 'disabled' : ''}>${n}</button>`).join('')}</div>
+      <button class="db${c.mirror ? ' on' : ''}" type="button" aria-label="Miroir" aria-pressed="${!!c.mirror}" title="Miroir (l’écran d’attente reste à l’endroit)" data-act="mirror">${I.mirror}</button>
       <button class="db" type="button" aria-label="Retourner la caméra" data-act="flipcam">${I.flip}</button>
       <span class="sep"></span>
       <button class="db${this.panel === 'info' ? ' on' : ''}" type="button" aria-label="Infos du flux" data-act="panel" data-v="info">${I.info}</button>
@@ -754,7 +756,7 @@ const Cam = {
       }
       this.dockKey = '';
     }
-    const dockKey = [this.connected(), this.isLive(), this.cs.front, this.cs.lens].join('|');
+    const dockKey = [this.connected(), this.isLive(), this.cs.front, this.cs.lens, this.cs.mirror].join('|');
     if (dockKey !== this.dockKey) {
       this.dockKey = dockKey;
       this.paintDock();
@@ -900,6 +902,12 @@ const Cam = {
     },
     panel: (el) => Cam.openPanel(el.dataset.v),
     close: () => Cam.openPanel(Cam.panel),
+    mirror: () => {
+      Cam.cs.mirror = !Cam.cs.mirror;
+      Cam.paintDock();
+      Cam.pushLens();
+      Cam.changed(false);
+    },
     flipcam: () => {
       Cam.cs.front = !Cam.cs.front;
       Cam.paintDock();

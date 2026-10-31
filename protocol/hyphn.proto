@@ -137,6 +137,7 @@ message CamControl {
   uint32 wb_kelvin = 12;  // 2500..8000, when manual
   bool torch = 13;
   uint32 stabilization = 14; // 0 off, 1 standard, 2 cinematic
+  bool mirror = 15;       // picture flipped left-right on the iPhone (never the waiting screen)
 }
 
 message CamState {

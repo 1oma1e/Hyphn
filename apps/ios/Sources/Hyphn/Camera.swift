@@ -89,7 +89,9 @@ final class Camera: NSObject, ObservableObject {
         let reconfigure = c.front != control.front || c.height != control.height || c.fps != control.fps
         let relens = c.lens != control.lens
         let retune = !Self.sameTune(c, control)
+        let remirror = c.mirror != control.mirror
         control = c
+        if remirror, let r = rotation { applyRotation(r.videoRotationAngleForHorizonLevelCapture) }
         if isOpen, !denied {
             if reconfigure { configure(front: c.front, lens: c.lens, height: c.height, fps: c.fps) }
             else {
@@ -289,7 +291,11 @@ final class Camera: NSObject, ObservableObject {
     private func applyRotation(_ angle: CGFloat) {
         if let conn = output.connection(with: .video), conn.isVideoRotationAngleSupported(angle) {
             conn.videoRotationAngle = angle
-            conn.isVideoMirrored = front
+            // Mirror only when asked (Cam dock on the PC): text reads the right way for the people watching.
+            if conn.isVideoMirroringSupported {
+                conn.automaticallyAdjustsVideoMirroring = false
+                conn.isVideoMirrored = control.mirror
+            }
         }
         let dims = (session.inputs.first as? AVCaptureDeviceInput).map { CMVideoFormatDescriptionGetDimensions($0.device.activeFormat.formatDescription) }
         if let d = dims {

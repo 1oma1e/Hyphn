@@ -50,6 +50,8 @@ struct CamControl: Equatable {
     var torch = false
     /// 0 off, 1 standard, 2 cinematic.
     var stabilization: UInt32 = 0
+    /// Picture flipped left-right (never the waiting screen, drawn by the PC).
+    var mirror = false
 }
 
 struct CamState {
@@ -340,6 +342,7 @@ extension Msg {
                     case 12: c.wbKelvin = UInt32(truncatingIfNeeded: v)
                     case 13: c.torch = v != 0
                     case 14: c.stabilization = UInt32(truncatingIfNeeded: v)
+                    case 15: c.mirror = v != 0
                     default: break
                     }
                 }

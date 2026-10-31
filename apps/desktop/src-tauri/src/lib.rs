@@ -331,10 +331,11 @@ fn cam_set(quality: CamRequest, h: State<'_, Hyphn>) {
 /// Lens or front camera touched on the PC. Apart from `cam_set` so that
 /// opening the Cam page never sends back an old lens over the iPhone's.
 #[tauri::command]
-fn cam_lens(front: bool, lens: u32, h: State<'_, Hyphn>) {
+fn cam_lens(front: bool, lens: u32, mirror: bool, h: State<'_, Hyphn>) {
     h.hub.update_cam(|c| {
         c.front = front;
         c.lens = lens.min(3);
+        c.mirror = mirror;
     });
 }
 
@@ -526,6 +527,7 @@ fn saved_cam(settings: &Settings) -> CamWanted {
         codec: if c.get("codec").and_then(|v| v.as_u64()) == Some(1) { Codec::H264 } else { Codec::Hevc },
         front: c.get("front").and_then(|v| v.as_bool()).unwrap_or(false),
         lens: c.get("lens").and_then(|v| v.as_u64()).unwrap_or(1) as u32,
+        mirror: c.get("mirror").and_then(|v| v.as_bool()).unwrap_or(false),
         tune: {
             let flag = |k: &str, d: bool| c.get(k).and_then(|v| v.as_bool()).unwrap_or(d);
             let num = |k: &str, d: u64| c.get(k).and_then(|v| v.as_u64()).unwrap_or(d) as u32;
