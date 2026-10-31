@@ -519,6 +519,8 @@ const Video = {
     this.close();
     this.codec = codec;
     this.size = w + 'x' + h;
+    this.w = w;
+    this.h = h;
     this.dec = new VideoDecoder({
       output: (frame) => {
         if (this.pending) this.pending.close();
@@ -537,13 +539,25 @@ const Video = {
         this.key();
       },
     });
-    this.dec.configure({ codec: CODEC_STR[codec] || CODEC_STR[2], optimizeForLatency: true, hardwareAcceleration: 'prefer-hardware' });
+    // The real picture size, from the iPhone: some HEVC decoders announce a
+    // wrong visible area otherwise (only a corner shown, as if zoomed in).
+    this.dec.configure({
+      codec: CODEC_STR[codec] || CODEC_STR[2], optimizeForLatency: true, hardwareAcceleration: 'prefer-hardware',
+      codedWidth: w, codedHeight: h, displayAspectWidth: w, displayAspectHeight: h,
+    });
   },
   paint() {
     this.raf = 0;
-    const f = this.pending;
+    let f = this.pending;
     this.pending = null;
     if (!f) return;
+    const vr = f.visibleRect;
+    if (vr && this.w && (vr.width !== this.w || vr.height !== this.h) && f.codedWidth >= this.w && f.codedHeight >= this.h) {
+      // Visible area wrong (HEVC): crop the frame to the iPhone's real size.
+      const fixed = new VideoFrame(f, { visibleRect: { x: 0, y: 0, width: this.w, height: this.h }, displayWidth: this.w, displayHeight: this.h });
+      f.close();
+      f = fixed;
+    }
     const c = this.canvas;
     if (c) {
       // Drawn at the size shown on screen, not at the 4K of the stream.
