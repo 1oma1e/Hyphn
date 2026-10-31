@@ -306,6 +306,8 @@ final class PCLink: ObservableObject {
             camControl = c
             if c.live, camera?.isOpen != true { wantsCam = true }
             camera?.apply(c)
+        case .keyRequest:
+            camera?.requestKey()
         case .forget:
             session?.close()
             forgetLocally(notice: "\(pcName) a oublié cet iPhone.")
@@ -341,7 +343,7 @@ final class PCLink: ObservableObject {
     /// A second connection for the video (spec `Cam - Flux v1`, E3).
     func openMedia() -> PinnedConnection? {
         guard let pc, let identity, session != nil else { return nil }
-        let c = PinnedConnection(host: pc.host, port: pc.port, pinned: pc.fingerprint, identity: identity)
+        let c = PinnedConnection(host: pc.host, port: pc.port, pinned: pc.fingerprint, identity: identity, serviceClass: .interactiveVideo)
         c.onReady = { c.send(.videoHello) }
         c.start()
         return c

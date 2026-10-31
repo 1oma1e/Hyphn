@@ -26,6 +26,11 @@ use crate::Error;
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const PING_EVERY: Duration = Duration::from_secs(5);
+/// The iPhone answers each Ping: 4 missed answers = the session is dead,
+/// even if Windows has not noticed the lost Wi-Fi yet.
+const SILENCE_LIMIT: Duration = Duration::from_secs(20);
+/// At most one keyframe request this often (a burst of drops asks once).
+const KEY_REQUEST_EVERY: Duration = Duration::from_millis(300);
 
 /// What the window must hear about. Never sent while the state lock is held.
 #[derive(Debug, Clone, PartialEq)]
@@ -40,6 +45,8 @@ pub enum UiEvent {
     Changed,
     /// Evan picked a quality on the iPhone.
     CamQuality { height: u32, fps: u32 },
+    /// Evan touched « Afficher » on the iPhone: the PC shows the Cam page.
+    PhoneLive,
 }
 
 /// What the PC wants from the camera; the thermal rule turns it into `CamControl`.
@@ -51,6 +58,21 @@ pub struct CamWanted {
     pub codec: Codec,
     pub front: bool,
     pub lens: u32,
+    pub tune: Tune,
+}
+
+/// Picture settings applied by the iPhone camera itself (Réglages › Caméra).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Tune {
+    /// -20..20 tenths of EV.
+    pub ev_tenths: i32,
+    /// None = auto focus; Some(0..100) = locked, near to far.
+    pub focus: Option<u32>,
+    /// None = auto white balance; Some(kelvin).
+    pub wb: Option<u32>,
+    pub torch: bool,
+    /// 0 off, 1 standard, 2 cinematic.
+    pub stab: u32,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -76,8 +98,25 @@ pub struct PhoneCam {
     pub lens_count: u32,
 }
 
-/// Called with each video packet for the window; false = the window did not take it.
-pub type VideoSink = Arc<dyn Fn(Vec<u8>) -> bool + Send + Sync>;
+/// Called with each video frame (the window, the Windows webcam, OBS);
+/// false = that reader was too slow and skipped it.
+pub type VideoSink = Arc<dyn Fn(&proto::VideoFrame) -> bool + Send + Sync>;
+
+/// A reader that starts from a keyframe, and after a skipped frame waits for
+/// the next one: frames that depend on a lost one are dropped quietly instead
+/// of reaching its decoder broken.
+pub fn keyed_sink(send: impl Fn(&proto::VideoFrame) -> bool + Send + Sync + 'static) -> VideoSink {
+    let need_key = std::sync::atomic::AtomicBool::new(true);
+    Arc::new(move |f| {
+        use std::sync::atomic::Ordering::Relaxed;
+        if need_key.load(Relaxed) && !f.keyframe {
+            return true;
+        }
+        let ok = send(f);
+        need_key.store(!ok, Relaxed);
+        ok
+    })
+}
 
 struct Session {
     id: u64,
@@ -85,6 +124,7 @@ struct Session {
     tx: UnboundedSender<Envelope>,
     rtt_ms: Option<u32>,
     cam: Option<proto::CamState>,
+    last_key_request: Option<Instant>,
 }
 
 pub struct State {
@@ -96,7 +136,9 @@ pub struct State {
     pub cam: CamWanted,
     sent_control: Option<proto::CamControl>,
     stats: CamStats,
-    video_sink: Option<VideoSink>,
+    video_sinks: Vec<(String, VideoSink)>,
+    /// Readers that cannot decode HEVC: the iPhone sends H.264 while one is there.
+    h264_readers: Vec<String>,
 }
 
 /// Read by the snapshot.
@@ -162,7 +204,8 @@ impl Hub {
                 cam,
                 sent_control: None,
                 stats: CamStats::default(),
-                video_sink: None,
+                video_sinks: Vec::new(),
+                h264_readers: Vec::new(),
             }),
             notify,
             tls,
@@ -202,13 +245,60 @@ impl Hub {
         }
     }
 
+    #[cfg(test)]
     pub fn set_cam(&self, wanted: CamWanted) {
         self.lock().cam = wanted;
         self.push_control();
     }
 
-    pub fn set_video_sink(&self, sink: Option<VideoSink>) {
-        self.lock().video_sink = sink;
+    /// Quality, codec, lens… from the PC window; « live » is left as it is.
+    pub fn update_cam(&self, f: impl FnOnce(&mut CamWanted)) {
+        f(&mut self.lock().cam);
+        self.push_control();
+    }
+
+    /// « Afficher » / « Pause » on the PC.
+    pub fn set_live(&self, live: bool) {
+        self.lock().cam.live = live;
+        self.push_control();
+        (self.notify)(UiEvent::Changed);
+    }
+
+    /// One reader of the video per name; None removes it.
+    pub fn set_video_sink(&self, name: &str, sink: Option<VideoSink>) {
+        let mut st = self.lock();
+        st.video_sinks.retain(|(n, _)| n != name);
+        if let Some(s) = sink {
+            st.video_sinks.push((name.to_string(), s));
+        }
+    }
+
+    /// The Windows webcam or OBS on this PC cannot decode HEVC.
+    pub fn set_reader_needs_h264(&self, name: &str, needs: bool) {
+        {
+            let mut st = self.lock();
+            st.h264_readers.retain(|n| n != name);
+            if needs {
+                st.h264_readers.push(name.to_string());
+            }
+        }
+        self.push_control();
+    }
+
+    /// A decoder (window, webcam) starts or lost frames: the next frame from
+    /// the iPhone is a keyframe, instead of waiting up to 2 s for one.
+    pub fn request_key(&self) {
+        let tx = {
+            let mut st = self.lock();
+            let Some(s) = st.session.as_mut() else { return };
+            let now = Instant::now();
+            if s.last_key_request.is_some_and(|t| now.duration_since(t) < KEY_REQUEST_EVERY) {
+                return;
+            }
+            s.last_key_request = Some(now);
+            s.tx.clone()
+        };
+        let _ = tx.send(env(Msg::KeyRequest(proto::KeyRequest {})));
     }
 
     /// Once per second: turns the frame counters into fps and Mb/s.
@@ -377,7 +467,7 @@ impl Hub {
             st.next_id += 1;
             let id = st.next_id;
             // A newer connection from the same iPhone replaces the old one.
-            st.session = Some(Session { id, fingerprint: fp, tx: tx.clone(), rtt_ms: None, cam: None });
+            st.session = Some(Session { id, fingerprint: fp, tx: tx.clone(), rtt_ms: None, cam: None, last_key_request: None });
             st.sent_control = None;
             id
         };
@@ -403,7 +493,8 @@ impl Hub {
         self.push_control();
         (self.notify)(UiEvent::Changed);
 
-        while let Ok(Some(m)) = read_msg(&mut rd).await {
+        // Silence longer than SILENCE_LIMIT (no Pong, no status) ends the session.
+        while let Ok(Ok(Some(m))) = timeout(SILENCE_LIMIT, read_msg(&mut rd)).await {
             match m.msg {
                 Some(Msg::DeviceStatus(s)) => {
                     self.lock().last_status = Some(StatusView::from(&s));
@@ -417,17 +508,35 @@ impl Hub {
                     }
                 }
                 Some(Msg::CamState(c)) => {
-                    {
+                    let started = {
                         let mut st = self.lock();
-                        // The iPhone may change these itself: the PC follows.
-                        st.cam.live = c.live;
-                        st.cam.front = c.front;
-                        st.cam.lens = c.lens;
+                        let mut started = false;
+                        // Only Evan's own touches on the iPhone change what the PC
+                        // wants; a report sent before our last CamControl arrived
+                        // would otherwise undo it (the « Afficher » ping-pong).
+                        // Each value only if Evan changed that one: a lens touch
+                        // carries the old « live » and must not undo the PC's.
+                        let before = st.session.as_ref().filter(|s| s.id == id).and_then(|s| s.cam.clone());
+                        if c.by_user {
+                            let changed = |f: fn(&proto::CamState) -> (bool, u32)| before.as_ref().map_or(true, |b| f(b) != f(&c));
+                            if changed(|s| (s.live, 0)) {
+                                started = c.live && !st.cam.live;
+                                st.cam.live = c.live;
+                            }
+                            if changed(|s| (s.front, s.lens)) {
+                                st.cam.front = c.front;
+                                st.cam.lens = c.lens;
+                            }
+                        }
                         if let Some(s) = st.session.as_mut().filter(|s| s.id == id) {
                             s.cam = Some(c);
                         }
-                    }
+                        started
+                    };
                     self.push_control();
+                    if started {
+                        (self.notify)(UiEvent::PhoneLive);
+                    }
                     (self.notify)(UiEvent::Changed);
                 }
                 Some(Msg::CamQuality(q)) => {
@@ -465,18 +574,23 @@ impl Hub {
         if !self.is_paired(&fp) {
             return Ok(());
         }
-        while let Ok(Some(m)) = read_msg(&mut io).await {
+        // A media connection that goes quiet (Wi-Fi lost) is closed too.
+        while let Ok(Ok(Some(m))) = timeout(SILENCE_LIMIT, read_msg(&mut io)).await {
             let Some(Msg::VideoFrame(f)) = m.msg else { continue };
-            let sink = {
+            let sinks: Vec<VideoSink> = {
                 let mut st = self.lock();
                 st.stats.frames += 1;
                 st.stats.bytes += f.data.len() as u64;
-                st.video_sink.clone()
+                st.video_sinks.iter().map(|(_, s)| s.clone()).collect()
             };
-            if let Some(sink) = sink {
-                if !sink(video_packet(&f)) {
-                    self.lock().stats.dropped += 1;
-                }
+            let mut skipped = false;
+            for sink in sinks {
+                skipped |= !sink(&f);
+            }
+            if skipped {
+                self.lock().stats.dropped += 1;
+                // The skipped reader cannot decode until the next keyframe.
+                self.request_key();
             }
         }
         Ok(())
@@ -498,9 +612,16 @@ impl State {
             height: eff.quality.height,
             fps: eff.quality.fps,
             bitrate_kbps: eff.quality.bitrate_mbps * 1000,
-            codec: self.cam.codec as i32,
+            codec: if self.h264_readers.is_empty() { self.cam.codec } else { Codec::H264 } as i32,
             front: self.cam.front,
             lens: self.cam.lens,
+            exposure_bias_tenths: self.cam.tune.ev_tenths.clamp(-20, 20),
+            focus_manual: self.cam.tune.focus.is_some(),
+            focus: self.cam.tune.focus.unwrap_or(50).min(100),
+            wb_manual: self.cam.tune.wb.is_some(),
+            wb_kelvin: self.cam.tune.wb.unwrap_or(5600).clamp(2500, 8000),
+            torch: self.cam.tune.torch,
+            stabilization: self.cam.tune.stab.min(2),
         }
     }
 }
@@ -547,6 +668,7 @@ mod tests {
                 codec: Codec::Hevc,
                 front: false,
                 lens: 1,
+                tune: Tune::default(),
             },
             Box::new(move |e| ev.lock().unwrap().push(e)),
         )
@@ -568,8 +690,14 @@ mod tests {
         write_msg(io, &env(m)).await.unwrap();
     }
 
+    /// Next message, Pings skipped (they come every 5 s, at any time).
     async fn recv(io: &mut Phone) -> Option<Msg> {
-        timeout(Duration::from_secs(5), read_msg(io)).await.unwrap().unwrap().and_then(|e| e.msg)
+        loop {
+            let m = timeout(Duration::from_secs(5), read_msg(io)).await.unwrap().unwrap().and_then(|e| e.msg);
+            if !matches!(m, Some(Msg::Ping(_))) {
+                return m;
+            }
+        }
     }
 
     fn request(offer: &PairOffer) -> Msg {
@@ -713,8 +841,8 @@ mod tests {
         let _ctl = pair(&r, &phone).await;
         let got = Arc::new(Mutex::new(Vec::<Vec<u8>>::new()));
         let g = got.clone();
-        r.hub.set_video_sink(Some(Arc::new(move |p| {
-            g.lock().unwrap().push(p);
+        r.hub.set_video_sink("window", Some(Arc::new(move |f| {
+            g.lock().unwrap().push(video_packet(f));
             true
         })));
         let mut media = connect(r.addr, &phone, r.hub.identity.fingerprint).await.unwrap();
@@ -725,7 +853,7 @@ mod tests {
             codec: Codec::Hevc as i32,
             width: 1920,
             height: 1080,
-            data: vec![0, 0, 0, 1, 0x40, 0x01],
+            data: vec![0, 0, 0, 1, 0x40, 0x01].into(),
         };
         send(&mut media, Msg::VideoFrame(frame.clone())).await;
         wait_until(|| !got.lock().unwrap().is_empty()).await;
@@ -734,5 +862,92 @@ mod tests {
         assert_eq!((p[0], p[1]), (Codec::Hevc as u8, 1));
         assert_eq!(u32::from_le_bytes(p[10..14].try_into().unwrap()), 1920);
         assert_eq!(&p[18..], &frame.data[..]);
+    }
+
+    #[tokio::test]
+    async fn a_late_iphone_report_does_not_undo_afficher_on_the_pc() {
+        let r = rig().await;
+        let phone = Identity::generate("phone").unwrap();
+        let mut io = pair(&r, &phone).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::CamControl(_))));
+        r.hub.set_live(true);
+        assert!(matches!(recv(&mut io).await, Some(Msg::CamControl(c)) if c.live));
+        // Sent by the iPhone before it got the CamControl: Cam tab still closed.
+        send(&mut io, Msg::CamState(proto::CamState { open: false, live: false, by_user: false, ..Default::default() })).await;
+        wait_until(|| r.hub.view().phone_cam.is_some_and(|c| !c.open)).await;
+        assert!(r.hub.view().live, "the PC must keep « Afficher »");
+    }
+
+    #[tokio::test]
+    async fn afficher_on_the_iphone_switches_the_pc() {
+        let r = rig().await;
+        let phone = Identity::generate("phone").unwrap();
+        let mut io = pair(&r, &phone).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::CamControl(_))));
+        send(&mut io, Msg::CamState(proto::CamState { open: true, live: true, lens: 2, by_user: true, ..Default::default() })).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::CamControl(c)) if c.live && c.lens == 2));
+        assert!(r.hub.view().live);
+        assert!(r.events.lock().unwrap().contains(&UiEvent::PhoneLive));
+        // « Pause » on the iPhone pauses the PC too.
+        send(&mut io, Msg::CamState(proto::CamState { open: true, live: false, lens: 2, by_user: true, ..Default::default() })).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::CamControl(c)) if !c.live));
+    }
+
+    #[tokio::test]
+    async fn a_lens_touch_on_the_iphone_keeps_afficher_from_the_pc() {
+        let r = rig().await;
+        let phone = Identity::generate("phone").unwrap();
+        let mut io = pair(&r, &phone).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::CamControl(_))));
+        send(&mut io, Msg::CamState(proto::CamState { open: true, live: false, lens: 1, ..Default::default() })).await;
+        wait_until(|| r.hub.view().phone_cam.is_some()).await;
+        r.hub.set_live(true);
+        assert!(matches!(recv(&mut io).await, Some(Msg::CamControl(c)) if c.live));
+        // Lens touched before the iPhone saw « Afficher »: old live, new lens.
+        send(&mut io, Msg::CamState(proto::CamState { open: true, live: false, lens: 3, by_user: true, ..Default::default() })).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::CamControl(c)) if c.live && c.lens == 3));
+        assert!(r.hub.view().live);
+    }
+
+    #[test]
+    fn a_keyed_reader_skips_until_the_next_keyframe() {
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let full = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let (s, f) = (sent.clone(), full.clone());
+        let sink = keyed_sink(move |fr| {
+            if f.load(std::sync::atomic::Ordering::Relaxed) {
+                return false;
+            }
+            s.lock().unwrap().push(fr.pts_us);
+            true
+        });
+        let frame = |pts, keyframe| proto::VideoFrame { pts_us: pts, keyframe, ..Default::default() };
+        assert!(sink(&frame(1, false)), "before the first keyframe: dropped quietly");
+        assert!(sink(&frame(2, true)));
+        full.store(true, std::sync::atomic::Ordering::Relaxed);
+        assert!(!sink(&frame(3, false)), "the reader was full");
+        full.store(false, std::sync::atomic::Ordering::Relaxed);
+        assert!(sink(&frame(4, false)), "depends on the lost frame: dropped");
+        assert!(sink(&frame(5, true)));
+        assert_eq!(*sent.lock().unwrap(), vec![2, 5]);
+    }
+
+    #[tokio::test]
+    async fn a_slow_reader_asks_the_iphone_for_a_keyframe_once() {
+        let r = rig().await;
+        let phone = Identity::generate("phone").unwrap();
+        let mut ctl = pair(&r, &phone).await;
+        assert!(matches!(recv(&mut ctl).await, Some(Msg::CamControl(_))));
+        r.hub.set_video_sink("window", Some(Arc::new(|_| false)));
+        let mut media = connect(r.addr, &phone, r.hub.identity.fingerprint).await.unwrap();
+        send(&mut media, Msg::VideoHello(proto::VideoHello {})).await;
+        for _ in 0..3 {
+            send(&mut media, Msg::VideoFrame(proto::VideoFrame { data: vec![0, 0, 0, 1].into(), ..Default::default() })).await;
+        }
+        assert!(matches!(recv(&mut ctl).await, Some(Msg::KeyRequest(_))));
+        wait_until(|| r.hub.view().stats.dropped == 3).await;
+        // Rate limited: three drops in a row, one request.
+        let more = timeout(Duration::from_millis(150), recv(&mut ctl)).await;
+        assert!(more.is_err(), "only one KeyRequest expected");
     }
 }

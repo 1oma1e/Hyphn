@@ -36,10 +36,15 @@ final class PinnedConnection {
     var onMessage: ((Msg) -> Void)?
     var onClose: ((Failure?) -> Void)?
 
-    /// Messages waiting to leave; the camera drops frames when it grows.
+    /// Messages and bytes waiting to leave; the camera encoder adapts to them.
     private(set) var pendingSends = 0
+    private let pendingLock = NSLock()
+    private var _pendingBytes = 0
+    var pendingBytes: Int { pendingLock.withLock { _pendingBytes } }
 
-    init(to endpoint: NWEndpoint, pinned: Data, identity: DeviceIdentity) {
+    /// `serviceClass`: `.interactiveVideo` for the Cam stream, so the Wi-Fi
+    /// (WMM) gives its packets priority over background traffic.
+    init(to endpoint: NWEndpoint, pinned: Data, identity: DeviceIdentity, serviceClass: NWParameters.ServiceClass = .responsiveData) {
         let tls = NWProtocolTLS.Options()
         let sec = tls.securityProtocolOptions
         sec_protocol_options_set_min_tls_protocol_version(sec, .TLSv13)
@@ -57,15 +62,15 @@ final class PinnedConnection {
         }, queue)
         self.pinState = pin
         self.queue = queue
-        self.nw = NWConnection(to: endpoint, using: Self.parameters(tls))
+        self.nw = NWConnection(to: endpoint, using: Self.parameters(tls, serviceClass: serviceClass))
     }
 
-    convenience init(host: String, port: UInt16, pinned: Data, identity: DeviceIdentity) {
+    convenience init(host: String, port: UInt16, pinned: Data, identity: DeviceIdentity, serviceClass: NWParameters.ServiceClass = .responsiveData) {
         let ep = NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port) ?? 47800)
-        self.init(to: ep, pinned: pinned, identity: identity)
+        self.init(to: ep, pinned: pinned, identity: identity, serviceClass: serviceClass)
     }
 
-    private static func parameters(_ tls: NWProtocolTLS.Options) -> NWParameters {
+    private static func parameters(_ tls: NWProtocolTLS.Options, serviceClass: NWParameters.ServiceClass) -> NWParameters {
         let tcp = NWProtocolTCP.Options()
         tcp.noDelay = true
         // A lost Wi-Fi is seen by TCP keepalive, not by app messages (spec `Core - Reconnexion`, E6).
@@ -74,7 +79,11 @@ final class PinnedConnection {
         tcp.keepaliveInterval = 5
         tcp.keepaliveCount = 3
         tcp.connectionTimeout = 8
-        return NWParameters(tls: tls, tcp: tcp)
+        let p = NWParameters(tls: tls, tcp: tcp)
+        p.serviceClass = serviceClass
+        // Never over cellular or a VPN: the PC is on this Wi-Fi.
+        p.prohibitExpensivePaths = true
+        return p
     }
 
     private static func leafFingerprint(_ trust: sec_trust_t) -> Data? {
@@ -134,11 +143,14 @@ final class PinnedConnection {
 
     func send(_ m: Msg) {
         let data = m.framed()
+        let n = data.count
+        pendingLock.withLock { _pendingBytes += n }
         queue.async {
             self.pendingSends += 1
             self.nw.send(content: data, completion: .contentProcessed { [weak self] err in
                 guard let self else { return }
                 self.pendingSends -= 1
+                self.pendingLock.withLock { self._pendingBytes -= n }
                 if let err { self.finish(.network(err.localizedDescription)) }
             })
         }

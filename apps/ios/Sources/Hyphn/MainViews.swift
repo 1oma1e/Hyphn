@@ -50,6 +50,7 @@ struct RootView: View {
 struct TabShell: View {
     @EnvironmentObject var link: PCLink
     @EnvironmentObject var camera: Camera
+    @Environment(\.scenePhase) private var phase
     @Binding var tab: AppTab
     @Binding var arrived: Bool
     @Binding var scanning: Bool
@@ -74,6 +75,10 @@ struct TabShell: View {
             if t == .cam { camera.open() } else { camera.close() }
         }
         .onAppear { if tab == .cam { camera.open() } }
+        // Back from the background on the Cam tab: iOS closed the camera, open it again.
+        .onChange(of: phase) { _, p in
+            if p == .active, tab == .cam { camera.open() }
+        }
     }
 }
 
@@ -248,7 +253,7 @@ struct HomeView: View {
                 .frame(width: 58, height: 58)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Drop").font(.geist(17, .semibold))
-                    Text("Photos et fichiers vers le PC · bientôt").font(.geist(13)).foregroundStyle(Ink.tx2)
+                    Text("Bientôt").font(.geist(13)).foregroundStyle(Ink.tx2)
                 }
                 Spacer()
             }
@@ -300,8 +305,6 @@ struct CamView: View {
                 VStack(spacing: 10) {
                     Spacer()
                     Text("En pause").font(.geist(30, .semibold)).tracking(-1)
-                    Text("\(link.pcName) montre ton écran d’attente. Touche « Afficher » quand tu es prêt.")
-                        .font(.geist(15)).foregroundStyle(Ink.tx2).multilineTextAlignment(.center).padding(.horizontal, 40)
                     Spacer().frame(height: 260)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -505,8 +508,6 @@ struct QualitySheet: View {
             segment("Images par seconde", [(24, "24"), (30, "30"), (60, "60")], current: link.camControl.fps) {
                 camera.pickQuality(height: link.camControl.height, fps: $0)
             }
-            Text("Tout le reste (flou, lumière, exposition…) se règle sur le PC.")
-                .font(.geist(13)).foregroundStyle(Ink.tx3).multilineTextAlignment(.center)
             Button("OK") { dismiss() }.buttonStyle(PrimaryButtonStyle(fill: Ink.tx, text: .black))
         }
         .padding(22)
@@ -541,8 +542,6 @@ struct DropView: View {
             Image(systemName: "arrow.up.arrow.down").font(.system(size: 30)).foregroundStyle(Ink.cy)
                 .frame(width: 72, height: 72).background(Ink.cy.opacity(0.1), in: RoundedRectangle(cornerRadius: 22))
             Text("Drop arrive bientôt").font(.geist(26, .semibold)).tracking(-1)
-            Text("Photos, vidéos et fichiers entre l’iPhone et le PC, rangés par année et par mois.")
-                .font(.geist(15)).foregroundStyle(Ink.tx2).multilineTextAlignment(.center).padding(.horizontal, 36)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.bottom, 90)
@@ -603,7 +602,7 @@ struct SettingsView: View {
                     Toggle(isOn: $autoBlack) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Écran noir automatique").font(.geist(15))
-                            Text("Après 30 s sans toucher, l’image continue de partir").font(.geist(12)).foregroundStyle(Ink.tx3)
+                            Text("Après 30 s sans toucher").font(.geist(12)).foregroundStyle(Ink.tx3)
                         }
                     }
                     .tint(Ink.li)

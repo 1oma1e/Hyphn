@@ -9,7 +9,7 @@ pub const MAX_MESSAGE: usize = 16 * 1024 * 1024;
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Envelope {
-    #[prost(oneof = "envelope::Msg", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16")]
+    #[prost(oneof = "envelope::Msg", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17")]
     pub msg: Option<envelope::Msg>,
 }
 
@@ -48,6 +48,8 @@ pub mod envelope {
         VideoFrame(super::VideoFrame),
         #[prost(message, tag = "16")]
         Forget(super::Forget),
+        #[prost(message, tag = "17")]
+        KeyRequest(super::KeyRequest),
     }
 }
 
@@ -199,6 +201,20 @@ pub struct CamControl {
     pub front: bool,
     #[prost(uint32, tag = "7")]
     pub lens: u32,
+    #[prost(sint32, tag = "8")]
+    pub exposure_bias_tenths: i32,
+    #[prost(bool, tag = "9")]
+    pub focus_manual: bool,
+    #[prost(uint32, tag = "10")]
+    pub focus: u32,
+    #[prost(bool, tag = "11")]
+    pub wb_manual: bool,
+    #[prost(uint32, tag = "12")]
+    pub wb_kelvin: u32,
+    #[prost(bool, tag = "13")]
+    pub torch: bool,
+    #[prost(uint32, tag = "14")]
+    pub stabilization: u32,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -221,6 +237,8 @@ pub struct CamState {
     pub lens: u32,
     #[prost(uint32, tag = "9")]
     pub lens_count: u32,
+    #[prost(bool, tag = "10")]
+    pub by_user: bool,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -246,12 +264,16 @@ pub struct VideoFrame {
     pub width: u32,
     #[prost(uint32, tag = "5")]
     pub height: u32,
-    #[prost(bytes = "vec", tag = "6")]
-    pub data: Vec<u8>,
+    /// `Bytes`: decoded without a copy out of the received buffer.
+    #[prost(bytes = "bytes", tag = "6")]
+    pub data: bytes::Bytes,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Forget {}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct KeyRequest {}
 
 /// Reads one length-prefixed message. `Ok(None)` on a clean end of stream.
 pub async fn read_msg<R: AsyncRead + Unpin>(r: &mut R) -> std::io::Result<Option<Envelope>> {
@@ -267,7 +289,7 @@ pub async fn read_msg<R: AsyncRead + Unpin>(r: &mut R) -> std::io::Result<Option
     }
     let mut buf = vec![0u8; len];
     r.read_exact(&mut buf).await?;
-    prost::Message::decode(buf.as_slice())
+    prost::Message::decode(bytes::Bytes::from(buf))
         .map(Some)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
 }
@@ -286,6 +308,21 @@ mod tests {
     use super::*;
     use envelope::Msg;
 
+    /// The bytes Wire.swift must write and read for the Cam fields of 2026-10-31.
+    #[test]
+    fn cam_fields_known_encoding() {
+        use prost::Message;
+        // sint32 −3 = zigzag 5, in CamControl (envelope field 11).
+        let c: Envelope = Msg::CamControl(CamControl { exposure_bias_tenths: -3, ..Default::default() }).into();
+        assert_eq!(c.encode_to_vec(), vec![0x5A, 0x02, 0x40, 0x05]);
+        // by_user (tag 10) in CamState (envelope field 12).
+        let s: Envelope = Msg::CamState(CamState { by_user: true, ..Default::default() }).into();
+        assert_eq!(s.encode_to_vec(), vec![0x62, 0x02, 0x50, 0x01]);
+        // KeyRequest: envelope field 17, empty.
+        let k: Envelope = Msg::KeyRequest(KeyRequest {}).into();
+        assert_eq!(k.encode_to_vec(), vec![0x8A, 0x01, 0x00]);
+    }
+
     #[tokio::test]
     async fn frames_round_trip() {
         let msgs: Vec<Envelope> = vec![
@@ -298,7 +335,8 @@ mod tests {
             })
             .into(),
             Msg::DeviceStatus(DeviceStatus { battery_percent: -1, thermal: Thermal::Serious as i32, ..Default::default() }).into(),
-            Msg::VideoFrame(VideoFrame { keyframe: true, data: vec![0, 0, 0, 1, 0x40], ..Default::default() }).into(),
+            Msg::VideoFrame(VideoFrame { keyframe: true, data: vec![0, 0, 0, 1, 0x40].into(), ..Default::default() }).into(),
+            Msg::KeyRequest(KeyRequest {}).into(),
         ];
         let mut buf = Vec::new();
         for m in &msgs {

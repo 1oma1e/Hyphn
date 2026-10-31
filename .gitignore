@@ -29,3 +29,6 @@ desktop.ini
 
 # Tauri : fichiers générés
 apps/desktop/src-tauri/gen/
+# DLL de la webcam et du plugin OBS, faites par tools/build-native.ps1
+apps/desktop/src-tauri/native/*
+!apps/desktop/src-tauri/native/.gitkeep

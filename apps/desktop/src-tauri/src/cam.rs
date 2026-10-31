@@ -30,16 +30,20 @@ pub struct Effective {
     pub lowered: bool,
 }
 
-/// Automatic bitrate used when the user picks « Auto », per resolution.
+/// Automatic bitrate (Mb/s) used when the user picks « Auto ». HEVC from the
+/// iPhone media engine looks clean at these rates for a webcam scene, and they
+/// leave room on a busy Wi-Fi (the iPhone lowers them further if the network
+/// falls behind). 60 images/s costs 40 % more, not twice: half the frames are
+/// almost identical.
 pub fn auto_bitrate(height: u32, fps: u32) -> u32 {
     let base = match height {
-        h if h >= 2160 => 40,
-        h if h >= 1440 => 24,
-        h if h >= 1080 => 12,
-        h if h >= 720 => 6,
+        h if h >= 2160 => 28,
+        h if h >= 1440 => 16,
+        h if h >= 1080 => 10,
+        h if h >= 720 => 5,
         _ => 3,
     };
-    if fps > 30 { base * 3 / 2 } else { base }
+    if fps > 30 { base * 7 / 5 } else { base }
 }
 
 pub fn effective(requested: Quality, thermal: Thermal, adapt: bool) -> Effective {

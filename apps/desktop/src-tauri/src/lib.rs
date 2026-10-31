@@ -12,14 +12,16 @@ mod proto;
 mod status;
 mod store;
 mod tls;
+mod vcam;
+mod video;
 
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
@@ -55,11 +57,22 @@ struct Inner {
     port: u16,
     /// Keeps the Bonjour announce alive.
     _mdns: Option<mdns_sd::ServiceDaemon>,
+    /// Where the window reads the Cam picture (`video.rs`).
+    video_url: String,
+    /// The Windows webcam exists for this session.
+    camera: bool,
+    /// Why it does not, in plain words.
+    camera_error: Option<String>,
+    /// Built DLLs and install script, if present.
+    native: Option<PathBuf>,
 }
 
 struct Hyphn {
     hub: Arc<Hub>,
     inner: Mutex<Inner>,
+    vcam_state: tokio::sync::watch::Sender<vcam::VcamState>,
+    /// Apps showing the Windows webcam or the OBS source right now.
+    vcam_readers: Arc<AtomicUsize>,
 }
 
 impl Hyphn {
@@ -91,6 +104,20 @@ struct CamView {
 }
 
 #[derive(Serialize, Clone)]
+struct VcamView {
+    /// The DLL is registered (installed once as admin).
+    installed: bool,
+    /// The camera exists for this session.
+    camera: bool,
+    obs: bool,
+    obs_present: bool,
+    /// Apps showing the camera now.
+    in_use: u32,
+    can_install: bool,
+    error: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
 struct Snapshot {
     pc_name: String,
     pc_fingerprint: String,
@@ -100,6 +127,7 @@ struct Snapshot {
     status: Option<StatusView>,
     latency_ms: Option<u32>,
     cam: CamView,
+    vcam: VcamView,
     pair_seconds_left: u64,
 }
 
@@ -107,6 +135,18 @@ fn snapshot(h: &Hyphn) -> Snapshot {
     let hub = &h.hub;
     let v = hub.view();
     let device = hub.store.devices().into_iter().next();
+    let vcam = {
+        let inner = h.lock();
+        VcamView {
+            installed: inner.camera || registered_dll().is_some(),
+            camera: inner.camera,
+            obs: vcam::obs_plugin_installed(),
+            obs_present: vcam::obs_present(),
+            in_use: h.vcam_readers.load(Ordering::Relaxed) as u32,
+            can_install: inner.native.is_some(),
+            error: inner.camera_error.clone(),
+        }
+    };
     let connected = match (&device, v.connected) {
         (Some(d), Some(fp)) => identity::from_hex(&d.fingerprint) == Some(fp),
         _ => false,
@@ -131,9 +171,51 @@ fn snapshot(h: &Hyphn) -> Snapshot {
             stats: v.stats,
             phone: if connected { v.phone_cam } else { None },
         },
+        vcam,
         pair_seconds_left: v.pair_seconds_left,
     }
 }
+
+#[cfg(windows)]
+fn registered_dll() -> Option<PathBuf> {
+    vcam::registered_dll()
+}
+
+#[cfg(not(windows))]
+fn registered_dll() -> Option<PathBuf> {
+    None
+}
+
+/// What the Windows webcam shows while there is no picture (ADR-0018).
+fn vcam_state(h: &Hyphn) -> vcam::VcamState {
+    let v = h.hub.view();
+    let inner = h.lock();
+    let c = &inner.settings.cam;
+    vcam::VcamState {
+        live: v.live,
+        phone: v.connected.is_some(),
+        multi: c.get("multi").and_then(|v| v.as_bool()).unwrap_or(true),
+        style: c.get("wst").and_then(|v| v.as_u64()).unwrap_or(0).min(2) as u8,
+        message: c.get("msg").and_then(|v| v.as_str()).unwrap_or("Je reviens bientôt").to_string(),
+    }
+}
+
+/// Creates the webcam for this session if the DLL is registered (once).
+#[cfg(windows)]
+fn start_camera(app: &AppHandle) {
+    if app.state::<Hyphn>().lock().camera {
+        return;
+    }
+    let Some(dll) = registered_dll() else { return };
+    let result = vcam::create_camera(&dll);
+    let h = app.state::<Hyphn>();
+    let mut inner = h.lock();
+    inner.camera = result.is_ok();
+    inner.camera_error = result.err();
+}
+
+#[cfg(not(windows))]
+fn start_camera(_app: &AppHandle) {}
 
 #[tauri::command]
 fn get_snapshot(h: State<'_, Hyphn>) -> Snapshot {
@@ -216,31 +298,90 @@ struct CamRequest {
     adapt: bool,
     /// "hevc" or "h264": what the window can decode.
     codec: String,
-    front: bool,
-    lens: u32,
+    #[serde(default)]
+    ev: f64,
+    /// None = auto.
+    #[serde(default)]
+    focus: Option<u32>,
+    #[serde(default)]
+    wb: Option<u32>,
+    #[serde(default)]
+    torch: bool,
+    /// 0 off (default: less delay, no crop), 1 standard, 2 cinematic.
+    #[serde(default)]
+    stab: u32,
+}
+
+fn tune_of(ev: f64, focus: Option<u32>, wb: Option<u32>, torch: bool, stab: u32) -> link::Tune {
+    link::Tune { ev_tenths: (ev * 10.0).round() as i32, focus, wb, torch, stab }
 }
 
 #[tauri::command]
-fn cam_set(live: bool, quality: CamRequest, h: State<'_, Hyphn>) {
-    h.hub.set_cam(CamWanted {
-        live,
-        request: Quality { height: quality.height, fps: quality.fps, bitrate_mbps: quality.bitrate_mbps },
-        adapt: quality.adapt,
-        codec: if quality.codec == "h264" { Codec::H264 } else { Codec::Hevc },
-        front: quality.front,
-        lens: quality.lens,
+fn cam_set(quality: CamRequest, h: State<'_, Hyphn>) {
+    // « live » belongs to Rust: the window never overwrites it with an old value.
+    h.hub.update_cam(|c| {
+        c.request = Quality { height: quality.height, fps: quality.fps, bitrate_mbps: quality.bitrate_mbps };
+        c.adapt = quality.adapt;
+        c.codec = if quality.codec == "h264" { Codec::H264 } else { Codec::Hevc };
+        c.tune = tune_of(quality.ev, quality.focus, quality.wb, quality.torch, quality.stab);
     });
 }
 
-/// The Cam page gives a channel; each video packet goes through it as raw bytes.
+/// Lens or front camera touched on the PC. Apart from `cam_set` so that
+/// opening the Cam page never sends back an old lens over the iPhone's.
 #[tauri::command]
-fn cam_attach(channel: Channel<InvokeResponseBody>, h: State<'_, Hyphn>) {
-    h.hub.set_video_sink(Some(Arc::new(move |p| channel.send(InvokeResponseBody::Raw(p)).is_ok())));
+fn cam_lens(front: bool, lens: u32, h: State<'_, Hyphn>) {
+    h.hub.update_cam(|c| {
+        c.front = front;
+        c.lens = lens.min(3);
+    });
 }
 
+/// « Afficher la caméra » / « Pause » on the PC.
 #[tauri::command]
-fn cam_detach(h: State<'_, Hyphn>) {
-    h.hub.set_video_sink(None);
+fn cam_live(on: bool, h: State<'_, Hyphn>) {
+    h.hub.set_live(on);
+}
+
+/// The window reads the picture here (WebSocket, `video.rs`).
+#[tauri::command]
+fn cam_video_url(h: State<'_, Hyphn>) -> String {
+    h.lock().video_url.clone()
+}
+
+/// « Installer » the Windows webcam and the OBS source: one UAC prompt, then
+/// the camera is created at once.
+#[cfg(windows)]
+#[tauri::command]
+async fn vcam_install(uninstall: bool, app: AppHandle) -> Result<(), String> {
+    let native = app.state::<Hyphn>().lock().native.clone().ok_or("Fichiers de la webcam introuvables.")?;
+    if !uninstall && !vcam::native_is_genuine(&native) {
+        return Err("Les fichiers de la webcam ont été modifiés : réinstalle Hyphn.".into());
+    }
+    if uninstall {
+        vcam::remove_camera();
+    }
+    let params = vcam::install_command(&native, uninstall);
+    let code = tauri::async_runtime::spawn_blocking(move || vcam::run_elevated(&params))
+        .await
+        .map_err(|e| e.to_string())??;
+    if code != 0 {
+        return Err(format!("L’installation a échoué (code {code})."));
+    }
+    if uninstall {
+        app.state::<Hyphn>().lock().camera = false;
+    } else {
+        let a = app.clone();
+        tauri::async_runtime::spawn_blocking(move || start_camera(&a)).await.map_err(|e| e.to_string())?;
+    }
+    on_event(&app, UiEvent::Changed);
+    Ok(())
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+async fn vcam_install(_uninstall: bool) -> Result<(), String> {
+    Err("Windows seulement.".into())
 }
 
 fn show_main(app: &AppHandle) {
@@ -296,10 +437,23 @@ fn on_event(app: &AppHandle, e: UiEvent) {
         UiEvent::CamQuality { height, fps } => {
             let _ = app.emit("cam_quality", serde_json::json!({ "height": height, "fps": fps }));
         }
+        UiEvent::PhoneLive => {
+            // « Afficher » on the iPhone: the PC shows the Cam page. A window
+            // hidden in the tray stays hidden (Discord may be using the webcam).
+            let _ = app.emit("cam_phone_live", ());
+            if let Some(w) = app.get_webview_window("main") {
+                if w.is_visible().unwrap_or(false) && w.is_minimized().unwrap_or(false) {
+                    let _ = w.unminimize();
+                }
+            }
+        }
         UiEvent::Changed => {}
     }
-    // Every event can change the snapshot; the window gets it at once.
+    // Every event can change the snapshot; the window and the webcam get it
+    // at once (« Afficher » shows on Discord without waiting for the tick).
     if let Some(h) = app.try_state::<Hyphn>() {
+        let state = vcam_state(&h);
+        h.vcam_state.send_if_modified(|s| if *s != state { *s = state; true } else { false });
         let _ = app.emit("snapshot", snapshot(&h));
     }
 }
@@ -321,12 +475,26 @@ fn saved_cam(settings: &Settings) -> CamWanted {
         codec: if c.get("codec").and_then(|v| v.as_u64()) == Some(1) { Codec::H264 } else { Codec::Hevc },
         front: c.get("front").and_then(|v| v.as_bool()).unwrap_or(false),
         lens: c.get("lens").and_then(|v| v.as_u64()).unwrap_or(1) as u32,
+        tune: {
+            let flag = |k: &str, d: bool| c.get(k).and_then(|v| v.as_bool()).unwrap_or(d);
+            let num = |k: &str, d: u64| c.get(k).and_then(|v| v.as_u64()).unwrap_or(d) as u32;
+            tune_of(
+                c.get("ev").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                (!flag("afA", true)).then(|| num("focus", 50)),
+                (!flag("wbA", true)).then(|| num("wb", 5600)),
+                flag("torch", false),
+                num("stab", 0),
+            )
+        },
     }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // One Hyphn at a time: a second launch shows the first one's window
+        // (two would fight over the port, the pipe and the webcam).
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
@@ -353,8 +521,30 @@ pub fn run() {
                 Box::new(move |e| on_event(&handle, e)),
             )?;
             let mdns = net::local_ip().and_then(|ip| net::advertise(ip, port, &short_id));
-            app.manage(Hyphn { hub: hub.clone(), inner: Mutex::new(Inner { settings, port, _mdns: mdns }) });
+            let video_url = tauri::async_runtime::block_on(video::start(hub.clone()))?;
+            let native = vcam::native_dir(app.path().resource_dir().ok()).filter(|d| vcam::native_is_genuine(d));
+            let (vcam_tx, vcam_rx) = tokio::sync::watch::channel(vcam::VcamState::default());
+            let readers = Arc::new(AtomicUsize::new(0));
+            app.manage(Hyphn {
+                hub: hub.clone(),
+                inner: Mutex::new(Inner { settings, port, _mdns: mdns, video_url, camera: false, camera_error: None, native }),
+                vcam_state: vcam_tx,
+                vcam_readers: readers.clone(),
+            });
             setup_tray(app.handle())?;
+
+            #[cfg(windows)]
+            {
+                tauri::async_runtime::spawn(vcam::serve(hub.clone(), vcam_rx, readers));
+                // Off the main thread: Media Foundation may take a moment.
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    start_camera(&handle);
+                    on_event(&handle, UiEvent::Changed);
+                });
+            }
+            #[cfg(not(windows))]
+            drop((vcam_rx, readers));
 
             tauri::async_runtime::spawn(async move {
                 match tokio::net::TcpListener::bind((Ipv4Addr::UNSPECIFIED, port)).await {
@@ -370,6 +560,8 @@ pub fn run() {
                 std::thread::sleep(Duration::from_secs(1));
                 let h = handle.state::<Hyphn>();
                 h.hub.tick();
+                let state = vcam_state(&h);
+                h.vcam_state.send_if_modified(|s| if *s != state { *s = state; true } else { false });
                 let _ = handle.emit("snapshot", snapshot(&h));
             });
             Ok(())
@@ -392,8 +584,10 @@ pub fn run() {
             pick_photos_dir,
             open_photos_dir,
             cam_set,
-            cam_attach,
-            cam_detach
+            cam_lens,
+            cam_live,
+            cam_video_url,
+            vcam_install
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hyphn");

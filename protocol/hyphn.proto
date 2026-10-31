@@ -35,6 +35,7 @@ message Envelope {
     VideoHello video_hello = 14;    // iPhone -> PC, first message of a media connection
     VideoFrame video_frame = 15;    // iPhone -> PC
     Forget forget = 16;             // either side: « Oublier »
+    KeyRequest key_request = 17;    // PC -> iPhone: the decoder needs a keyframe now
   }
 }
 
@@ -129,6 +130,13 @@ message CamControl {
   Codec codec = 5;
   bool front = 6;
   uint32 lens = 7;        // 0 = 0.5x, 1 = 1x, 2 = 2x, 3 = 5x
+  sint32 exposure_bias_tenths = 8; // -20..20 = -2..+2 EV
+  bool focus_manual = 9;  // false = continuous auto focus
+  uint32 focus = 10;      // 0 (near) .. 100 (far), when manual
+  bool wb_manual = 11;    // false = auto white balance
+  uint32 wb_kelvin = 12;  // 2500..8000, when manual
+  bool torch = 13;
+  uint32 stabilization = 14; // 0 off, 1 standard, 2 cinematic
 }
 
 message CamState {
@@ -141,6 +149,10 @@ message CamState {
   bool front = 7;
   uint32 lens = 8;
   uint32 lens_count = 9;  // back lenses this iPhone has (0.5x, 1x, 2x, 5x)
+  // True only when Evan touched a button on the iPhone (Afficher, Pause, lens,
+  // flip). The PC follows these; the other reports are just information, so
+  // a late report never undoes what the PC asked.
+  bool by_user = 10;
 }
 
 // Evan picked a quality on the iPhone; the PC keeps it and answers CamControl.
@@ -161,3 +173,7 @@ message VideoFrame {
 }
 
 message Forget {}
+
+// Sent when the PC window or the Windows webcam starts decoding, or after it
+// dropped frames: the iPhone encodes its next frame as a keyframe.
+message KeyRequest {}

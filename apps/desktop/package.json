@@ -5,7 +5,8 @@
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
-    "build": "tauri build"
+    "native": "powershell -NoProfile -ExecutionPolicy Bypass -File ../../tools/build-native.ps1",
+    "build": "npm run native && tauri build"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

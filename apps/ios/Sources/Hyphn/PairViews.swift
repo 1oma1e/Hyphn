@@ -176,7 +176,7 @@ struct ScanView: View {
             case .idle:
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Vise le QR code du PC").font(.geist(20, .semibold))
-                    Text("Sur le PC : Hyphn › Relier un iPhone. La lecture est automatique.")
+                    Text("Sur le PC : Relier un iPhone.")
                         .font(.geist(14)).foregroundStyle(Ink.tx2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -262,7 +262,7 @@ struct CodeSheet: View {
             .frame(maxWidth: .infinity)
             .accessibilityElement()
             .accessibilityLabel("Code \(code.map(String.init).joined(separator: " "))")
-            Text("S’il est différent, refuse : quelqu’un a peut-être affiché un faux QR.")
+            Text("Sinon, touche Non.")
                 .font(.geist(14)).foregroundStyle(Ink.tx2)
             HStack(spacing: 10) {
                 Button("Non") { link.answer(false) }.buttonStyle(GhostButtonStyle()).frame(width: 100)

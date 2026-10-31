@@ -40,6 +40,16 @@ struct CamControl: Equatable {
     var codec: Codec = .hevc
     var front = false
     var lens: UInt32 = 1
+    /// -20..20 = -2..+2 EV.
+    var exposureBiasTenths: Int32 = 0
+    var focusManual = false
+    /// 0 (near) .. 100 (far).
+    var focus: UInt32 = 50
+    var wbManual = false
+    var wbKelvin: UInt32 = 5600
+    var torch = false
+    /// 0 off, 1 standard, 2 cinematic.
+    var stabilization: UInt32 = 0
 }
 
 struct CamState {
@@ -52,6 +62,8 @@ struct CamState {
     var front = false
     var lens: UInt32 = 1
     var lensCount: UInt32 = 4
+    /// Evan touched a button on the iPhone: the PC follows (see hyphn.proto).
+    var byUser = false
 }
 
 struct VideoFrame {
@@ -86,6 +98,7 @@ enum Msg {
     case videoHello
     case videoFrame(VideoFrame)
     case forget
+    case keyRequest
     case other
 }
 
@@ -223,7 +236,7 @@ extension Msg {
             field = 12
             b.bool(1, c.open); b.bool(2, c.live); b.uint(3, UInt64(c.width)); b.uint(4, UInt64(c.height))
             b.uint(5, UInt64(c.fps)); b.uint(6, UInt64(c.codec.rawValue)); b.bool(7, c.front); b.uint(8, UInt64(c.lens))
-            b.uint(9, UInt64(c.lensCount))
+            b.uint(9, UInt64(c.lensCount)); b.bool(10, c.byUser)
         case let .camQuality(height, fps):
             field = 13
             b.uint(1, UInt64(height)); b.uint(2, UInt64(fps))
@@ -245,10 +258,31 @@ extension Msg {
 
     /// Length prefix + envelope, ready for the socket.
     func framed() -> Data {
+        if case let .videoFrame(f) = self { return Self.framedVideo(f) }
         let body = encoded()
         var len = UInt32(body.count).bigEndian
         var out = Data(bytes: &len, count: 4)
         out.append(body)
+        return out
+    }
+
+    /// A VideoFrame written straight into one buffer: the picture is copied
+    /// once instead of three times (up to 60 frames a second).
+    private static func framedVideo(_ f: VideoFrame) -> Data {
+        var head = ProtoWriter()
+        head.int(1, f.ptsUs); head.bool(2, f.keyframe); head.uint(3, UInt64(f.codec.rawValue))
+        head.uint(4, UInt64(f.width)); head.uint(5, UInt64(f.height))
+        head.tag(6, 2); head.varint(UInt64(f.data.count))
+        let inner = head.data.count + f.data.count
+        var env = ProtoWriter()
+        env.tag(15, 2); env.varint(UInt64(inner))
+        let total = env.data.count + inner
+        var out = Data(capacity: 4 + total)
+        var len = UInt32(total).bigEndian
+        withUnsafeBytes(of: &len) { out.append(contentsOf: $0) }
+        out.append(env.data)
+        out.append(head.data)
+        out.append(f.data)
         return out
     }
 
@@ -284,7 +318,9 @@ extension Msg {
                 result = .ping(id: id)
             case 11:
                 // Every field starts at its proto3 default (0 / false), not at CamControl's.
-                var c = CamControl(live: false, height: 0, fps: 0, bitrateKbps: 0, codec: .unknown, front: false, lens: 0)
+                var c = CamControl(live: false, height: 0, fps: 0, bitrateKbps: 0, codec: .unknown, front: false, lens: 0,
+                                   exposureBiasTenths: 0, focusManual: false, focus: 0, wbManual: false, wbKelvin: 0,
+                                   torch: false, stabilization: 0)
                 while let (f, w) = try m.field() {
                     guard w == 0 else { try m.skip(w); continue }
                     let v = try m.varint()
@@ -296,12 +332,22 @@ extension Msg {
                     case 5: c.codec = Codec(rawValue: Int(v)) ?? .unknown
                     case 6: c.front = v != 0
                     case 7: c.lens = UInt32(truncatingIfNeeded: v)
+                    // sint32: zigzag encoding.
+                    case 8: c.exposureBiasTenths = Int32(truncatingIfNeeded: Int64(bitPattern: (v >> 1) ^ (0 &- (v & 1))))
+                    case 9: c.focusManual = v != 0
+                    case 10: c.focus = UInt32(truncatingIfNeeded: v)
+                    case 11: c.wbManual = v != 0
+                    case 12: c.wbKelvin = UInt32(truncatingIfNeeded: v)
+                    case 13: c.torch = v != 0
+                    case 14: c.stabilization = UInt32(truncatingIfNeeded: v)
                     default: break
                     }
                 }
                 result = .camControl(c)
             case 16:
                 result = .forget
+            case 17:
+                result = .keyRequest
             default:
                 result = .other
             }

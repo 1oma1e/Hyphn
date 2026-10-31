@@ -57,12 +57,14 @@ final class Camera: NSObject, ObservableObject {
 
     func close() {
         guard isOpen else { return }
+        let wasLive = live
         isOpen = false
         setLive(false)
         UIApplication.shared.isIdleTimerDisabled = false
         let s = session
         work.async { s.stopRunning() }
-        report()
+        // Leaving the Cam tab while live is Evan's own pause: the PC follows.
+        report(byUser: wasLive)
     }
 
     /// Called when the app leaves the foreground or the PC is gone.
@@ -86,33 +88,42 @@ final class Camera: NSObject, ObservableObject {
     func apply(_ c: CamControl) {
         let reconfigure = c.front != control.front || c.height != control.height || c.fps != control.fps
         let relens = c.lens != control.lens
+        let retune = !Self.sameTune(c, control)
         control = c
         if isOpen, !denied {
             if reconfigure { configure(front: c.front, lens: c.lens, height: c.height, fps: c.fps) }
-            else if relens { setZoom(c.lens) }
+            else {
+                if relens { setZoom(c.lens) }
+                if retune { applyTune() }
+            }
         }
         pump.configure(codec: c.codec, bitrateKbps: c.bitrateKbps, fps: c.fps, height: c.height)
         setLive(c.live && isOpen)
         report()
     }
 
+    /// The PC window or the Windows webcam starts decoding: next frame is a keyframe.
+    func requestKey() {
+        pump.requestKey()
+    }
+
     /// « Afficher » / « Pause » on the iPhone.
     func toggleLive() {
         setLive(!live)
         control.live = live
-        report()
+        report(byUser: true)
     }
 
     func flip() {
         control.front.toggle()
         configure(front: control.front, lens: control.lens, height: control.height, fps: control.fps)
-        report()
+        report(byUser: true)
     }
 
     func pickLens(_ i: UInt32) {
         control.lens = i
         setZoom(i)
-        report()
+        report(byUser: true)
     }
 
     /// Quick quality from the iPhone: the PC keeps it and answers CamControl (E4).
@@ -120,8 +131,55 @@ final class Camera: NSObject, ObservableObject {
         link?.send(.camQuality(height: height, fps: fps))
     }
 
-    private func report() {
-        link?.send(.camState(state))
+    /// `byUser`: Evan touched a button here, the PC must follow; otherwise the
+    /// report is information only and never undoes what the PC asked.
+    private func report(byUser: Bool = false) {
+        var s = state
+        s.byUser = byUser
+        link?.send(.camState(s))
+    }
+
+    private static func sameTune(_ a: CamControl, _ b: CamControl) -> Bool {
+        a.exposureBiasTenths == b.exposureBiasTenths && a.focusManual == b.focusManual && a.focus == b.focus
+            && a.wbManual == b.wbManual && a.wbKelvin == b.wbKelvin && a.torch == b.torch && a.stabilization == b.stabilization
+    }
+
+    /// Exposure, focus, white balance and torch on the device, stabilization
+    /// on the frames that are encoded (Réglages › Caméra on the PC).
+    private func applyTune() {
+        let c = control
+        if let conn = output.connection(with: .video), conn.isVideoStabilizationSupported {
+            let modes: [AVCaptureVideoStabilizationMode] = [.off, .standard, .cinematic]
+            let mode = modes[Int(min(c.stabilization, 2))]
+            let supported = (session.inputs.first as? AVCaptureDeviceInput)?.device.activeFormat.isVideoStabilizationModeSupported(mode) ?? false
+            conn.preferredVideoStabilizationMode = supported ? mode : .off
+        }
+        guard let dev = (session.inputs.first as? AVCaptureDeviceInput)?.device,
+              (try? dev.lockForConfiguration()) != nil else { return }
+        defer { dev.unlockForConfiguration() }
+        let bias = Float(c.exposureBiasTenths) / 10
+        dev.setExposureTargetBias(max(dev.minExposureTargetBias, min(dev.maxExposureTargetBias, bias)), completionHandler: nil)
+        if c.focusManual, dev.isLockingFocusWithCustomLensPositionSupported {
+            dev.setFocusModeLocked(lensPosition: Float(min(c.focus, 100)) / 100, completionHandler: nil)
+        } else if dev.isFocusModeSupported(.continuousAutoFocus) {
+            dev.focusMode = .continuousAutoFocus
+        }
+        if c.wbManual, dev.isLockingWhiteBalanceWithCustomDeviceGainsSupported {
+            let t = AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(temperature: Float(c.wbKelvin), tint: 0)
+            var g = dev.deviceWhiteBalanceGains(for: t)
+            let top = dev.maxWhiteBalanceGain
+            g.redGain = max(1, min(top, g.redGain))
+            g.greenGain = max(1, min(top, g.greenGain))
+            g.blueGain = max(1, min(top, g.blueGain))
+            dev.setWhiteBalanceModeLocked(with: g, completionHandler: nil)
+        } else if dev.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+            dev.whiteBalanceMode = .continuousAutoWhiteBalance
+        }
+        // The front camera has no torch.
+        if dev.hasTorch {
+            let mode: AVCaptureDevice.TorchMode = c.torch ? .on : .off
+            if dev.isTorchModeSupported(mode) { dev.torchMode = mode }
+        }
     }
 
     // MARK: Live
@@ -216,6 +274,7 @@ final class Camera: NSObject, ObservableObject {
         }
         session.commitConfiguration()
         setZoom(lens)
+        applyTune()
 
         // Keep the picture level with the horizon whatever the phone's angle.
         let coord = AVCaptureDevice.RotationCoordinator(device: dev, previewLayer: nil)
@@ -272,13 +331,21 @@ final class Camera: NSObject, ObservableObject {
 }
 
 /// Runs on the capture queue: encodes frames while live and sends them.
-/// No buffer: if the network falls behind, frames are dropped until the next keyframe.
+/// No buffer: the bitrate follows the Wi-Fi (down fast when bytes pile up,
+/// back up slowly when the way is clear); only a real backlog drops a frame,
+/// and the next one is then a keyframe.
 final class FramePump: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     let queue = DispatchQueue(label: "hyphn.encode", qos: .userInteractive)
     private let lock = NSLock()
     private var running = false
     private var codec: Codec = .hevc
+    /// What the PC asked for.
     private var bitrateKbps: UInt32 = 12_000
+    /// What the encoder uses now (≤ bitrateKbps, lowered on congestion).
+    private var currentKbps: Double = 12_000
+    private var appliedKbps: Double = 0
+    private var lastCut = DispatchTime.now()
+    private var clearSince = DispatchTime.now()
     private var fps: UInt32 = 30
     private var encoder: VTCompressionSession?
     private var encodedSize = (0, 0)
@@ -297,6 +364,7 @@ final class FramePump: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             let changed = codec != self.codec
             self.codec = codec == .unknown ? .hevc : codec
             self.bitrateKbps = max(1_000, bitrateKbps)
+            self.currentKbps = Double(self.bitrateKbps)
             self.fps = max(1, fps)
             if changed { self.dropEncoder() } else { self.applyRate() }
         }
@@ -306,7 +374,12 @@ final class FramePump: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         queue.async {
             self.running = true
             self.needKey = true
+            self.currentKbps = Double(self.bitrateKbps)
         }
+    }
+
+    func requestKey() {
+        queue.async { self.needKey = true }
     }
 
     func stop() {
@@ -331,8 +404,9 @@ final class FramePump: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             makeEncoder(width: w, height: h)
         }
         guard let enc = encoder else { return }
-        // Network behind: drop this frame and ask for a keyframe next.
-        if conn.pendingSends > 3 {
+        if !adapt(to: conn) {
+            // A real backlog (over half a second): skip this frame; the next
+            // one is a keyframe so the PC picture is whole again.
             needKey = true
             return
         }
@@ -347,6 +421,40 @@ final class FramePump: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         }
     }
 
+    /// Adapts the bitrate to the bytes still waiting to leave. False = drop this frame.
+    private func adapt(to conn: PinnedConnection) -> Bool {
+        let now = DispatchTime.now()
+        let ms = { (t: DispatchTime) in Double(now.uptimeNanoseconds &- t.uptimeNanoseconds) / 1e6 }
+        // Bytes the current rate sends in 150 ms.
+        let budget = max(60_000, currentKbps * 1000 / 8 * 0.15)
+        let pending = Double(conn.pendingBytes)
+        if pending > budget * 4 {
+            if ms(lastCut) > 500 { cut(0.7, now) }
+            return false
+        }
+        if pending > budget {
+            clearSince = now
+            if ms(lastCut) > 300 { cut(0.85, now) }
+        } else if pending < budget / 4 {
+            // Clear for a while: climb back towards what the PC asked, 8 % a second.
+            if ms(clearSince) > 1000, currentKbps < Double(bitrateKbps) {
+                currentKbps = min(Double(bitrateKbps), currentKbps * 1.08)
+                clearSince = now
+                applyRate()
+            }
+        } else {
+            clearSince = now
+        }
+        return true
+    }
+
+    private func cut(_ factor: Double, _ now: DispatchTime) {
+        currentKbps = max(1_500, currentKbps * factor)
+        lastCut = now
+        clearSince = now
+        applyRate()
+    }
+
     private func makeEncoder(width: Int, height: Int) {
         dropEncoder()
         var s: VTCompressionSession?
@@ -359,11 +467,14 @@ final class FramePump: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         VTSessionSetProperty(s, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
         VTSessionSetProperty(s, key: kVTCompressionPropertyKey_ProfileLevel,
                              value: codec == .h264 ? kVTProfileLevel_H264_High_AutoLevel : kVTProfileLevel_HEVC_Main_AutoLevel)
-        // A keyframe every 2 s (E2).
-        VTSessionSetProperty(s, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 2 as CFNumber)
+        // Each frame leaves the encoder at once (no look-ahead delay).
+        VTSessionSetProperty(s, key: kVTCompressionPropertyKey_MaxFrameDelayCount, value: 0 as CFNumber)
+        // A keyframe every 4 s at most: any reader that needs one sooner asks (KeyRequest).
+        VTSessionSetProperty(s, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 4 as CFNumber)
         encoder = s
         encodedSize = (width, height)
         encodedCodec = codec
+        appliedKbps = 0
         applyRate()
         VTCompressionSessionPrepareToEncodeFrames(s)
         needKey = true
@@ -371,9 +482,17 @@ final class FramePump: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
 
     private func applyRate() {
         guard let s = encoder else { return }
-        VTSessionSetProperty(s, key: kVTCompressionPropertyKey_AverageBitRate, value: Int(bitrateKbps) * 1000 as CFNumber)
+        // Small changes are not worth reconfiguring the encoder.
+        if appliedKbps > 0, abs(currentKbps - appliedKbps) / appliedKbps < 0.04 { return }
+        appliedKbps = currentKbps
+        let bps = Int(currentKbps * 1000)
+        VTSessionSetProperty(s, key: kVTCompressionPropertyKey_AverageBitRate, value: bps as CFNumber)
+        // Hard ceiling: 1.5× the average over any second, so a keyframe never
+        // floods the Wi-Fi.
+        let limits = [bps * 3 / 2 / 8, 1] as CFArray
+        VTSessionSetProperty(s, key: kVTCompressionPropertyKey_DataRateLimits, value: limits)
         VTSessionSetProperty(s, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: Int(fps) as CFNumber)
-        VTSessionSetProperty(s, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: Int(fps) * 2 as CFNumber)
+        VTSessionSetProperty(s, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: Int(fps) * 4 as CFNumber)
     }
 
     private func dropEncoder() {
