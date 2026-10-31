@@ -33,7 +33,7 @@ Source unique des règles du projet. Les règles **sans exception** sont aussi i
 
 ## Énergie (iPhone) — obligatoires dans le code
 1. Aucune boucle de polling : tout sur événements (notifications batterie et thermique).
-2. Bonjour actif seulement quand l'app est ouverte ; sockets fermées après 30 s d'inactivité.
+2. Bonjour actif seulement quand l'app est ouverte ; connexion de contrôle et Pulse seulement quand l'app est au premier plan ; sockets de données (Cam, Drop) fermées après 30 s d'inactivité ([[ADR-0015 Lien permanent et connexion au premier plan]]).
 3. Encodage et décodage **matériels** uniquement ; jamais de traitement d'image sur le CPU.
 4. Envois groupés : gros blocs plutôt que milliers de petits messages.
 5. Mode économie d'iOS respecté : qualité réduite automatiquement.

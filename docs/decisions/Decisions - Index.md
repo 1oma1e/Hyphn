@@ -18,5 +18,6 @@ Une décision par fichier, numérotée. Modèle : `_modele.md`. Statuts : `propo
 | [[ADR-0012 Anisette Mac publique]] | Anisette `mac-ani.jkcoxson.com` (Apple refuse l'anisette Android), exception au « tout local » | accepte (2026-10-30) |
 | [[ADR-0013 Build iOS par clone Git]] | Clone du repo sur le serveur (clé de déploiement lecture seule), bundle ID `io.github.1oma1e.hyphn`, `.ipa` zippé en Python | accepte (2026-10-31) |
 | [[ADR-0014 Pas de plan B AltServer]] | Pas d'AltServer-Linux + netmuxd ; on surveille le rafraîchissement SideStore | accepte (2026-10-31) |
+| [[ADR-0015 Lien permanent et connexion au premier plan]] | Appairage permanent jusqu'à « Oublier » ; connexion et Pulse seulement quand l'app iPhone est ouverte | accepte (2026-10-31) |
 
 Liens : [[00-Accueil]]
