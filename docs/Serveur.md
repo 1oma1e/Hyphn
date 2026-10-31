@@ -9,7 +9,7 @@ Ce que Hyphn fait tourner sur le serveur Linux d'Evan, et comment c'est rangé. 
 - Autres conteneurs d'Evan (on n'y touche **jamais**) : Home Assistant, Nginx Proxy Manager (seul à écouter sur 80/443 publics), cloudflare-ddns, pairdrop, ollama, tv-accueil, apphome.
 
 ## Rangement
-- Tout Hyphn vit dans `~/hyphn/` (droits 700), **un dossier par service** : `~/hyphn/anisette/`, `~/hyphn/xtool/`, plus tard `~/hyphn/altserver/`.
+- Tout Hyphn vit dans `~/hyphn/` (droits 700), **un dossier par service** : `~/hyphn/anisette/`, `~/hyphn/xtool/` (pas d'`altserver/` : [[ADR-0014 Pas de plan B AltServer]]).
 - Chaque dossier contient le `docker-compose.yml` copié depuis `infra/<service>/` du repo. Le repo est la source : on modifie dans le repo, puis on copie.
 - Noms Docker préfixés `hyphn-` (projet, conteneur, volume, réseau) pour les reconnaître d'un coup d'œil.
 - Ports liés à `192.168.1.63` seulement, jamais `0.0.0.0` : rien n'est joignable depuis internet, même si un port était transféré sur la box.

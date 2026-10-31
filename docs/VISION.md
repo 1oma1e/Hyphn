@@ -29,7 +29,7 @@ Version vivante de la vision. Le texte de départ est figé dans [[CAHIER]] (sec
 - Sauvegarde à heure fixe : **en partie** (iOS choisit l'heure ; Raccourcis pour forcer).
 
 ## Contraintes fixes
-Pas d'abonnement Apple payant. Pas de Mac pendant le développement : Evan en a un, mais Xcode ne sert qu'à la fin ([[ADR-0009 Serveur et Mac]]). Build par xtool sur le serveur Linux, installation par SideStore + LocalDevVPN, serveur anisette perso en Docker, AltServer-Linux en plan B. Usage perso. PC sous Windows 11.
+Pas d'abonnement Apple payant. Pas de Mac pendant le développement : Evan en a un, mais Xcode ne sert qu'à la fin ([[ADR-0009 Serveur et Mac]]). Build par xtool sur le serveur Linux, installation par SideStore + LocalDevVPN, anisette Mac publique ([[ADR-0012 Anisette Mac publique]]), pas de plan B AltServer pour l'instant ([[ADR-0014 Pas de plan B AltServer]]). Usage perso. PC sous Windows 11.
 
 ## Nom
 Hyphn, proposé après vérification : [[Noms]], [[ADR-0004 Nom Hyphn]].

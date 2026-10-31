@@ -6,7 +6,7 @@ Tous les réglages de la caméra de l'iPhone, l'aperçu et la télémétrie en d
 ┌───────────┬──────────────────────────────────────────────────┐
 │ Hyphn     │ Cam · iPhone d'Evan            ● EN DIRECT [■]   │
 │           │ ┌──────────────────────────────┐ Télémétrie      │
-│ ▣ Accueil │ │                              │ 4K30 · HEVC     │
+│ ▣ Accueil │ │                    ▮ 82 % ⚡ │ 4K30 · HEVC     │
 │ ◉ Cam     │ │         (aperçu vidéo)       │ 31,8 Mb/s       │
 │ ⇅ Drop    │ │                              │ 29,9 fps réels  │
 │ ♥ Pulse   │ │                              │ Latence 78 ms   │
@@ -23,6 +23,8 @@ Tous les réglages de la caméra de l'iPhone, l'aperçu et la télémétrie en d
 │ ⚙ Réglages│ Profils : [Appel] [Stream] [Cours] [+ Enregistrer]│
 └───────────┴──────────────────────────────────────────────────┘
 ```
+**Coin batterie** (demandé par Evan le 2026-10-31) : en haut à droite de l'aperçu, la batterie de l'iPhone (%, éclair si en charge, chaleur si elle n'est pas « normal »), rouge sous 15 % sans charge. Seulement dans la fenêtre Hyphn : jamais dans l'image envoyée à la webcam Windows ni à OBS ([[Pulse - Batterie et thermique]], E8).
+
 iOS ne donne pas de température en degrés à une app, seulement un **état thermique** (nominal, fair, serious, critical) : c'est ce qu'on affiche, jamais un chiffre en °C (voir [[Points a tester]]).
 
 ## Adaptation automatique (visible ici)

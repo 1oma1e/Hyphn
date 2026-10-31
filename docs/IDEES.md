@@ -14,7 +14,7 @@ Idées à ajouter petit à petit. **Aucune n'est validée** : Evan choisit, puis
 ## Phase 1 — Socle
 | Idée | Valeur | Effort | Pourquoi |
 |---|---|---|---|
-| Code à 4 chiffres affiché des deux côtés après le scan | ★★★ | S | Bloque un faux QR (attaque de l'homme du milieu) pour un coût minime |
+| ~~Code à 4 chiffres affiché des deux côtés après le scan~~ : **retenu** le 2026-10-31 ([[Core - Appairage QR]]) | ★★★ | S | Bloque un faux QR (attaque de l'homme du milieu) pour un coût minime |
 | Rappel « SideStore à rafraîchir » quand le profil expire dans < 2 jours (date lue dans l'app) | ★★★ | S | Évite l'app qui ne s'ouvre plus |
 | Icône dans la zone de notification Windows avec l'état de l'iPhone | ★★ | S | Pulse visible sans ouvrir la fenêtre |
 | Reconnexion sans Bonjour (dernière IP connue) si le routeur bloque le multicast | ★★ | S | Certains routeurs/box filtrent Bonjour |

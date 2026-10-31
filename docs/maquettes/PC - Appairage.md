@@ -18,6 +18,8 @@ Ouvert par « + Ajouter » sur [[PC - Accueil]].
 └──────────────────────────────────────────────────────────────┘
 ```
 
+« Saisir le code à la main » : plus tard, pas en phase 1 ([[Core - Appairage QR]]).
+
 Après le scan, le même code à 4 chiffres que sur l'iPhone s'affiche avec « Oui, relier » / « Non » (voir [[iPhone - Scan QR]]).
 
 ## Ce que contient le QR

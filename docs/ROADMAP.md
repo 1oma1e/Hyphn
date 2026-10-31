@@ -5,7 +5,7 @@ Une phase à la fois, chacune avec une porte de sortie **mesurable**. On passe �
 **Phase actuelle : 0 — Fondations.**
 
 ## Phase 0 — Fondations
-Porte : un « Hello » SwiftUI construit par xtool tourne sur l'iPhone et se rafraîchit **tout seul** pendant 14 jours. Étape intermédiaire proposée : la phase 1 commence au premier rafraîchissement automatique réussi ([[ADR-0007 Porte de la phase 0]]).
+Porte : un « Hello » SwiftUI construit par xtool tourne sur l'iPhone et se rafraîchit **tout seul** pendant 14 jours. Étape intermédiaire : la phase 1 commence au premier rafraîchissement automatique réussi ([[ADR-0007 Porte de la phase 0]]).
 
 - [x] Recherche : Claude Code, concurrents, points à tester ([[Points a tester]]) — 2026-10-29
 - [x] Règles, docs, skills, hooks, reviewer — 2026-10-29
@@ -19,9 +19,9 @@ Porte : un « Hello » SwiftUI construit par xtool tourne sur l'iPhone et se raf
 - [x] PC : iloader installe SideStore une fois, avec l'Apple ID secondaire ; anisette `mac-ani.jkcoxson.com` ([[ADR-0012 Anisette Mac publique]]) ; preuve : « Refresh All » réussi (confirmé par Evan) — 2026-10-30
 - [x] « Hello » SwiftUI construit par xtool, installé par SideStore ; preuve : capture de l'app ouverte (confirmé par Evan, sans capture) — 2026-10-31
 - [x] Raccourci « Refresh All » (avec LocalDevVPN connecté) : `Refresh SideStore` (Connect VPN → Refresh All Apps → Disconnect), automatisation lundi et jeudi à 20 h ; test à la main OK (confirmé par Evan) — 2026-10-31
-- [ ] Plan B testé une fois : AltServer-Linux + netmuxd
-- [ ] Premier rafraîchissement automatique réussi (J+7)
-- [ ] 14 jours sans action manuelle ; journal des rafraîchissements
+- ~~Plan B testé une fois : AltServer-Linux + netmuxd~~ : abandonné ([[ADR-0014 Pas de plan B AltServer]]) — 2026-10-31
+- [ ] Premier rafraîchissement automatique réussi (lundi 2026-11-02, 20 h)
+- [ ] 14 jours sans action manuelle ; [[Journal des rafraichissements]]
 
 ## Phase 1 — Socle
 Bonjour, appairage QR, TLS épinglé, Pulse (batterie, thermique). Mesure de la consommation au repos (budget). Lecture batterie par câble ([[ADR-0006 Sante batterie par cable]]). Ajout du hook `Stop` « build et tests verts ».

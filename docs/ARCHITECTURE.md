@@ -3,7 +3,7 @@
 Version vivante de [[CAHIER]] section 7. Différences avec le cahier : marquées « ADR ».
 
 ## Trois machines, un protocole
-L'iPhone et le PC se parlent **directement** sur le réseau local. Le serveur Linux construit, signe et héberge l'infra (anisette, AltServer, sauvegarde), mais n'est **jamais** nécessaire pour streamer ou transférer.
+L'iPhone et le PC se parlent **directement** sur le réseau local. Le serveur Linux construit, signe et héberge l'infra (anisette, sauvegarde ; AltServer non monté, [[ADR-0014 Pas de plan B AltServer]]), mais n'est **jamais** nécessaire pour streamer ou transférer.
 
 ```mermaid
 flowchart LR
@@ -29,11 +29,11 @@ flowchart LR
   IDrop -- HTTPS par blocs, ADR-0005 --> PDrop
   IPulse -- événements --> PPulse
   LIMD -. câble USB .- IPH
-  SRV[(Serveur Linux 24/7 - Docker : xtool, anisette, AltServer, sauvegarde)]
+  SRV[(Serveur Linux 24/7 - Docker : xtool, anisette, sauvegarde)]
   SRV -. build + installation .- IPH
 ```
 
-Le QR code affiché par le PC contient : IP, port, empreinte du certificat du PC, jeton à usage unique. L'iPhone le scanne, se connecte, vérifie l'empreinte, puis les deux gardent l'empreinte de l'autre (comme LocalSend et KDE Connect, mais sans PIN).
+Le QR code affiché par le PC contient : IP, port, empreinte du certificat du PC, jeton à usage unique. L'iPhone le scanne, se connecte, vérifie l'empreinte, puis les deux gardent l'empreinte de l'autre (comme LocalSend et KDE Connect, mais sans PIN dans l'URL). Un code de vérification à 4 chiffres, affiché des deux côtés, est proposé ([[Core - Appairage QR]], à confirmer par Evan).
 
 ## Stack
 | Partie | Choix | Pourquoi |
@@ -60,8 +60,8 @@ flowchart LR
   IPA --> SS[SideStore sur l'iPhone, via LocalDevVPN]
   ANI[anisette Mac publique mac-ani.jkcoxson.com - ADR-0012] --> SS
   SS --> APP[Hyphn installé]
-  SC[Raccourci quotidien Refresh All] --> SS
-  ALT[Plan B : AltServer-Linux + netmuxd] -.-> APP
+  SC[Raccourci Refresh All, lundi et jeudi 20 h] --> SS
+  ALT[Plan B AltServer-Linux + netmuxd : non monté, ADR-0014] -.-> APP
 ```
 Règles : toujours le même Apple ID secondaire (sinon les données du Keychain sont perdues) ; 3 apps actives maximum, SideStore compris ; mode développeur et code de verrouillage obligatoires ; si le rafraîchissement rate 7 jours, l'app ne s'ouvre plus mais rien n'est perdu.
 
@@ -77,7 +77,7 @@ apps/ios/      SwiftPM + xtool.yml            (phase 0 : Hello)
 apps/desktop/  Rust + Tauri                   (phase 1)
 apps/desktop-vcam/  DLL C++ webcam virtuelle  (phase 5)
 apps/obs-plugin/                              (phase 5)
-infra/         un docker-compose par service : anisette/, altserver/  (phase 0, voir Serveur.md)
+infra/         un docker-compose par service : anisette/, xtool/  (phase 0, voir Serveur.md)
 apps/android/                                 (phase 7)
 ```
 Les dossiers n'existent qu'à partir de la phase indiquée : pas de dossier vide.
