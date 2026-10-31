@@ -1,7 +1,6 @@
 //! QR pairing (spec `Core - Appairage QR`): QR content (E2), single-use token
-//! (E3), checks on `PairRequest` (E5) and the 4-digit code (E6).
-//! The TLS tunnel (E4) is not written yet: the fingerprint check below is the
-//! one the iPhone will run on the PC certificate.
+//! (E3), checks on `PairRequest` (E5) and the 4-digit code (E6). The TLS tunnel
+//! (E4) and the messages are in `link`.
 
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
@@ -11,13 +10,17 @@ use base64::Engine;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 
-use crate::identity::{fingerprint_of, Fingerprint};
+#[cfg(test)]
+use crate::identity::fingerprint_of;
+use crate::identity::Fingerprint;
 
 pub const PROTOCOL_VERSION: u32 = 1;
 pub const URI_PREFIX: &str = "hyphn://pair?";
 pub const TOKEN_TTL: Duration = Duration::from_secs(120);
 
+/// The QR-reading variants are produced by the iPhone; the PC keeps them for its tests.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub enum PairError {
     #[error("Ce QR code ne vient pas de Hyphn.")]
     NotHyphn,
@@ -57,7 +60,9 @@ impl PairOffer {
         )
     }
 
-    /// Parsing done by the iPhone after the scan.
+    /// Parsing done by the iPhone after the scan (`PairOffer.swift`), kept here
+    /// to test the format from both ends.
+    #[cfg(test)]
     pub fn parse(uri: &str) -> Result<Self, PairError> {
         let query = uri.strip_prefix(URI_PREFIX).ok_or(PairError::NotHyphn)?;
         let (mut v, mut h, mut p, mut fp, mut t) = (None, None, None, None, None);
@@ -114,7 +119,7 @@ struct ActiveToken {
 }
 
 /// PC side of the pairing: one token at a time, then one pending device until
-/// Evan says yes or no.
+/// Evan says yes or no on the iPhone.
 #[derive(Default)]
 pub struct PairingSession {
     token: Option<ActiveToken>,
@@ -170,7 +175,7 @@ impl PairingSession {
         Ok(pending)
     }
 
-    /// Evan's answer on the PC. Returns the device to keep if he said yes.
+    /// Evan's answer, sent by the iPhone. Returns the device to keep if he said yes.
     pub fn answer(&mut self, accept: bool) -> Option<PendingPair> {
         let pending = self.pending.take();
         if accept { pending } else { None }
@@ -190,6 +195,7 @@ pub fn pairing_code(a: &Fingerprint, b: &Fingerprint) -> String {
 }
 
 /// iPhone side of E4: the PC certificate is accepted only if its fingerprint is the QR one.
+#[cfg(test)]
 pub fn check_pinned(expected: &Fingerprint, presented_cert_der: &[u8]) -> Result<(), PairError> {
     if constant_time_eq(expected, &fingerprint_of(presented_cert_der)) {
         Ok(())

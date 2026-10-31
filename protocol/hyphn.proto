@@ -1,0 +1,163 @@
+// Hyphn protocol, version 1. One contract for the iPhone, the PC and later Android.
+//
+// Transport: TCP + TLS 1.3 with a certificate on both sides (mutual TLS). Each
+// side pins the other's certificate by its SHA-256 fingerprint (spec
+// `Core - Appairage QR`, E4). Every message is one `Envelope`, prefixed by its
+// length as a 4-byte big-endian unsigned integer. Maximum 16 MiB per message.
+//
+// Two kinds of connection on the same port, told apart by their first message:
+// - control: `PairRequest` (first pairing) or `Hello` (paired device);
+// - media:   `VideoHello`, then only `VideoFrame` from the iPhone (spec `Cam - Flux v1`).
+//
+// The Rust side mirrors these messages by hand with prost derives
+// (apps/desktop/src-tauri/src/proto.rs), the Swift side with a small codec
+// (apps/ios/Sources/Hyphn/Wire.swift). Change all three together.
+
+syntax = "proto3";
+
+package hyphn.v1;
+
+message Envelope {
+  oneof msg {
+    PairRequest pair_request = 1;   // iPhone -> PC
+    PairPending pair_pending = 2;   // PC -> iPhone: token accepted, show the code
+    PairConfirm pair_confirm = 3;   // iPhone -> PC: Evan's answer
+    PairDone pair_done = 4;         // PC -> iPhone: device kept, play the animation
+    Refused refused = 5;            // PC -> iPhone, then the PC closes
+    Hello hello = 6;                // iPhone -> PC: paired device reconnects
+    Welcome welcome = 7;            // PC -> iPhone
+    DeviceStatus device_status = 8; // iPhone -> PC
+    Ping ping = 9;                  // PC -> iPhone, every 5 s
+    Pong pong = 10;                 // iPhone -> PC
+    CamControl cam_control = 11;    // PC -> iPhone
+    CamState cam_state = 12;        // iPhone -> PC
+    CamQuality cam_quality = 13;    // iPhone -> PC
+    VideoHello video_hello = 14;    // iPhone -> PC, first message of a media connection
+    VideoFrame video_frame = 15;    // iPhone -> PC
+    Forget forget = 16;             // either side: « Oublier »
+  }
+}
+
+message PairRequest {
+  uint32 protocol_version = 1;
+  bytes token = 2;        // 16 bytes, from the QR
+  string device_name = 3;
+  string model = 4;
+  string app_version = 5;
+}
+
+message PairPending {
+  string pc_name = 1;
+}
+
+message PairConfirm {
+  bool accept = 1;
+}
+
+message PairDone {}
+
+message Refused {
+  enum Reason {
+    REASON_UNKNOWN = 0;
+    EXPIRED = 1;
+    ALREADY_USED = 2;
+    UNKNOWN_TOKEN = 3;
+    WRONG_VERSION = 4;
+    UNKNOWN_DEVICE = 5; // not paired, or forgotten on the PC
+    BUSY = 6;           // another pairing is already waiting
+  }
+  Reason reason = 1;
+  string message = 2;   // French text, shown as is
+}
+
+message Hello {
+  uint32 protocol_version = 1;
+  string device_name = 2;
+  string model = 3;
+  string app_version = 4;
+}
+
+message Welcome {
+  string pc_name = 1;
+}
+
+enum Thermal {
+  THERMAL_UNKNOWN = 0;
+  NOMINAL = 1;
+  FAIR = 2;
+  SERIOUS = 3;
+  CRITICAL = 4;
+}
+
+enum Charge {
+  CHARGE_UNKNOWN = 0;
+  UNPLUGGED = 1;
+  CHARGING = 2;
+  FULL = 3;
+}
+
+message DeviceStatus {
+  int32 battery_percent = 1;      // -1 = unknown
+  Charge charge = 2;
+  bool low_power = 3;
+  Thermal thermal = 4;
+  uint64 storage_free_bytes = 5;  // 0 = unknown
+  uint64 storage_total_bytes = 6; // 0 = unknown
+  int64 measured_at_ms = 7;       // iPhone clock, Unix milliseconds
+}
+
+message Ping {
+  uint64 id = 1;
+}
+
+message Pong {
+  uint64 id = 1;
+}
+
+enum Codec {
+  CODEC_UNKNOWN = 0;
+  HEVC = 1;
+  H264 = 2;
+}
+
+// Effective settings, after the thermal rule (RULES, Énergie 9).
+message CamControl {
+  bool live = 1;          // false = paused: nothing is sent
+  uint32 height = 2;      // 2160, 1440, 1080, 720, 480
+  uint32 fps = 3;
+  uint32 bitrate_kbps = 4;
+  Codec codec = 5;
+  bool front = 6;
+  uint32 lens = 7;        // 0 = 0.5x, 1 = 1x, 2 = 2x, 3 = 5x
+}
+
+message CamState {
+  bool open = 1;          // the Cam tab is open on the iPhone
+  bool live = 2;
+  uint32 width = 3;
+  uint32 height = 4;
+  uint32 fps = 5;
+  Codec codec = 6;
+  bool front = 7;
+  uint32 lens = 8;
+  uint32 lens_count = 9;  // back lenses this iPhone has (0.5x, 1x, 2x, 5x)
+}
+
+// Evan picked a quality on the iPhone; the PC keeps it and answers CamControl.
+message CamQuality {
+  uint32 height = 1;
+  uint32 fps = 2;
+}
+
+message VideoHello {}
+
+message VideoFrame {
+  int64 pts_us = 1;       // capture time, iPhone clock
+  bool keyframe = 2;
+  Codec codec = 3;
+  uint32 width = 4;
+  uint32 height = 5;
+  bytes data = 6;         // Annex-B; parameter sets (VPS/SPS/PPS) before each keyframe
+}
+
+message Forget {}

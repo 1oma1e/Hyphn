@@ -1,6 +1,6 @@
-//! Local address and port put in the QR code.
-//! The full network checks of E11 (private network, firewall, real adapter)
-//! are not written yet.
+//! Local address and port put in the QR code, and the Bonjour announce
+//! (spec `Core - Reconnexion`, E1). The full network checks of E11 (private
+//! network, firewall, real adapter) are not written yet.
 
 use std::net::{IpAddr, Ipv4Addr, TcpListener};
 
@@ -17,6 +17,19 @@ pub fn local_ip() -> Option<IpAddr> {
 
 fn is_lan(ip: Ipv4Addr) -> bool {
     ip.is_private() && !ip.is_loopback()
+}
+
+pub const SERVICE: &str = "_hyphn._tcp.local.";
+
+/// Announces `_hyphn._tcp` while the app runs. The name holds only a short id
+/// taken from the fingerprint, nothing private. Dropping the daemon stops it.
+pub fn advertise(ip: IpAddr, port: u16, short_id: &str) -> Option<mdns_sd::ServiceDaemon> {
+    let daemon = mdns_sd::ServiceDaemon::new().ok()?;
+    let name = format!("Hyphn-{short_id}");
+    let host = format!("hyphn-{short_id}.local.");
+    let info = mdns_sd::ServiceInfo::new(SERVICE, &name, &host, ip, port, [("id", short_id)].as_slice()).ok()?;
+    daemon.register(info).ok()?;
+    Some(daemon)
 }
 
 /// The saved port if still free, else the default one, else a random one.

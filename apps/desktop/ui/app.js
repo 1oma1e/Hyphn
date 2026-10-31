@@ -1,8 +1,8 @@
 // Hyphn PC interface. Design V2 (ADR-0016). Every iPhone value comes from the
-// Rust side; the iPhone itself is simulated there for now (ADR-0019).
+// Rust side (`link`), which talks to the real iPhone app over TLS.
 'use strict';
 
-const { invoke } = window.__TAURI__.core;
+const { invoke, Channel } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -38,7 +38,6 @@ const I = {
   shield: svg('<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>'),
   alert: svg('<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/>'),
   swap: svg('<path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/>'),
-  flask: svg('<path d="M9 3h6M10 3v6L4 19a1 1 0 0 0 1 2h14a1 1 0 0 0 1-2l-6-10V3"/>'),
 };
 
 // ---------- Formatting ----------
@@ -133,8 +132,8 @@ function paintHeader() {
     el.innerHTML = '<span class="led off"></span>Aucun appareil';
     return;
   }
-  const state = S.connected ? `${S.latency_ms} ms` : 'en veille';
-  el.innerHTML = `<span class="led${S.connected ? '' : ' off'}"></span>${esc(S.device.name)} · ${state}<span class="demo-tag" title="iPhone simulé (ADR-0019)">démo</span>`;
+  const state = S.connected ? (S.latency_ms == null ? 'relié' : `${S.latency_ms} ms`) : 'en veille';
+  el.innerHTML = `<span class="led${S.connected ? '' : ' off'}"></span>${esc(S.device.name)} · ${state}`;
 }
 
 // ---------- Router ----------
@@ -203,7 +202,7 @@ const Home = {
         <p class="lead">Lance la caméra pour tes appels et tes streams, ou récupère tes photos en un clic.</p>
         <div class="row" style="gap:12px">
           <a class="btn cam" href="#cam">${I.cam}Ouvrir Cam</a>
-          <a class="btn" href="#drop">${I.down}Recevoir les photos</a>
+          <a class="btn" href="#drop">${I.down}Drop</a>
         </div>`;
     } else if (k === 'veille') {
       left = `
@@ -263,7 +262,7 @@ const Home = {
               <span class="ph" style="background:linear-gradient(135deg,#B9F25A,#3E9B4F);animation-delay:1.4s"></span>
               <span class="ph" style="background:linear-gradient(135deg,#8E7CFF,#4A3BB5);animation-delay:2.1s"></span>
             </div>
-            <div><h3>Drop</h3><p id="h-drop">—</p><span class="go">Recevoir${I.arrow}</span></div>
+            <div><h3>Drop</h3><p>Photos et fichiers entre l’iPhone et le PC. Arrive bientôt.</p><span class="go">Voir${I.arrow}</span></div>
           </a>
         </section>`}
       </main>`;
@@ -271,7 +270,7 @@ const Home = {
   },
   update() {
     if (!S.device) return;
-    const p = S.pulse || {};
+    const p = S.status || {};
     const pct = p.battery;
     $('#h-pct').innerHTML = pct == null ? '—' : `${pct}<small>%</small>`;
     $('#h-arc').style.strokeDasharray = `${pct == null ? 0 : (1024 * pct / 100).toFixed(0)} 1025`;
@@ -283,12 +282,6 @@ const Home = {
     $('#f-disk').textContent = p.storage_free_gb == null ? 'inconnu' : `${nf.format(Math.round(p.storage_free_gb))} Go libres`;
     const q = S.cam.effective.quality;
     $('#h-camtag').textContent = S.connected ? `Prête · ${resName(q.height)}${q.fps}` : 'Hors ligne';
-    const t = S.transfer;
-    $('#h-drop').textContent = t && t.state !== 'done'
-      ? `Transfert en cours : ${Math.floor(t.bytes_done / t.bytes_total * 100)} %.`
-      : S.new_photos > 0
-        ? `${nf.format(S.new_photos)} nouvelles photos et vidéos sur l’iPhone.`
-        : S.connected ? 'Tout est déjà sur ce PC.' : 'Ouvre Hyphn sur l’iPhone pour voir ses photos.';
     const seen = $('#h-seen');
     if (seen) seen.textContent = ago(S.device.last_seen);
     const low = pct != null && pct < 15 && p.charge === 'unplugged' && settings && settings.low_battery_alert;
@@ -363,7 +356,6 @@ const Pair = {
           </div>
           ${this.err ? `<div class="ban bad" style="margin-bottom:18px">${I.alert}<span>${esc(this.err)}</span></div>` : ''}
           <div class="row">
-            <button class="btn pri" type="button" data-act="scan">Simuler le scan<span class="demo-tag">démo</span></button>
             <button class="btn" type="button" data-act="renew">${I.refresh}Nouveau QR</button>
           </div>
         </div>
@@ -373,13 +365,9 @@ const Pair = {
       body = `<div class="stage" style="grid-template-columns:1fr;text-align:center;padding:56px 36px">
         <div>
           <span class="lbl">Étape 2 sur 2 · ${esc(this.device)} trouvé</span>
-          <h2 style="margin:16px 0 36px;font-size:36px;letter-spacing:-.04em;font-weight:600">Le même code s’affiche sur l’iPhone ?</h2>
+          <h2 style="margin:16px 0 36px;font-size:36px;letter-spacing:-.04em;font-weight:600">Confirme sur l’iPhone</h2>
           <div class="digits" aria-label="Code ${d.join(' ')}">${d.map((x, i) => `<span class="dg" style="animation-delay:${i * 0.12}s">${x}</span>`).join('')}</div>
-          <p style="margin:26px auto;max-width:520px;color:var(--tx2);font-size:14px;line-height:1.55">Ce code vient des empreintes des deux appareils. S’il est différent, quelqu’un a peut-être affiché un faux QR : refuse.</p>
-          <div class="row" style="justify-content:center">
-            <button class="btn pri" type="button" data-act="yes" style="min-width:180px">Oui, relier</button>
-            <button class="btn" type="button" data-act="no" style="min-width:140px">Non</button>
-          </div>
+          <p style="margin:26px auto 0;max-width:520px;color:var(--tx2);font-size:14px;line-height:1.55">Si l’iPhone affiche le même code, touche « Oui, relier » sur l’iPhone. Sinon, touche « Non » : quelqu’un a peut-être affiché un faux QR.</p>
         </div>
       </div>`;
     } else {
@@ -420,38 +408,32 @@ const Pair = {
       go('home');
     }, 650);
   },
-  acts: {
-    renew: () => {
+  // Events from `link`: the iPhone scanned (code), said yes (linked) or left (ended).
+  onPair(e) {
+    if (page !== Pair) {
+      if (e.step === 'linked') toast(`${e.device_name} est lié à ce PC`);
+      return;
+    }
+    if (e.step === 'code') {
+      Pair.code = e.code;
+      Pair.device = e.device_name;
+      Pair.step = 'code';
       Pair.err = '';
-      Pair.newOffer();
-    },
-    scan: async () => {
-      try {
-        const r = await invoke('demo_scan', { uri: Pair.offer.uri });
-        Pair.code = r.code;
-        Pair.device = r.device_name;
-        Pair.step = 'code';
-        Pair.err = '';
-      } catch (e) {
-        Pair.err = String(e);
-      }
       Pair.paint();
-    },
-    yes: async () => {
-      try {
-        await invoke('pair_answer', { accept: true });
-      } catch (e) {
-        Pair.err = String(e);
-        Pair.newOffer();
-        return;
-      }
+    } else if (e.step === 'linked') {
+      Pair.device = e.device_name;
       Pair.step = 'linked';
       Pair.paint();
       // E8: about 8 s of « liés », then slide to the home page.
       Pair.t1 = setTimeout(() => Pair.leave(), 8000);
-    },
-    no: async () => {
-      await invoke('pair_answer', { accept: false });
+    } else if (Pair.step !== 'linked') {
+      Pair.err = e.message || (Pair.step === 'code' ? 'L’iPhone a refusé ou s’est déconnecté. Voici un nouveau QR.' : '');
+      Pair.newOffer();
+    }
+  },
+  acts: {
+    renew: () => {
+      Pair.err = '';
       Pair.newOffer();
     },
     home: () => Pair.leave(),
@@ -476,6 +458,104 @@ const CAM_DEFAULTS = {
 };
 const LANGS = ['Je reviens bientôt', 'Be right back', 'Vuelvo enseguida', 'Bin gleich zurück', 'Torno subito', 'Volto já', 'すぐ戻ります', '곧 돌아올게요'];
 
+// Video from the iPhone (spec `Cam - Flux v1`): Annex-B packets from Rust,
+// decoded by WebCodecs (graphics card), drawn at once. No buffer: when the
+// decoder falls behind, frames are dropped until the next keyframe.
+const CODEC_STR = { 1: 'hev1.1.6.L153.B0', 2: 'avc1.640033' };
+const Video = {
+  hevc: true,
+  dec: null,
+  codec: 0,
+  size: '',
+  waitKey: true,
+  drops: 0,
+  lastFrame: 0,
+  async detect() {
+    try {
+      const r = await VideoDecoder.isConfigSupported({ codec: CODEC_STR[1], hardwareAcceleration: 'prefer-hardware' });
+      this.hevc = !!r.supported;
+    } catch (e) {
+      this.hevc = false;
+    }
+  },
+  start(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.ch = new Channel();
+    this.ch.onmessage = (m) => this.packet(m);
+    invoke('cam_attach', { channel: this.ch });
+  },
+  stop() {
+    invoke('cam_detach');
+    this.close();
+    this.canvas = null;
+  },
+  close() {
+    if (this.dec && this.dec.state !== 'closed') this.dec.close();
+    this.dec = null;
+    this.waitKey = true;
+  },
+  configure(codec, w, h) {
+    this.close();
+    this.codec = codec;
+    this.size = w + 'x' + h;
+    this.dec = new VideoDecoder({
+      output: (frame) => {
+        const c = this.canvas;
+        if (c) {
+          if (c.width !== frame.displayWidth || c.height !== frame.displayHeight) {
+            c.width = frame.displayWidth;
+            c.height = frame.displayHeight;
+          }
+          this.ctx.drawImage(frame, 0, 0);
+          this.lastFrame = performance.now();
+        }
+        frame.close();
+      },
+      error: (e) => {
+        console.warn('decoder', e);
+        // HEVC refused by this PC: ask the iPhone for H.264 instead.
+        if (this.codec === 1 && this.hevc) {
+          this.hevc = false;
+          Cam.push();
+        }
+        this.dec = null;
+      },
+    });
+    this.dec.configure({ codec: CODEC_STR[codec] || CODEC_STR[2], optimizeForLatency: true, hardwareAcceleration: 'prefer-hardware' });
+  },
+  packet(m) {
+    if (!this.canvas) return;
+    const u8 = m instanceof ArrayBuffer ? new Uint8Array(m) : new Uint8Array(m.buffer || m);
+    if (u8.length < 18) return;
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    const codec = u8[0], key = u8[1] === 1;
+    const pts = Number(dv.getBigInt64(2, true));
+    const w = dv.getUint32(10, true), h = dv.getUint32(14, true);
+    if (!this.dec || codec !== this.codec || this.size !== w + 'x' + h) {
+      if (!key) return;
+      this.configure(codec, w, h);
+    }
+    if (this.waitKey && !key) return;
+    if (this.dec.decodeQueueSize > 2) {
+      this.drops++;
+      this.waitKey = true;
+      return;
+    }
+    this.waitKey = false;
+    try {
+      this.dec.decode(new EncodedVideoChunk({ type: key ? 'key' : 'delta', timestamp: pts, data: u8.subarray(18) }));
+    } catch (e) {
+      this.waitKey = true;
+    }
+  },
+  // A picture arrived in the last 1.5 s.
+  fresh: () => performance.now() - Video.lastFrame < 1500,
+};
+Video.detect();
+
+const LENS_L = ['0,5×', '1×', '2×', '5×'];
+
 const Cam = {
   key: () => '',
   mount(root) {
@@ -488,16 +568,7 @@ const Cam = {
     root.innerHTML = `
       <main class="cam-wrap enter">
         <div class="pv" id="c-pv">
-          <div class="scene" id="c-scene" role="img" aria-label="Aperçu de la caméra (simulé)">
-            <div class="bgl" id="c-bgl">
-              <span class="bk" style="left:6%;top:12%;width:150px;height:150px;background:#FFB547"></span>
-              <span class="bk" style="left:72%;top:6%;width:190px;height:190px;background:#FF7A66;animation-delay:-3s"></span>
-              <span class="bk" style="left:84%;top:52%;width:100px;height:100px;background:#5FD4F4;opacity:.35;animation-delay:-6s"></span>
-              <span class="bk" style="left:18%;top:62%;width:120px;height:120px;background:#FFD7A8;opacity:.25;animation-delay:-2s"></span>
-              <span class="shelf"></span><span class="plant"></span>
-            </div>
-            <div class="person"><span class="hd"></span><span class="bd"></span></div>
-          </div>
+          <canvas class="scene vid" id="c-scene" role="img" aria-label="Image de la caméra de l’iPhone"></canvas>
           <div class="tint" id="c-tint"></div>
           <div class="vig" id="c-vig"></div>
           <div id="c-crop"></div>
@@ -508,10 +579,12 @@ const Cam = {
           <div class="dock" role="toolbar" aria-label="Commandes de la caméra" id="c-dock"></div>
         </div>
         <div class="under">
-          <span>Webcam Windows et plugin OBS : <b>pas encore installés</b> · <span id="c-camname"></span> · aperçu simulé</span>
+          <span>Webcam Windows et plugin OBS : <b>pas encore installés</b> · <span id="c-camname"></span></span>
           <span>Batterie, chaleur et réseau : visibles ici seulement, jamais dans l’image envoyée.</span>
         </div>
       </main>`;
+    this.phoneKey = '';
+    Video.start($('#c-scene'));
     this.paintScene();
     this.paintDock();
     this.push();
@@ -520,13 +593,17 @@ const Cam = {
     // Leaving the page pauses the camera: nothing is sent while nobody looks.
     this.live = false;
     this.push();
+    Video.stop();
   },
   connected: () => !!(S && S.connected),
   push() {
     const c = this.cs;
     invoke('cam_set', {
       live: this.live,
-      quality: { height: RES[c.res], fps: FPS[c.fps], bitrate_mbps: RATE[c.rate], adapt: c.autoq },
+      quality: {
+        height: RES[c.res], fps: FPS[c.fps], bitrate_mbps: RATE[c.rate], adapt: c.autoq,
+        codec: c.codec === 1 || !Video.hevc ? 'h264' : 'hevc', front: c.front, lens: c.lens,
+      },
     });
   },
   save() {
@@ -543,12 +620,13 @@ const Cam = {
     if (c.lut === 2) f += ' contrast(1.15) saturate(.8)';
     if (c.lut === 3) f += ' sepia(.28)';
     if (c.lut === 4) f += ' hue-rotate(-14deg)';
-    const sc = [0.84, 1, 1.35, 1.9][c.lens] * (c.zoom / 10);
+    // Lenses are real now (the iPhone switches); only the fine zoom and the
+    // mirror stay on the PC side, like the colour effects (graphics card).
+    const sc = c.zoom / 10;
     const scene = $('#c-scene');
     if (!scene) return;
     scene.style.filter = f;
     scene.style.transform = `scale(${sc.toFixed(3)})${c.mirror ? ' scaleX(-1)' : ''}`;
-    $('#c-bgl').style.filter = `blur(${(c.blur / 100 * 16).toFixed(1)}px)`;
     $('#c-tint').style.background = c.temp >= 0 ? `rgba(255,140,50,${(c.temp / 50 * 0.35).toFixed(2)})` : `rgba(80,160,255,${(-c.temp / 50 * 0.35).toFixed(2)})`;
     $('#c-vig').style.opacity = (c.vig / 100).toFixed(2);
     $('#c-crop').innerHTML = c.ratio ? `<div class="crop" style="aspect-ratio:${RATIO_CSS[c.ratio]}"></div>` : '';
@@ -557,8 +635,9 @@ const Cam = {
   paintWait() {
     const c = this.cs;
     const conn = this.connected();
-    const show = !this.live || !conn;
-    const key = [show, conn, c.wst, c.multi, c.msg].join('|');
+    const phone = S && S.cam.phone;
+    const show = !this.live || !conn || !Video.fresh();
+    const key = [show, conn, c.wst, c.multi, c.msg, this.live, phone && phone.open].join('|');
     if (key === this.overlayKey) return;
     this.overlayKey = key;
     if (!show) {
@@ -571,7 +650,9 @@ const Cam = {
       : `<div class="static">${esc(c.msg)}</div>`;
     const sub = !S || !S.device
       ? `<div class="wait-sub">Aucun iPhone relié. <a href="#pair" style="color:var(--li)">Relier un iPhone</a></div>`
-      : conn ? '' : '<div class="wait-sub">Ouvre Hyphn sur l’iPhone pour afficher la caméra.</div>';
+      : !conn ? '<div class="wait-sub">Ouvre Hyphn sur l’iPhone pour afficher la caméra.</div>'
+        : this.live ? '<div class="wait-sub">L’image arrive…</div>'
+          : phone && phone.open ? '' : '<div class="wait-sub">« Afficher la caméra » ouvre Cam sur l’iPhone.</div>';
     $('#c-wait').innerHTML = `<div class="wait${c.wst === 2 ? ' blur' : ''}">
       ${c.wst === 0 ? `<svg class="tr" viewBox="0 0 400 300" preserveAspectRatio="none" aria-hidden="true">${waves(12, 40, 20, 0.3)}</svg>` : ''}
       <div class="bigmark" aria-hidden="true"><span class="d"></span><span class="b"></span><span class="d"></span></div>
@@ -583,9 +664,8 @@ const Cam = {
     const live = this.live && conn;
     $('#c-dock').innerHTML = `
       <button class="pz ${live ? 'live' : 'paused'}" type="button" data-act="pause" ${conn ? '' : 'disabled'}>${live ? I.pause + 'Pause' : I.play + 'Afficher la caméra'}</button>
-      <div class="lens" role="group" aria-label="Objectif">${['0,5×', '1×', '2×', '5×'].map((n, i) => `<button type="button" class="${i === c.lens ? 'on' : ''}" data-act="set" data-k="lens" data-v="${i}">${n}</button>`).join('')}</div>
+      <div class="lens" role="group" aria-label="Objectif">${LENS_L.map((n, i) => `<button type="button" class="${i === c.lens ? 'on' : ''}" data-act="set" data-k="lens" data-v="${i}">${n}</button>`).join('')}</div>
       <button class="db" type="button" aria-label="Retourner la caméra" data-act="flipcam">${I.flip}</button>
-      <button class="db" type="button" aria-label="Prendre une photo 48 Mpx" data-act="shot">${I.photo}</button>
       <span class="sep"></span>
       <button class="db${this.panel === 'info' ? ' on' : ''}" type="button" aria-label="Infos du flux" data-act="panel" data-v="info">${I.info}</button>
       <button class="db${this.panel === 'set' ? ' on' : ''}" type="button" aria-label="Réglages de la caméra" data-act="panel" data-v="set">${I.sliders}</button>`;
@@ -598,7 +678,7 @@ const Cam = {
     $('#c-hudl').innerHTML = (live
       ? '<span class="chip" style="color:#FFB3A6"><span class="rec"></span>EN DIRECT</span>'
       : `<span class="chip">${I.pause}En pause · tes apps voient l’écran d’attente</span>`) + `<span class="chip mono">${qual}</span>`;
-    const p = S.pulse;
+    const p = S.status;
     if (!S.device || !p) {
       $('#c-hudr').innerHTML = '';
     } else {
@@ -607,7 +687,7 @@ const Cam = {
       $('#c-hudr').innerHTML = `
         <span class="chip" style="color:${bc}"><span class="batt" aria-hidden="true"><i style="width:${p.battery ?? 0}%"></i></span><span class="mono">${p.battery ?? '—'} %</span>${p.charge !== 'unplugged' ? svg('<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>', ' aria-label="en charge"') : ''}</span>
         <span class="chip"><span class="tdot" style="background:${HEAT_COLOR[p.thermal] || '#868F9D'}"></span>${p.thermal ? HEAT[p.thermal] : 'inconnu'}</span>
-        <span class="chip">${I.wifi}<span class="mono">${conn ? S.latency_ms + ' ms' : 'hors ligne'}</span></span>`;
+        <span class="chip">${I.wifi}<span class="mono">${conn ? (S.latency_ms == null ? '—' : S.latency_ms + ' ms') : 'hors ligne'}</span></span>`;
     }
     const e = S.cam.effective;
     $('#c-notice').innerHTML = !conn ? '' : e.alert
@@ -618,6 +698,20 @@ const Cam = {
     if (!this.connected() && this.live) {
       this.live = false;
       this.push();
+    }
+    // The iPhone can pause, switch lens or camera itself: the PC follows.
+    const ph = S.cam.phone;
+    const pk = ph ? [ph.live, ph.front, ph.lens].join('|') : '';
+    if (ph && pk !== this.phoneKey) {
+      this.phoneKey = pk;
+      this.live = ph.live;
+      if (ph.front !== this.cs.front || ph.lens !== this.cs.lens) {
+        this.cs.front = ph.front;
+        this.cs.lens = ph.lens;
+        this.paintScene();
+        this.save();
+      }
+      this.dockKey = '';
     }
     const dockKey = this.connected() + '|' + this.live;
     if (dockKey !== this.dockKey) {
@@ -631,18 +725,18 @@ const Cam = {
     if (this.panel === 'info') this.paintInfo();
   },
   paintInfo() {
-    const st = S.cam.stats, q = S.cam.effective.quality, p = S.pulse || {};
+    const st = S.cam.stats, q = S.cam.effective.quality, p = S.status || {}, ph = S.cam.phone;
     const max = Math.max(1, ...this.spark);
     const bars = Array.from({ length: 40 }, (_, i) => this.spark[i - (40 - this.spark.length)] ?? 0)
       .map((v) => `<i style="height:${Math.max(4, Math.round(v / max * 90))}%"></i>`).join('');
     const body = `
       <div class="spark" aria-hidden="true">${bars}</div>
       <div class="ig">
-        <div class="icell"><div class="k">Image envoyée</div><div class="v">${resName(q.height)} · ${q.fps}</div><div class="h">encodage matériel sur l’iPhone</div></div>
+        <div class="icell"><div class="k">Image envoyée</div><div class="v">${ph && ph.height ? `${ph.width}×${ph.height} · ${ph.fps}` : `${resName(q.height)} · ${q.fps}`}</div><div class="h">encodage matériel sur l’iPhone</div></div>
         <div class="icell"><div class="k">Débit réseau</div><div class="v">${n1(st.bitrate_mbps)} Mb/s</div><div class="h">chiffré</div></div>
         <div class="icell"><div class="k">Images par seconde</div><div class="v">${n1(st.fps)}</div><div class="h">reçues par le PC</div></div>
-        <div class="icell"><div class="k">Latence</div><div class="v">${st.latency_ms} ms</div><div class="h">de l’objectif à l’écran</div></div>
-        <div class="icell"><div class="k">Images perdues</div><div class="v">${st.dropped}</div><div class="h">depuis le début</div></div>
+        <div class="icell"><div class="k">Latence réseau</div><div class="v">${S.latency_ms == null ? 'inconnu' : S.latency_ms + ' ms'}</div><div class="h">aller-retour Wi-Fi</div></div>
+        <div class="icell"><div class="k">Images jetées</div><div class="v">${st.dropped + Video.drops}</div><div class="h">pour rester sans retard</div></div>
         <div class="icell"><div class="k">iPhone</div><div class="v">${p.battery ?? '—'} % · ${p.thermal ? HEAT[p.thermal] : 'inconnu'}</div><div class="h">${p.charge ? CHARGE[p.charge] : 'inconnu'}</div></div>
       </div>`;
     const el = $('#c-info');
@@ -659,7 +753,7 @@ const Cam = {
       layer.innerHTML = `<button class="scrim" type="button" aria-label="Fermer les infos" data-act="close"></button>
         <div class="modal" role="dialog" aria-label="Infos du flux">
           <div class="row" style="justify-content:space-between">
-            <div><div style="font-size:20px;font-weight:600;letter-spacing:-.03em">Infos du flux <span class="demo-tag">démo</span></div><div class="muted" style="margin-top:2px">Mis à jour chaque seconde</div></div>
+            <div><div style="font-size:20px;font-weight:600;letter-spacing:-.03em">Infos du flux</div><div class="muted" style="margin-top:2px">Mis à jour chaque seconde</div></div>
             <button class="ib" type="button" aria-label="Fermer" data-act="close">${I.close}</button>
           </div>
           <div id="c-info"></div>
@@ -753,7 +847,7 @@ const Cam = {
       const k = el.dataset.k;
       Cam.cs[k] = Number(el.dataset.v);
       if (k === 'lens') Cam.paintDock();
-      Cam.changed(['res', 'fps', 'rate'].includes(k));
+      Cam.changed(['res', 'fps', 'rate', 'codec', 'lens'].includes(k));
     },
     toggle: (el) => {
       const k = el.dataset.k;
@@ -774,9 +868,8 @@ const Cam = {
     close: () => Cam.openPanel(Cam.panel),
     flipcam: () => {
       Cam.cs.front = !Cam.cs.front;
-      Cam.changed(false);
+      Cam.changed(true);
     },
-    shot: () => toast('Photo 48 Mpx : arrive avec l’app iPhone', 'info'),
     slide: (el) => {
       const k = el.dataset.k;
       Cam.cs[k] = Number(el.value);
@@ -798,156 +891,20 @@ const Cam = {
 // ===================================================================
 // Drop
 // ===================================================================
-const GRADS = [['#FFB547', '#FF7A66'], ['#5FD4F4', '#2D6CDF'], ['#B9F25A', '#3E9B4F'], ['#F3D9C0', '#A0705A'], ['#8E7CFF', '#4A3BB5'], ['#FFB547', '#D2552F'], ['#5FD4F4', '#0E8C80'], ['#EEF1F5', '#7C8594']];
-const grad = (i) => `linear-gradient(135deg,${GRADS[i % 8][0]},${GRADS[i % 8][1]})`;
-
 const Drop = {
-  key() {
-    if (!S) return '';
-    const t = S.transfer;
-    return [!!S.device, S.connected, t ? t.direction + t.state : 'none', S.new_photos > 0].join('|');
-  },
+  key: () => '',
   mount(root) {
-    const t = S && S.transfer;
-    const conn = S && S.connected;
-    let ban = '';
-    if (t && t.state === 'waiting') ban = `<div class="ban w">${I.wifiOff}<span><strong>En pause, l’iPhone ne répond plus.</strong> Ça reprend tout seul quand Hyphn est rouvert sur l’iPhone, sans rien renvoyer.</span></div>`;
-    if (t && t.state === 'done') {
-      const dup = t.direction === 'in' && t.duplicates ? ` ${t.duplicates} doublons ignorés.` : '';
-      ban = `<div class="ban ok">${I.check}<span><strong>C’est fini.</strong> ${nf.format(t.items_total)} éléments ${t.direction === 'in' ? 'reçus' : 'envoyés'} et vérifiés un par un.${dup}</span></div>`;
-    }
-    const moving = t && t.state === 'running';
-    const flightCls = 'flight' + (t && t.direction === 'out' ? ' rev' : '') + (t ? (moving ? '' : ' stop') : ' idle');
-    let right;
-    if (t) {
-      const btns = t.state === 'done'
-        ? `${t.direction === 'in' ? `<button class="btn cy" type="button" data-act="open">${I.folder}Ouvrir le dossier</button>` : ''}<button class="btn" type="button" data-act="dismiss">OK</button>`
-        : `<button class="btn" type="button" data-act="pause">${t.state === 'paused' ? 'Reprendre' : 'Pause'}</button><button class="btn" type="button" data-act="cancel">Annuler</button>`;
-      right = `<span class="lbl" id="d-phase">—</span>
-        <div class="big" style="margin-top:10px" id="d-pct">0<small>%</small></div>
-        <div class="prog"><i id="d-bar" style="width:0%"></i></div>
-        <div class="say" id="d-say">—</div>
-        <div class="row" style="margin-top:20px">${btns}</div>`;
-    } else if (!S || !S.device) {
-      right = `<span class="lbl">Drop</span><div class="say" style="margin-top:12px;font-size:18px">Relie d’abord ton iPhone pour échanger des photos et des fichiers.</div>
-        <div class="row" style="margin-top:20px"><a class="btn pri" href="#pair">Relier un iPhone</a></div>`;
-    } else if (!conn) {
-      right = `<span class="lbl">iPhone en veille</span><div class="say" style="margin-top:12px;font-size:18px">Ouvre Hyphn sur l’iPhone pour recevoir tes photos.</div>`;
-    } else if (S.new_photos > 0) {
-      right = `<span class="lbl">Sur l’iPhone <span class="demo-tag">démo</span></span>
-        <div class="big" style="margin-top:10px">${nf.format(S.new_photos)}</div>
-        <div class="say" style="margin-top:12px">nouvelles photos et vidéos, rangées par date à l’arrivée.</div>
-        <div class="row" style="margin-top:20px"><button class="btn cy" type="button" data-act="receive">${I.down}Recevoir les photos</button></div>`;
-    } else {
-      right = `<span class="lbl">Sur l’iPhone</span><div class="say" style="margin-top:12px;font-size:18px">Tout est déjà sur ce PC.</div>`;
-    }
-    const sortTxt = { year_month: 'Rangé tout seul par année et par mois, selon la vraie date de la photo.', year: 'Rangé tout seul par année, selon la vraie date de la photo.', flat: 'Tout dans le même dossier.' }[settings.sort];
     root.innerHTML = `
       <main class="wrap enter">
-        ${ban}
         <section class="card">
-          <div class="dhero">
-            <div class="${flightCls}">
-              <svg class="pth" viewBox="0 0 560 200" aria-hidden="true"><path d="M 76 150 C 200 0, 360 0, 484 150" style="stroke:color-mix(in srgb,var(--cy) 35%,transparent);stroke-width:1.5;stroke-dasharray:4 7"/></svg>
-              <div class="end" style="left:0">${I.phone}</div>
-              <div class="end pc" style="left:484px">${I.folder}</div>
-              ${GRADS.map((_, i) => `<span class="ph" style="background:${grad(i)};animation-delay:${i * 0.4}s"></span>`).join('')}
-            </div>
-            <div>${right}</div>
+          <div class="problem"><span class="ic" style="color:var(--cy)">${I.swap}</span>
+            <h2 style="margin:0;font-size:28px;letter-spacing:-.03em">Drop arrive bientôt</h2>
+            <p class="sub" style="max-width:520px;line-height:1.55">Photos, vidéos et fichiers entre l’iPhone et ce PC, rangés par année et par mois. C’est la prochaine étape.</p>
           </div>
         </section>
-        <div class="two">
-          <section class="card">
-            <div class="row" style="justify-content:space-between;gap:12px">
-              <span class="lbl">Où vont tes photos</span>
-              <button class="btn mono sm" type="button" data-act="pick" title="Changer de dossier">${esc(settings.photos_dir)}</button>
-            </div>
-            <div style="margin-top:10px" id="d-sum"><div class="muted">Lecture du dossier…</div></div>
-            <p class="muted" style="margin:12px 0 0">${sortTxt}</p>
-          </section>
-          <section class="card">
-            <span class="lbl">Envoyer vers l’iPhone</span>
-            <button class="zone" id="d-zone" type="button" data-act="files" ${conn && !(t && t.state !== 'done') ? '' : 'disabled'}>
-              ${I.up}
-              <div class="t">Glisse des fichiers ici</div>
-              <div style="font-size:13px;margin-top:6px">ou clique pour choisir · photos et vidéos → app Photos, le reste → app Fichiers</div>
-            </button>
-          </section>
-        </div>
-        <section class="card">
-          <span class="lbl">Derniers envois</span>
-          <div class="hist" id="d-hist"></div>
-        </section>
       </main>`;
-    this.loadSummary();
-  },
-  async loadSummary() {
-    const rows = await invoke('drop_summary');
-    const el = $('#d-sum');
-    if (!el) return;
-    el.innerHTML = rows.length
-      ? rows.map((r, i) => `<div class="mrow"><span class="stack" aria-hidden="true">${[0, 1, 2].map((j) => `<i style="background:${grad(i * 3 + j)}"></i>`).join('')}</span>${esc(r.label)}<span class="n mono">${nf.format(r.files)} · ${bytes(r.bytes)}</span></div>`).join('')
-      : '<div class="mrow muted">Le dossier est vide pour l’instant.</div>';
-  },
-  update() {
-    const t = S.transfer;
-    if (t && $('#d-pct')) {
-      const pct = t.bytes_done / t.bytes_total * 100;
-      $('#d-pct').innerHTML = `${Math.floor(pct)}<small>%</small>`;
-      $('#d-bar').style.width = pct.toFixed(1) + '%';
-      const what = t.direction === 'in' ? 'photos et vidéos' : 'fichiers';
-      $('#d-phase').textContent = t.state === 'done' ? 'Terminé' : t.state === 'running' ? (t.direction === 'in' ? 'Réception depuis l’iPhone' : 'Envoi vers l’iPhone') : 'En pause';
-      const left = (t.bytes_total - t.bytes_done) / t.speed_bps / 60;
-      const eta = t.state === 'done' ? 'Terminé.' : t.state !== 'running' ? 'En pause.'
-        : left < 1 ? 'Encore moins d’une minute.' : `Encore environ ${Math.ceil(left)} min, à ${Math.round(t.speed_bps / 1e6)} Mo/s.`;
-      $('#d-say').innerHTML = `<b>${nf.format(t.items_done)}</b> sur ${nf.format(t.items_total)} ${what} · <b>${bytes(t.bytes_done)}</b> sur ${bytes(t.bytes_total)}<br>${eta}`;
-    }
-    const h = $('#d-hist');
-    if (h) {
-      const html = S.history.length
-        ? S.history.slice(0, 6).map((e) => `<div class="hr"><span class="d mono">${when(e.at)}</span><span>${e.direction === 'in' ? 'iPhone → PC' : 'PC → iPhone'}</span><span class="mono">${nf.format(e.items)} élément${e.items > 1 ? 's' : ''} · ${bytes(e.bytes)}</span><span class="ok">${I.check}tout vérifié</span></div>`).join('')
-        : '<div class="hr muted">Rien pour l’instant.</div>';
-      if (h.innerHTML !== html) h.innerHTML = html;
-    }
-  },
-  acts: {
-    receive: () => invoke('drop_action', { action: 'receive' }).then(refresh),
-    pause: () => invoke('drop_action', { action: 'pause' }).then(refresh),
-    cancel: () => invoke('drop_action', { action: 'cancel' }).then(refresh),
-    dismiss: () => invoke('drop_action', { action: 'dismiss' }).then(refresh),
-    open: () => invoke('open_photos_dir').catch((e) => toast(String(e), 'info')),
-    pick: async () => {
-      const dir = await invoke('pick_photos_dir');
-      if (!dir) return;
-      settings.photos_dir = dir;
-      await saveSettings();
-      mount(true);
-    },
-    files: async () => {
-      const paths = await invoke('drop_pick_files');
-      if (paths.length) {
-        await invoke('drop_send', { paths });
-        refresh();
-      }
-    },
   },
 };
-
-// Files dragged from Windows onto the window (Tauri gives real paths).
-try {
-  window.__TAURI__.webview.getCurrentWebview().onDragDropEvent(async (e) => {
-    const zone = $('#d-zone');
-    if (!zone || zone.disabled) return;
-    const type = e.payload.type;
-    zone.classList.toggle('over', type === 'enter' || type === 'over');
-    if (type === 'drop' && e.payload.paths.length) {
-      await invoke('drop_send', { paths: e.payload.paths });
-      refresh();
-    }
-  });
-} catch (err) {
-  console.warn('drag and drop unavailable', err);
-}
 
 // ===================================================================
 // Réglages
@@ -964,23 +921,13 @@ const Settings = {
     const d = S && S.device;
     const tog = (k, label, hint) => `<button class="tg" type="button" data-act="toggle" data-k="${k}" aria-pressed="${s[k]}"><span>${esc(label)}${hint ? `<span class="h" style="display:block;font-size:12px;color:var(--tx3);margin-top:2px">${esc(hint)}</span>` : ''}</span><span class="sw${s[k] ? ' on' : ''}"></span></button>`;
     const device = d
-      ? `<div class="line"><span>${esc(d.name)} <span class="demo-tag">démo</span><span class="h">Relié le ${dateFr(d.paired_at)} · pour toujours, jusqu’à « Oublier » · empreinte <span class="mono">${esc(d.fingerprint)}</span></span></span><button class="btn bad sm" type="button" data-act="ask">Oublier</button></div>
+      ? `<div class="line"><span>${esc(d.name)}<span class="h">Relié le ${dateFr(d.paired_at)} · pour toujours, jusqu’à « Oublier » · empreinte <span class="mono">${esc(d.fingerprint)}</span></span></span><button class="btn bad sm" type="button" data-act="ask">Oublier</button></div>
         ${this.asking ? `<div class="confirm" role="alertdialog" aria-label="Confirmer l’oubli">
           <span><strong>Oublier ${esc(d.name)} ?</strong> Il faudra scanner un nouveau QR pour le relier.</span>
           <div class="row" style="gap:8px"><button class="btn badf sm" type="button" data-act="forget">Oublier</button><button class="btn sm" type="button" data-act="cancel">Annuler</button></div>
         </div>` : ''}
         <div class="line"><span>Relier un autre iPhone<span class="h">Il remplace celui-ci</span></span><a class="btn sm" href="#pair">Relier</a></div>`
       : `<div class="line"><span>Aucun iPhone relié</span><a class="btn pri sm" href="#pair">Relier un iPhone</a></div>`;
-    const p = (S && S.pulse) || {};
-    const demo = d ? `
-      <section class="scard" style="--c:var(--am)">
-        <div class="ct">${I.flask}iPhone simulé <span class="demo-tag">démo</span></div>
-        <p class="muted" style="margin:0 0 8px">En attendant l’app iPhone, ces boutons jouent son rôle (ADR-0019).</p>
-        <button class="tg" type="button" data-act="demo" data-k="open" aria-pressed="${S.connected}">Hyphn ouvert sur l’iPhone<span class="sw${S.connected ? ' on' : ''}"></span></button>
-        <div class="line"><label for="dm-heat">Chaleur</label><select id="dm-heat" class="sel" data-change="demoheat">${Object.entries(HEAT).map(([k, v]) => `<option value="${k}"${p.thermal === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>
-        <div class="line"><label for="dm-bat">Batterie</label><span class="row"><input id="dm-bat" class="range" type="range" min="1" max="100" value="${p.battery ?? 50}" data-change="demobat"><span class="mono" id="dm-batv" style="width:44px;text-align:right">${p.battery ?? '—'} %</span></span></div>
-        <button class="tg" type="button" data-act="demo" data-k="charging" aria-pressed="${p.charge !== 'unplugged'}">En charge<span class="sw${p.charge !== 'unplugged' ? ' on' : ''}"></span></button>
-      </section>` : '';
     this.root.innerHTML = `
       <main class="wrap enter" style="max-width:1080px">
         <h1 class="h1" style="font-size:40px;letter-spacing:-.05em">Réglages</h1>
@@ -1007,34 +954,17 @@ const Settings = {
             <div class="ct">${I.swap}Drop</div>
             <div class="line"><span>Dossier des photos</span><button class="btn mono sm" type="button" data-act="pick">${esc(s.photos_dir)}</button></div>
             <div class="line"><label for="rg">Rangement</label><select id="rg" class="sel" data-change="sort">${[['year_month', 'Année / Mois'], ['year', 'Année'], ['flat', 'Tout ensemble']].map(([k, n]) => `<option value="${k}"${s.sort === k ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
-            <div class="line"><span>Vérification<span class="h">Chaque fichier est comparé à l’arrivée</span></span><span class="ok">${I.check}toujours</span></div>
+            <div class="line"><span>Envoi et réception</span><span class="todo">bientôt</span></div>
           </section>
           <section class="scard" style="--c:var(--am)">
             <div class="ct">${I.bolt}Alertes</div>
             ${tog('low_battery_alert', 'Prévenir sous 15 % de batterie', 'Quand l’iPhone n’est pas en charge')}
           </section>
-          ${demo}
         </div>
         <div class="mono" style="text-align:center;font-size:12px;color:var(--tx3)">Hyphn ${S ? S.version : ''} · protocole v1 · ${esc(S ? S.pc_name : '')} · empreinte ${esc(S ? S.pc_fingerprint : '')}</div>
       </main>`;
   },
-  update() {
-    // Only the demo battery value moves on its own; the rest changes on click.
-    const v = $('#dm-batv');
-    if (v && S.pulse && document.activeElement !== $('#dm-bat')) {
-      v.textContent = `${S.pulse.battery} %`;
-      $('#dm-bat').value = S.pulse.battery;
-    }
-  },
-  demoControls(over) {
-    const p = S.pulse || {};
-    return Object.assign({ open: S.connected, thermal: p.thermal || 'nominal', battery: p.battery ?? 50, charging: p.charge !== 'unplugged' }, over);
-  },
-  async demoSet(over) {
-    await invoke('demo_set', { controls: this.demoControls(over) });
-    await refresh();
-    this.paint();
-  },
+
   acts: {
     toggle: async (el) => {
       const k = el.dataset.k;
@@ -1073,13 +1003,6 @@ const Settings = {
       await refresh();
       mount(true);
     },
-    demo: (el) => {
-      const k = el.dataset.k;
-      const cur = Settings.demoControls({});
-      Settings.demoSet({ [k]: !cur[k] });
-    },
-    demoheat: (el) => Settings.demoSet({ thermal: el.value }),
-    demobat: (el) => Settings.demoSet({ battery: Number(el.value) }),
   },
 };
 
@@ -1105,4 +1028,18 @@ function onSnapshot(snap) {
   paintHeader();
   mount(true);
   listen('snapshot', (e) => onSnapshot(e.payload));
+  listen('pair', (e) => Pair.onPair(e.payload));
+  // Evan picked a quality on the iPhone: the PC keeps it (spec `Cam - Flux v1`, E4).
+  listen('cam_quality', (e) => {
+    const c = Object.assign({}, CAM_DEFAULTS, settings.cam || {});
+    const r = RES.indexOf(e.payload.height), f = FPS.indexOf(e.payload.fps);
+    if (r >= 0) c.res = r;
+    if (f >= 0) c.fps = f;
+    settings.cam = c;
+    saveSettings();
+    if (page === Cam) {
+      Cam.cs = c;
+      Cam.changed(false);
+    }
+  });
 })();

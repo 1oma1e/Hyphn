@@ -59,7 +59,6 @@ button { font-family: inherit; }
 .navp svg { width: 16px; height: 16px; }
 .right { display: flex; gap: 10px; align-items: center; min-width: 200px; justify-content: flex-end; }
 .devc { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--ln); background: var(--p1); font-size: 13px; color: var(--tx2); white-space: nowrap; }
-.demo-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 3px 7px; border-radius: 99px; background: rgba(255,181,71,.14); color: var(--am); }
 .ib { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; border: 1px solid var(--ln); background: var(--p1); color: var(--tx); text-decoration: none; cursor: pointer; }
 .ib:hover { border-color: var(--ln2); }
 .ib.on { background: var(--tx); color: var(--on-tx); }
@@ -169,7 +168,6 @@ button { font-family: inherit; }
 .qrbox { position: relative; justify-self: center; width: 420px; max-width: 100%; aspect-ratio: 1; padding: 28px; border-radius: 34px; background: #F4F7EE; box-shadow: 0 0 0 1px rgba(185,242,90,.35), 0 30px 90px rgba(185,242,90,.12); }
 .qrbox .qr { width: 100%; height: 100%; }
 .qrbox .qr svg { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; }
-.btn.pri .demo-tag { background: rgba(11,16,4,.14); color: var(--on-li); }
 .qrbox.expired .qr { filter: blur(6px); opacity: .4; }
 .beam { position: absolute; left: 14px; right: 14px; height: 46px; top: 14px; border-radius: 12px; background: linear-gradient(180deg, transparent, rgba(185,242,90,.55) 85%, rgba(185,242,90,.95)); mix-blend-mode: multiply; animation: scan 2.6s ease-in-out infinite alternate; pointer-events: none; }
 @keyframes scan { to { top: calc(100% - 60px); } }
@@ -221,14 +219,8 @@ button { font-family: inherit; }
 .cam-wrap { max-width: 1240px; margin: 0 auto; padding: 8px 32px 40px; }
 .pv { position: relative; width: 100%; aspect-ratio: 16/9; border-radius: 28px; overflow: hidden; background: #0A0C10; box-shadow: 0 0 0 1px var(--ln), 0 40px 120px rgba(0,0,0,.45); color: #F1F3F6; }
 .scene { position: absolute; inset: 0; transition: filter .3s, transform .5s cubic-bezier(.2,.9,.3,1); background: radial-gradient(120% 100% at 30% 20%, #2A1F19 0%, #15120F 45%, #0A0C10 100%); }
-.bgl { position: absolute; inset: -30px; transition: filter .3s; }
-.scene .bk { filter: blur(18px); animation-duration: 9s; }
-.shelf { position: absolute; left: 8%; right: 55%; top: 30%; height: 6px; border-radius: 3px; background: rgba(255,200,150,.18); }
-.plant { position: absolute; right: 9%; bottom: 18%; width: 70px; height: 150px; border-radius: 40px 40px 10px 10px; background: rgba(80,130,70,.35); }
-.person { position: absolute; left: 50%; bottom: 0; width: 360px; height: 80%; transform: translateX(-50%); animation: breathe 5s ease-in-out infinite; }
+.scene.vid { width: 100%; height: 100%; object-fit: contain; background: #000; }
 @keyframes breathe { 50% { transform: translateX(-50%) translateY(-4px); } }
-.person .hd { position: absolute; left: 50%; top: 6%; width: 140px; height: 166px; margin-left: -70px; border-radius: 48% 48% 46% 46%; background: #0C0D10; box-shadow: inset -10px -4px 26px rgba(255,150,110,.32), inset 6px 0 14px rgba(95,212,244,.10); }
-.person .bd { position: absolute; left: 0; right: 0; bottom: 0; height: 52%; border-radius: 160px 160px 0 0; background: #0C0D10; box-shadow: inset -14px 10px 40px rgba(255,150,110,.22); }
 .tint { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: soft-light; transition: background .3s; }
 .vig { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,.85) 100%); transition: opacity .3s; }
 .crop { position: absolute; top: 0; bottom: 0; left: 50%; transform: translateX(-50%); height: 100%; box-shadow: 0 0 0 2000px rgba(5,7,10,.78); border-left: 1px dashed rgba(255,255,255,.25); border-right: 1px dashed rgba(255,255,255,.25); pointer-events: none; }
