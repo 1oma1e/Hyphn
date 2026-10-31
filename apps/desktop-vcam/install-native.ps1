@@ -20,7 +20,8 @@ function Fail([int]$code, [string]$why) {
 trap { Fail 13 $_.Exception.Message }
 Remove-Item $report -ErrorAction SilentlyContinue
 
-$dest = Join-Path $env:ProgramFiles 'Hyphn'
+# Its own folder: the app itself may live in Program Files\Hyphn (installer).
+$dest = Join-Path $env:ProgramFiles 'Hyphn Webcam'
 $dll = Join-Path $dest 'hyphn_vcam.dll'
 $obsExe = Join-Path $env:ProgramFiles 'obs-studio\bin\64bit\obs64.exe'
 $obsPlugin = Join-Path $env:ProgramData 'obs-studio\plugins\hyphn-obs'

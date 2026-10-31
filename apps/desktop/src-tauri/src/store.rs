@@ -27,6 +27,9 @@ pub struct Settings {
     pub port: Option<u16>,
     /// Cam settings, owned by the Cam page.
     pub cam: serde_json::Value,
+    /// « Non » to the admin prompt of the automatic webcam install: not asked
+    /// again at start, the Réglages button stays.
+    pub vcam_declined: bool,
 }
 
 impl Default for Settings {
@@ -40,6 +43,7 @@ impl Default for Settings {
             low_battery_alert: true,
             port: None,
             cam: serde_json::Value::Object(Default::default()),
+            vcam_declined: false,
         }
     }
 }

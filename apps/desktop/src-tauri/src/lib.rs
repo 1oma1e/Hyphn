@@ -354,6 +354,26 @@ fn cam_video_url(h: State<'_, Hyphn>) -> String {
 #[cfg(windows)]
 #[tauri::command]
 async fn vcam_install(uninstall: bool, app: AppHandle) -> Result<(), String> {
+    // Asked by hand: the « declined » mark from a refused prompt goes away.
+    set_vcam_declined(&app, false);
+    let a = app.clone();
+    tauri::async_runtime::spawn_blocking(move || install_native(&a, uninstall)).await.map_err(|e| e.to_string())?
+}
+
+#[cfg(windows)]
+fn set_vcam_declined(app: &AppHandle, declined: bool) {
+    let h = app.state::<Hyphn>();
+    let mut inner = h.lock();
+    if inner.settings.vcam_declined != declined {
+        inner.settings.vcam_declined = declined;
+        let _ = h.hub.store.save_settings(&inner.settings);
+    }
+}
+
+/// Installs (or removes) the webcam and the OBS source: one UAC prompt, then
+/// the camera is created at once. Blocking.
+#[cfg(windows)]
+fn install_native(app: &AppHandle, uninstall: bool) -> Result<(), String> {
     let native = app.state::<Hyphn>().lock().native.clone().ok_or("Fichiers de la webcam introuvables.")?;
     if !uninstall && !vcam::native_is_genuine(&native) {
         return Err("Les fichiers de la webcam ont été modifiés : réinstalle Hyphn.".into());
@@ -361,10 +381,7 @@ async fn vcam_install(uninstall: bool, app: AppHandle) -> Result<(), String> {
     if uninstall {
         vcam::remove_camera();
     }
-    let params = vcam::install_command(&native, uninstall);
-    let code = tauri::async_runtime::spawn_blocking(move || vcam::run_elevated(&params))
-        .await
-        .map_err(|e| e.to_string())??;
+    let code = vcam::run_elevated(&vcam::install_command(&native, uninstall))?;
     if code != 0 {
         // The script wrote why (same user, elevated): %TEMP%\hyphn-install.log.
         let why = std::fs::read_to_string(std::env::temp_dir().join("hyphn-install.log")).unwrap_or_default();
@@ -374,11 +391,39 @@ async fn vcam_install(uninstall: bool, app: AppHandle) -> Result<(), String> {
     if uninstall {
         app.state::<Hyphn>().lock().camera = false;
     } else {
-        let a = app.clone();
-        tauri::async_runtime::spawn_blocking(move || start_camera(&a)).await.map_err(|e| e.to_string())?;
+        start_camera(app);
     }
-    on_event(&app, UiEvent::Changed);
+    on_event(app, UiEvent::Changed);
     Ok(())
+}
+
+/// At launch: the webcam must just be there. If it is not installed yet (app
+/// run without its installer), install it now, without waiting for a click;
+/// Windows still asks for the admin « Oui » once. A « Non » is remembered so
+/// Hyphn does not ask again at every start (Réglages keeps the button).
+#[cfg(windows)]
+fn auto_install(app: &AppHandle) {
+    let (declined, native) = {
+        let h = app.state::<Hyphn>();
+        let inner = h.lock();
+        (inner.settings.vcam_declined, inner.native.is_some())
+    };
+    if declined || !native || registered_dll().is_some() {
+        return;
+    }
+    match install_native(app, false) {
+        Ok(()) => {
+            let _ = app.emit("vcam_installed", ());
+        }
+        Err(e) => {
+            if e.contains("annulée") {
+                set_vcam_declined(app, true);
+            }
+            let h = app.state::<Hyphn>();
+            h.lock().camera_error = Some(e);
+            on_event(app, UiEvent::Changed);
+        }
+    }
 }
 
 #[cfg(not(windows))]
@@ -544,6 +589,7 @@ pub fn run() {
                 std::thread::spawn(move || {
                     start_camera(&handle);
                     on_event(&handle, UiEvent::Changed);
+                    auto_install(&handle);
                 });
             }
             #[cfg(not(windows))]

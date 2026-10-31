@@ -1091,6 +1091,8 @@ function onSnapshot(snap) {
   mount(true);
   listen('snapshot', (e) => onSnapshot(e.payload));
   listen('pair', (e) => Pair.onPair(e.payload));
+  // Installed by itself at launch (one admin « Oui »).
+  listen('vcam_installed', () => toast('Webcam Windows prête'));
   // « Afficher » touched on the iPhone: the PC shows the picture at once.
   listen('cam_phone_live', () => { if (route() !== 'cam') go('cam'); });
   // Evan picked a quality on the iPhone: the PC keeps it (spec `Cam - Flux v1`, E4).
