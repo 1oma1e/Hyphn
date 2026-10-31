@@ -1,6 +1,14 @@
 # Maquettes — index
 
-Maquettes en texte et Mermaid (phase 0), **à valider par Evan**. Elles fixent le contenu et l'ordre des écrans, pas le style : le design visuel viendra avant le code de chaque phase. Une note par écran, plus les parcours.
+## V2 visuelle — la référence (validée par Evan le 2026-10-31)
+Maquettes cliquables, avec animations et états (bouton Play, réglage « Tweaks ») : [[ADR-0016 Design visuel V2]].
+- **PC** (Accueil, Cam, Drop, Appairage, Réglages) : https://claude.ai/artifact/STaU5yYjqD5DsSy6vdATmr
+- **iPhone** (Bienvenue, Scan QR, Accueil, Cam, Drop, Envoi, Réglages) : https://claude.ai/artifact/1etdZqrAwQWpN31xwQMYFN
+
+Changements de fond par rapport aux notes ci-dessous : pas de page Pulse ([[ADR-0017 Pulse integre sans page]]) ; pas de micro, Cam démarre en pause, aperçu plein écran sur l'iPhone ([[ADR-0018 Cam image seule et demarrage en pause]]) ; Drop iPhone en 3 onglets (Tout, Photos, Fichiers) ; menu du haut sur le PC, onglets sur l'iPhone.
+
+## V1 texte (phase 0) — à remettre à jour d'après la V2
+Maquettes en texte et Mermaid. Elles fixent le contenu et l'ordre des écrans. Une note par écran, plus les parcours. Quand une note contredit la V2, la V2 a raison.
 
 ## Principes communs
 - **Le PC est l'écran principal** : réglages, télémétrie, progression. L'iPhone reste simple, sombre et économe (règles d'énergie de [[RULES]]).

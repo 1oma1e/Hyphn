@@ -39,7 +39,7 @@ Source unique des règles du projet. Les règles **sans exception** sont aussi i
 5. Mode économie d'iOS respecté : qualité réduite automatiquement.
 6. Budget mesuré en phase 1 (% de batterie par heure et température, par mode) ; chaque version comparée au budget.
 7. Sous 15 % sans charge : alerte sur le PC et qualité réduite.
-8. Pendant un stream : pas d'aperçu sur l'iPhone, mode écran noir, luminosité au minimum, HDR coupé par défaut.
+8. Pendant un stream : aperçu plein écran sur l'iPhone, écran noir en un geste et automatique après 30 s sans toucher (par défaut), luminosité au minimum en écran noir, HDR coupé par défaut ([[ADR-0018 Cam image seule et demarrage en pause]]).
 9. Adaptation thermique : nominal/fair = réglages demandés ; serious = 60 → 30 fps et débit −30 % ; critical = 1080p30 + alerte sur le PC.
 
 ## iOS
@@ -52,7 +52,8 @@ Source unique des règles du projet. Les règles **sans exception** sont aussi i
 ## PC
 - L'app PC tourne sans droits admin ; seule l'installation de la webcam virtuelle les demande, une fois.
 - Une API Windows se vérifie sur Microsoft Learn.
-- Pas de tampon vidéo par défaut côté PC (latence) ; tampon audio réglable.
+- Pas de tampon vidéo par défaut côté PC (latence). Pas de son : Hyphn n'envoie que l'image ([[ADR-0018 Cam image seule et demarrage en pause]]).
+- Les effets d'image (flou, lumière, filtres, cadrage) sont calculés par la carte graphique du PC.
 
 ## Infos et vérification
 - Ne jamais inventer un chiffre : sans mesure, afficher « inconnu ». Pas de « % santé batterie » calculé ([[ADR-0006 Sante batterie par cable]]).

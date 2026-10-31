@@ -47,7 +47,7 @@ Le QR code affiché par le PC contient : IP, port, empreinte du certificat du PC
 
 ## Ce que la recherche ajoute (2026-10-29)
 - **Drop** : envoi HTTPS par blocs vers un serveur du PC, pour que l'envoi continue en arrière-plan ([[ADR-0005 Drop par HTTPS et blocs]], proposé).
-- **Cam** : recette de scrcpy pour la latence — pas de tampon côté PC par défaut, paquets avec leur taille en tête, un fil par socket, petit tampon seulement pour l'audio.
+- **Cam** : recette de scrcpy pour la latence — pas de tampon côté PC par défaut, paquets avec leur taille en tête, un fil par socket. Pas d'audio ([[ADR-0018 Cam image seule et demarrage en pause]]).
 - **Webcam virtuelle** : `MFCreateVirtualCamera` exige Windows 11 (build 22000+) et le type `SoftwareCameraSource`. La DLL s'enregistre dans HKLM, donc **admin une fois** à l'installation ; la caméra est créée pour l'utilisateur courant, donc l'app tourne sans admin. Windows ajoute « Windows Virtual Camera » au nom.
 - **xtool** : app en **un seul binaire, sans extension** (les extensions sont encore cassées) ; vérifier `xtool.yml` à la main, car une clé mal écrite est ignorée sans erreur.
 - **Pulse par câble** : IORegistry `AppleSmartBattery`, lire aussi `BatteryData` ([[ADR-0006 Sante batterie par cable]]).

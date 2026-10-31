@@ -26,9 +26,10 @@ Relier l'iPhone d'Evan à son PC en scannant un QR code, sans compte, en local, 
 - **E5 — Échange.** Dans le tunnel, l'iPhone envoie `PairRequest` (jeton, nom de l'appareil, modèle, version de l'app). Le PC vérifie le jeton. Format : Protobuf préfixé par sa longueur, fichier `protocol/hyphn.proto`.
 - **E6 — Code à 4 chiffres** (choix d'Evan, 2026-10-31). Les deux côtés affichent le même code, tiré des deux empreintes. L'appareil n'est gardé que si Evan touche « Oui, relier » sur l'iPhone **et** clique « Oui » sur le PC.
 - **E7 — Mémoire.** Après accord, le PC garde l'empreinte de l'iPhone et son nom. L'iPhone garde l'empreinte du PC, son nom et sa dernière IP et son port (Keychain).
-- **E8 — Fin.** Le PC affiche la carte « iPhone d'Evan » sur [[PC - Accueil]] ; l'iPhone passe à l'écran « Appairé » de [[iPhone - Accueil]].
+- **E8 — Fin** (choix d'Evan, 2026-10-31, maquette V2 [[ADR-0016 Design visuel V2]]). Dès l'accord, les deux apps jouent **en même temps** l'animation « liés » (les deux appareils, le fil, un cadenas, 3 pastilles : relié pour de bon, chiffré, se reconnecte tout seul) pendant environ 8 s, puis glissent vers leur Accueil ([[PC - Accueil]], [[iPhone - Accueil]]), qui affiche une bulle « lié ». Un bouton « Aller à l'accueil » apparaît vite pour passer plus tôt.
 - **E9 — Permissions iOS.** `Info.plist` : `NSCameraUsageDescription`, `NSLocalNetworkUsageDescription`, `NSBonjourServices` = `_hyphn._tcp` (sert à [[Core - Reconnexion]]). À ajouter par `xtool.yml`, relu à la main ([[RULES]]).
 - **E10 — Lien permanent.** Une fois relié, l'iPhone et le PC restent liés pour toujours : on ne re-scanne jamais, même après un redémarrage ou une mise à jour. Le lien ne se défait **qu'à la main**, par le bouton « Oublier » dans les Réglages ([[iPhone - Reglages]], [[PC - Reglages]]) ; il efface l'empreinte de l'autre, et l'autre côté le voit à la connexion suivante (choix d'Evan, 2026-10-31).
+- **E11 — Pas de QR si le réseau ne va pas** (choix d'Evan, 2026-10-31). Avant d'afficher le QR, le PC vérifie : réseau privé, Hyphn autorisé par le pare-feu Windows, une vraie carte réseau choisie (pas un VPN ou une carte virtuelle). Si une vérification échoue, pas de QR : un message clair dit quoi faire. Ces vérifications ne s'affichent pas quand tout va bien.
 
 ## Cas limites
 | Cas | Ce qui se passe |
@@ -44,7 +45,7 @@ Relier l'iPhone d'Evan à son PC en scannant un QR code, sans compte, en local, 
 
 ## Preuve
 1. Tests automatiques côté PC (`cargo test`) : jeton expiré, jeton réutilisé, mauvaise empreinte, mauvaise version → refus.
-2. Sur le vrai matériel : scan → carte sur le PC. **Moins de 3 s sans compter le temps de décision d'Evan** (porte de la phase 1) : (lecture du QR → code affiché) + (dernier « Oui » → carte affichée). Lu dans les journaux horodatés des deux apps, 5 essais, notés dans le journal de session.
+2. Sur le vrai matériel : scan → carte sur le PC. **Moins de 3 s sans compter le temps de décision d'Evan** (porte de la phase 1) : (lecture du QR → code affiché) + (dernier « Oui » → début de l'animation « liés » des deux côtés). Lu dans les journaux horodatés des deux apps, 5 essais, notés dans le journal de session.
 3. Faux QR (empreinte modifiée à la main) → refus. Capture.
 
 ## À vérifier avant le code

@@ -19,5 +19,8 @@ Une décision par fichier, numérotée. Modèle : `_modele.md`. Statuts : `propo
 | [[ADR-0013 Build iOS par clone Git]] | Clone du repo sur le serveur (clé de déploiement lecture seule), bundle ID `io.github.1oma1e.hyphn`, `.ipa` zippé en Python | accepte (2026-10-31) |
 | [[ADR-0014 Pas de plan B AltServer]] | Pas d'AltServer-Linux + netmuxd ; on surveille le rafraîchissement SideStore | accepte (2026-10-31) |
 | [[ADR-0015 Lien permanent et connexion au premier plan]] | Appairage permanent jusqu'à « Oublier » ; connexion et Pulse seulement quand l'app iPhone est ouverte | accepte (2026-10-31) |
+| [[ADR-0016 Design visuel V2]] | Maquettes visuelles cliquables ; fond « trame », couleurs, Geist, menus ; écrans concis | accepte (2026-10-31) |
+| [[ADR-0017 Pulse integre sans page]] | Pas de page Pulse : infos sur l'Accueil PC et sur l'aperçu Cam | accepte (2026-10-31) |
+| [[ADR-0018 Cam image seule et demarrage en pause]] | Pas de son ; Cam démarre en pause (écran d'attente) ; aperçu plein écran sur l'iPhone + écran noir | accepte (2026-10-31) |
 
 Liens : [[00-Accueil]]

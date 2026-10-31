@@ -23,7 +23,8 @@ Idées à ajouter petit à petit. **Aucune n'est validée** : Evan choisit, puis
 ## Phase 2-3 — Drop
 | Idée | Valeur | Effort | Pourquoi |
 |---|---|---|---|
-| « Tout ce qui est nouveau depuis la dernière fois » en un bouton | ★★★ | S | Le cas d'usage n°1 : vider le téléphone |
+| ~~« Tout ce qui est nouveau » en un bouton~~ : remplacé par l'onglet **Tout** (tout l'iPhone d'un coup), maquette V2 du 2026-10-31 | ★★★ | S | Le cas d'usage n°1 : vider le téléphone |
+| Règles de tri (captures → `\Captures`, ProRes → autre disque, brouillons TikTok → `\TikTok`) | ★★ | S | Vu dans la maquette V1, retiré de la V2 pour rester simple |
 | Bouton « Libérer l'iPhone » : liste ce qui est sauvegardé (hash vérifié) et propose de le supprimer dans Photos | ★★★ | M | Le vrai but de la sauvegarde ; la suppression reste faite par Evan dans Photos |
 | Envoi d'un lien ou d'un texte PC ↔ iPhone (presse-papiers manuel) | ★★ | S | Très demandé, petit effort sur le canal existant |
 | Glisser-déposer d'un dossier PC vers le dossier Hyphn de l'iPhone | ★★ | S | PC → iPhone simple |
@@ -33,19 +34,27 @@ Idées à ajouter petit à petit. **Aucune n'est validée** : Evan choisit, puis
 ## Phase 4-5 — Cam
 | Idée | Valeur | Effort | Pourquoi |
 |---|---|---|---|
-| Profils (Appel, Stream, Cours) applicables en un clic | ★★★ | S | Prévu par le cahier, gros confort |
+| Profils (Appel, Stream, Cours) applicables en un clic | ★★★ | S | Prévu par le cahier, gros confort ; dans le tiroir de réglages de la maquette V2 |
+| Profil choisi tout seul selon l'app qui ouvre la caméra (Discord → Appel, OBS → Stream) | ★★ | M | Zéro réglage avant un appel |
+| Photo 48 Mpx déclenchée depuis le PC (arrive par Drop) | ★★ | M | Bouton présent dans la maquette V2 |
+| Format vertical 9:16 pour les lives TikTok | ★★ | M | Proposé dans la maquette V2 (Qualité › Format) |
+| Message de l'écran d'attente personnalisable, traduit dans toutes les langues | ★★ | M | Demandé par Evan pour plus tard ([[ADR-0018 Cam image seule et demarrage en pause]]) |
+| Graphe du débit dans la fenêtre « Infos du flux », avec les baisses de qualité expliquées | ★★ | S | Dans la maquette V2 |
 | Test réseau avant le stream (débit, latence) → résolution conseillée | ★★★ | S | Évite de lancer un 4K60 qui va saccader |
 | Mesure de latence « verre à verre » (chronomètre filmé) | ★★ | S | Preuve chiffrée de la phase 4 |
-| Micro de l'iPhone comme micro Windows | ★★ | L | Il faut aussi un micro virtuel |
+| ~~Micro de l'iPhone comme micro Windows~~ : abandonné, Hyphn n'envoie que l'image ([[ADR-0018 Cam image seule et demarrage en pause]]) | ★★ | L | Il faut aussi un micro virtuel |
 | Deux iPhone en même temps (deux caméras) | ★ | M | Neon montre que plusieurs caméras virtuelles sont possibles |
 | Sortie NDI ou SRT pour d'autres logiciels | ★ | M | Idée prise à NDI HX Camera |
-| Cadrage automatique (suivi du visage) | ★ | L | Coûte en calcul, contraire aux règles d'énergie : seulement si l'iPhone le fait en matériel |
+| Cadrage automatique (suivi du visage) | ★★ | L | Dans la maquette V2 (Effets), calculé par la carte graphique du PC, jamais sur l'iPhone |
 
 ## Phase 6 — Finition
 | Idée | Valeur | Effort | Pourquoi |
 |---|---|---|---|
 | Rapport « énergie » par session (batterie consommée, temps chaud) | ★★ | S | Prouve que le budget est tenu |
 | Page d'aide intégrée (brouillons TikTok, chauffe, SideStore) | ★★ | S | Déjà dans les maquettes |
+| Palette de commandes Ctrl K sur le PC (tout faire au clavier) | ★ | S | Vue dans la maquette V1 |
+| Rappel « débranche à 80 % » pendant la charge | ★ | S | Ménage la batterie |
+| Anti-marquage de l'écran noir (le petit texte bouge doucement) | ★ | S | Écran OLED allumé longtemps sur la même image |
 
 ## Plus tard
 | Idée | Valeur | Effort | Pourquoi |

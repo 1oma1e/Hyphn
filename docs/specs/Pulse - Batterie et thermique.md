@@ -17,17 +17,17 @@ Pulse ne marche **que quand l'app iPhone est ouverte**. À chaque ouverture, l'i
 - Le coin batterie dans l'aperçu de la caméra : écrit ici (E8), codé avec Cam v1 (phase 4).
 
 ## Parcours
-Écrans [[PC - Pulse]] et [[PC - Cam]] ; résumé sur [[iPhone - Accueil]] (bloc « Pulse : partagé »).
+Pas de page Pulse ([[ADR-0017 Pulse integre sans page]]) : infos sur [[PC - Accueil]] et dans le coin de l'aperçu de [[PC - Cam]] (maquette V2, [[ADR-0016 Design visuel V2]]). Rien à afficher sur l'iPhone.
 
 ## Exigences
 - **E1 — Valeurs.** Niveau de batterie (%), état de charge (en charge, pleine, sur batterie), mode économie d'énergie, état thermique (`nominal`, `fair`, `serious`, `critical`), stockage libre et total. Jamais de degrés : iOS ne les donne pas ([[Points a tester]]).
 - **E2 — Quand on envoie.** Tout, à chaque connexion (donc à chaque ouverture de l'app). Ensuite, batterie, charge, économie et chaleur seulement quand iOS signale un changement : `UIDevice.batteryLevelDidChangeNotification`, `batteryStateDidChangeNotification`, `ProcessInfo.thermalStateDidChangeNotification`, `NSProcessInfoPowerStateDidChange`. Le stockage n'a pas d'événement : lu seulement à la connexion. **Aucune boucle de relevé** ([[RULES]], Énergie 1).
 - **E3 — Message.** Un `PulseUpdate` Protobuf dans la connexion de [[Core - Reconnexion]], avec l'heure de la mesure sur l'iPhone.
-- **E4 — Écran Pulse du PC.** Cartes Batterie, Chaleur et Stockage de [[PC - Pulse]], « Mis à jour … » dans l'en-tête. Chaleur en français : `nominal` → normal, `fair` → tiède, `serious` → chaud, `critical` → critique. Le bloc Réseau, les cycles par câble et l'historique restent vides en phase 1. Une valeur jamais reçue s'affiche « inconnu ».
+- **E4 — Accueil du PC.** 4 infos en mots simples : Batterie (% et charge), Chaleur, Connexion, Stockage libre. Chaleur en français : `nominal` → Normale, `fair` → Tiède, `serious` → Chaude, `critical` → Très chaude. Les cycles par câble et l'historique ne sont pas en phase 1. Une valeur jamais reçue s'affiche « inconnu ».
 - **E5 — App fermée.** Dernières valeurs grisées + « Vu il y a … ».
 - **E6 — Alerte.** Sous 15 % et pas en charge : notification Windows une fois, et bandeau rouge ([[RULES]], Énergie 7). Case pour la couper.
 - **E7 — Budget.** Mesurer la consommation de l'app ouverte et connectée, écran allumé, sur 1 h : % de batterie perdu et état thermique, comparé à la même heure sans Hyphn. Résultat noté dans `docs/research/` : c'est le premier budget ([[RULES]], Énergie 6).
-- **E8 — Coin batterie dans l'aperçu Cam** (phase 4). Dans l'aperçu vidéo de [[PC - Cam]], un petit badge dans un coin : batterie en %, éclair si en charge, chaleur si elle n'est pas « normal ». Rouge sous 15 % sans charge. Il n'apparaît **que dans la fenêtre Hyphn**, jamais dans l'image envoyée à la webcam Windows ou à OBS (les autres ne doivent pas le voir).
+- **E8 — Coin batterie dans l'aperçu Cam** (phase 4). Dans l'aperçu vidéo de [[PC - Cam]], un petit badge dans un coin : batterie en %, éclair si en charge, chaleur, latence Wi-Fi. Rouge sous 15 % sans charge. Il n'apparaît **que dans la fenêtre Hyphn**, jamais dans l'image envoyée à la webcam Windows ou à OBS (les autres ne doivent pas le voir).
 
 ## Cas limites
 | Cas | Ce qui se passe |
