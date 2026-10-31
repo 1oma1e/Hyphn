@@ -11,6 +11,7 @@ Porte : un « Hello » SwiftUI construit par xtool tourne sur l'iPhone et se raf
 - [x] Règles, docs, skills, hooks, reviewer — 2026-10-29
 - [x] Maquettes texte + Mermaid ([[Maquettes - Index]]) — 2026-10-29
 - [x] Maquettes visuelles V2, validées par Evan ([[ADR-0016 Design visuel V2]]) — 2026-10-31 ; notes texte à remettre à jour
+- [x] Hors porte : app PC complète avec iPhone simulé ([[ADR-0019 App PC en premier avec iPhone simule]]) ; preuve : `cargo test` 27 OK + parcours d'appairage capturé — 2026-10-31
 - [ ] Nom validé par Evan ([[ADR-0004 Nom Hyphn]])
 - [x] Serveur : état relevé en lecture seule (OS, architecture, disque, RAM, Docker) ([[Serveur]]) — 2026-10-30
 - [x] Serveur : `anisette-v3-server` en Docker, réseau local seulement, `--restart always` ; preuve : réponse de `curl http://<ip-serveur>:6969` — 2026-10-30
