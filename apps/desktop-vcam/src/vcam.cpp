@@ -126,6 +126,9 @@ public:
     Stream() : feed_(g_module) {
         ++g_objects;
         MFCreateAttributes(&attrs_, 4);
+        // Discord shows the user's own camera mirrored: the waiting screen is
+        // sent mirrored so its text reads the right way there.
+        feed_.SetMirrorWait(true);
         tokenEvent_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         stopEvent_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         timer_ = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);

@@ -205,7 +205,7 @@ struct HomeView: View {
             .padding(.vertical, 16)
             if case let .offline(msg) = link.phase {
                 if !msg.isEmpty { Text(msg).font(.geist(13)).foregroundStyle(Ink.am).padding(.bottom, 10) }
-                Button { link.reconnect() } label: { Label("Chercher le PC", systemImage: "arrow.clockwise") }
+                Button { link.reconnectNow() } label: { Label("Reconnecter", systemImage: "arrow.clockwise") }
                     .buttonStyle(GhostButtonStyle())
             } else {
                 Button { withAnimation(.spring(duration: 0.45)) { tab = .cam } } label: {
@@ -589,6 +589,11 @@ struct SettingsView: View {
                         }
                         .padding(14)
                         .background(Ink.co.opacity(0.08))
+                    }
+                    Divider().overlay(Ink.line)
+                    Button { link.reconnectNow() } label: {
+                        Label("Reconnecter", systemImage: "arrow.clockwise").font(.geist(15, .medium)).foregroundStyle(Ink.tx)
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(14)
                     }
                     Divider().overlay(Ink.line)
                     Button { scanning = true } label: {

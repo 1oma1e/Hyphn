@@ -55,9 +55,11 @@ final class Camera: NSObject, ObservableObject {
         report()
     }
 
-    func close() {
+    /// `byUser`: leaving the Cam tab is Evan's own pause; going to another app
+    /// is not (the PC stays live, shows the waiting screen, resumes on return).
+    func close(byUser: Bool = true) {
         guard isOpen else { return }
-        let wasLive = live
+        let wasLive = live && byUser
         isOpen = false
         setLive(false)
         UIApplication.shared.isIdleTimerDisabled = false

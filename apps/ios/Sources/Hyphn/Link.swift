@@ -47,6 +47,8 @@ final class PCLink: ObservableObject {
     private var pairing: (conn: PinnedConnection, offer: PairOffer)?
     private var browser: NWBrowser?
     private var giveUp: Task<Void, Never>?
+    private var retry: Task<Void, Never>?
+    private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     private var pairTimeout: Task<Void, Never>?
     private var prime: NWBrowser?
     private var foreground = false
@@ -62,19 +64,60 @@ final class PCLink: ObservableObject {
 
     func enterForeground() {
         foreground = true
+        endBackgroundTask()
         info.start()
-        if pc != nil { reconnect() }
+        if session != nil {
+            // Still linked (short trip to another app): just refresh the status.
+            send(.deviceStatus(info.current(withStorage: true)))
+        } else if pc != nil {
+            reconnect()
+        }
     }
 
+    /// Another app in front: the link stays (ADR-0023). iOS stops the camera,
+    /// so the PC shows the waiting screen; iOS lets us run ~30 s, then the
+    /// link closes cleanly before the app is suspended.
     func enterBackground() {
         foreground = false
         info.stop()
         stopSearch()
-        session?.close()
-        session = nil
+        retry?.cancel()
         cancelPairing()
         camera?.stopStreaming()
-        if pc != nil { phase = .offline("") }
+        guard session != nil else {
+            if pc != nil { phase = .offline("") }
+            return
+        }
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "hyphn-link") { [weak self] in
+            Task { @MainActor in self?.backgroundExpired() }
+        }
+    }
+
+    private func backgroundExpired() {
+        if !foreground {
+            session?.close()
+            session = nil
+            if pc != nil { phase = .offline("") }
+        }
+        endBackgroundTask()
+    }
+
+    private func endBackgroundTask() {
+        if backgroundTask != .invalid {
+            UIApplication.shared.endBackgroundTask(backgroundTask)
+            backgroundTask = .invalid
+        }
+    }
+
+    /// « Reconnecter »: everything from scratch, at once.
+    func reconnectNow() {
+        retry?.cancel()
+        let old = session
+        session = nil
+        old?.close()
+        camera?.stopStreaming()
+        stopSearch()
+        reconnect()
     }
 
     // MARK: Pairing
@@ -196,6 +239,7 @@ final class PCLink: ObservableObject {
 
     func reconnect() {
         guard foreground, let pc, let identity, session == nil else { return }
+        retry?.cancel()
         stopSearch()
         phase = .searching
         // E3: the last known address...
@@ -213,6 +257,18 @@ final class PCLink: ObservableObject {
             guard !Task.isCancelled, let self, self.session == nil else { return }
             self.stopSearch()
             self.phase = .offline("PC introuvable. Vérifie que Hyphn est ouvert sur le PC et que les deux sont sur le même Wi-Fi.")
+            self.scheduleRetry()
+        }
+    }
+
+    /// While the app is open, try again every 5 s (ADR-0023): the PC may
+    /// just have restarted or the Wi-Fi come back.
+    private func scheduleRetry() {
+        retry?.cancel()
+        retry = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled, let self, self.foreground, self.session == nil, self.pc != nil else { return }
+            self.reconnect()
         }
     }
 
@@ -329,6 +385,7 @@ final class PCLink: ObservableObject {
     }
 
     private func forgetLocally(notice: String?) {
+        retry?.cancel()
         stopSearch()
         session = nil
         camera?.stopStreaming()

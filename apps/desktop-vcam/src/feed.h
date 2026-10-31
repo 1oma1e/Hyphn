@@ -66,6 +66,10 @@ public:
     // A recent iPhone picture is there and the camera is live.
     bool HasLiveVideo();
 
+    // Draw the waiting screen mirrored (Windows webcam): Discord mirrors the
+    // user's own preview, so the text reads the right way there.
+    void SetMirrorWait(bool on) { mirrorWait_ = on; }
+
 private:
     // Pipe thread.
     void PipeLoop();
@@ -153,6 +157,7 @@ private:
     ComPtr<IDWriteFactory5> dwrite_;
     ComPtr<IDWriteFontCollection1> fonts_;
     LARGE_INTEGER qpcFreq_{}, qpcStart_{};
+    std::atomic<bool> mirrorWait_{false};
 };
 
 }  // namespace hyphn

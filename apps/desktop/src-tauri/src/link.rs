@@ -127,7 +127,13 @@ struct Session {
     rtt_ms: Option<u32>,
     cam: Option<proto::CamState>,
     last_key_request: Option<Instant>,
+    /// Ends this session at once (« Reconnecter », or a newer connection).
+    kick: Arc<tokio::sync::Notify>,
 }
+
+/// After a lost link, « Afficher » comes back by itself if the iPhone returns
+/// within this time (ADR-0023); later, Cam starts paused again (ADR-0018).
+const RESUME_LIVE: Duration = Duration::from_secs(300);
 
 pub struct State {
     pub pairing: PairingSession,
@@ -141,6 +147,8 @@ pub struct State {
     video_sinks: Vec<(String, VideoSink)>,
     /// Readers that cannot decode HEVC: the iPhone sends H.264 while one is there.
     h264_readers: Vec<String>,
+    /// The link was lost while live: back live if the iPhone returns before.
+    resume_live_until: Option<Instant>,
 }
 
 /// Read by the snapshot.
@@ -208,6 +216,7 @@ impl Hub {
                 stats: CamStats::default(),
                 video_sinks: Vec::new(),
                 h264_readers: Vec::new(),
+                resume_live_until: None,
             }),
             notify,
             tls,
@@ -264,6 +273,14 @@ impl Hub {
         self.lock().cam.live = live;
         self.push_control();
         (self.notify)(UiEvent::Changed);
+    }
+
+    /// « Reconnecter » on the PC: ends the session; the iPhone (app open)
+    /// connects again at once, both sides start fresh.
+    pub fn drop_session(&self) {
+        if let Some(s) = &self.lock().session {
+            s.kick.notify_one();
+        }
     }
 
     /// One reader of the video per name; None removes it.
@@ -464,13 +481,29 @@ impl Hub {
     ) -> std::io::Result<()> {
         let (mut rd, mut wr) = tokio::io::split(io);
         let (tx, mut rx) = unbounded_channel::<Envelope>();
+        let kick = Arc::new(tokio::sync::Notify::new());
         let id = {
             let mut st = self.lock();
             st.next_id += 1;
             let id = st.next_id;
-            // A newer connection from the same iPhone replaces the old one.
-            st.session = Some(Session { id, fingerprint: fp, tx: tx.clone(), rtt_ms: None, cam: None, last_key_request: None });
+            // A newer connection from the same iPhone replaces the old one,
+            // which is closed at once.
+            if let Some(old) = &st.session {
+                old.kick.notify_one();
+            }
+            st.session = Some(Session {
+                id,
+                fingerprint: fp,
+                tx: tx.clone(),
+                rtt_ms: None,
+                cam: None,
+                last_key_request: None,
+                kick: kick.clone(),
+            });
             st.sent_control = None;
+            if st.resume_live_until.take().is_some_and(|t| Instant::now() < t) {
+                st.cam.live = true;
+            }
             id
         };
         let hex = identity::to_hex(&fp);
@@ -496,7 +529,14 @@ impl Hub {
         (self.notify)(UiEvent::Changed);
 
         // Silence longer than SILENCE_LIMIT (no Pong, no status) ends the session.
-        while let Ok(Ok(Some(m))) = timeout(SILENCE_LIMIT, read_msg(&mut rd)).await {
+        loop {
+            let m = tokio::select! {
+                r = timeout(SILENCE_LIMIT, read_msg(&mut rd)) => match r {
+                    Ok(Ok(Some(m))) => m,
+                    _ => break,
+                },
+                _ = kick.notified() => break,
+            };
             match m.msg {
                 Some(Msg::DeviceStatus(s)) => {
                     self.lock().last_status = Some(StatusView::from(&s));
@@ -564,6 +604,9 @@ impl Hub {
             let mut st = self.lock();
             if st.session.as_ref().is_some_and(|s| s.id == id) {
                 st.session = None;
+                if st.cam.live {
+                    st.resume_live_until = Some(Instant::now() + RESUME_LIVE);
+                }
                 st.cam.live = false;
             }
         }
@@ -911,6 +954,31 @@ mod tests {
         send(&mut io, Msg::CamState(proto::CamState { open: true, live: false, lens: 3, by_user: true, ..Default::default() })).await;
         assert!(matches!(recv(&mut io).await, Some(Msg::CamControl(c)) if c.live && c.lens == 3));
         assert!(r.hub.view().live);
+    }
+
+    #[tokio::test]
+    async fn reconnecter_ends_the_link_and_afficher_comes_back() {
+        let r = rig().await;
+        let phone = Identity::generate("phone").unwrap();
+        let mut io = pair(&r, &phone).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::CamControl(_))));
+        r.hub.set_live(true);
+        assert!(matches!(recv(&mut io).await, Some(Msg::CamControl(c)) if c.live));
+        // « Reconnecter » on the PC: the iPhone sees the end of the link.
+        r.hub.drop_session();
+        loop {
+            match timeout(Duration::from_secs(5), read_msg(&mut io)).await.unwrap() {
+                Ok(Some(_)) => continue,
+                _ => break,
+            }
+        }
+        wait_until(|| r.hub.view().connected.is_none()).await;
+        assert!(!r.hub.view().live);
+        // Back within 5 minutes: live again without a click.
+        let mut io = connect(r.addr, &phone, r.hub.identity.fingerprint).await.unwrap();
+        send(&mut io, Msg::Hello(proto::Hello { protocol_version: PROTOCOL_VERSION, ..Default::default() })).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::Welcome(_))));
+        assert!(matches!(recv(&mut io).await, Some(Msg::CamControl(c)) if c.live));
     }
 
     #[test]

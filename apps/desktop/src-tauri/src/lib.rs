@@ -57,7 +57,7 @@ struct Inner {
     settings: Settings,
     port: u16,
     /// Keeps the Bonjour announce alive.
-    _mdns: Option<mdns_sd::ServiceDaemon>,
+    mdns: Option<mdns_sd::ServiceDaemon>,
     /// Where the window reads the Cam picture (`video.rs`).
     video_url: String,
     /// The Windows webcam exists for this session.
@@ -339,6 +339,19 @@ fn cam_lens(front: bool, lens: u32, mirror: bool, h: State<'_, Hyphn>) {
     });
 }
 
+/// « Reconnecter » on the PC: ends the link (the iPhone, app open, comes back
+/// at once) and announces Hyphn again on the network (Wi-Fi changed…).
+#[tauri::command]
+fn reconnect(h: State<'_, Hyphn>) {
+    h.hub.drop_session();
+    let short_id = identity::to_hex(&h.hub.identity.fingerprint)[..8].to_string();
+    let mut inner = h.lock();
+    if let Some(old) = inner.mdns.take() {
+        let _ = old.shutdown();
+    }
+    inner.mdns = net::local_ip().and_then(|ip| net::advertise(ip, inner.port, &short_id));
+}
+
 /// « Afficher la caméra » / « Pause » on the PC.
 #[tauri::command]
 fn cam_live(on: bool, h: State<'_, Hyphn>) {
@@ -412,7 +425,9 @@ fn auto_install(app: &AppHandle) {
         let inner = h.lock();
         (inner.settings.vcam_declined, inner.native.is_some())
     };
-    if declined || !native || registered_dll().is_some() {
+    // Missing, or older than the one this app carries (an update): install.
+    let up_to_date = registered_dll().is_some_and(|d| vcam::sha256_hex(&d).as_deref() == Some(vcam::VCAM_SHA256));
+    if declined || !native || up_to_date {
         return;
     }
     match install_native(app, false) {
@@ -584,7 +599,7 @@ pub fn run() {
             let readers = Arc::new(AtomicUsize::new(0));
             app.manage(Hyphn {
                 hub: hub.clone(),
-                inner: Mutex::new(Inner { settings, port, _mdns: mdns, video_url, camera: false, camera_error: None, native }),
+                inner: Mutex::new(Inner { settings, port, mdns, video_url, camera: false, camera_error: None, native }),
                 vcam_state: vcam_tx,
                 vcam_readers: readers.clone(),
             });
@@ -641,6 +656,7 @@ pub fn run() {
             save_settings,
             pick_photos_dir,
             open_photos_dir,
+            reconnect,
             cam_set,
             cam_lens,
             cam_live,

@@ -17,11 +17,11 @@ struct HyphnApp: App {
                     link.camera = camera
                 }
                 .onChange(of: scenePhase) { _, phase in
-                    // Spec `Core - Reconnexion`, E2 and E6: network only in the foreground.
+                    // ADR-0023: the link stays while another app is in front.
                     switch phase {
                     case .active: link.enterForeground()
                     case .background:
-                        camera.close()
+                        camera.close(byUser: false)
                         link.enterBackground()
                     default: break
                     }

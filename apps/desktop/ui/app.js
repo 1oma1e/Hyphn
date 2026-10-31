@@ -180,6 +180,11 @@ document.addEventListener('change', dispatch('change'));
 
 const GLOBAL_ACTS = {
   go: (el) => go(el.dataset.to),
+  // Both sides start fresh: the PC ends the link, the iPhone comes back at once.
+  reconnect: async () => {
+    await invoke('reconnect');
+    toast('Reconnexion…', 'info');
+  },
 };
 
 // ===================================================================
@@ -209,7 +214,8 @@ const Home = {
       left = `
         <span class="eyebrow"><span class="led off"></span>${name} · <span id="h-seen">${ago(S.device.last_seen)}</span></span>
         <h1 class="big-h"><span class="w">En attente</span><br><span class="w" style="animation-delay:.1s">de l’iPhone.</span></h1>
-        <p class="lead">Ouvre Hyphn sur l’iPhone : il se reconnecte tout seul, sans scanner.</p>`;
+        <p class="lead">Ouvre Hyphn sur l’iPhone : il se reconnecte tout seul, sans scanner.</p>
+        <button class="btn" type="button" data-act="reconnect">${I.refresh}Reconnecter</button>`;
     } else {
       left = `
         <span class="eyebrow">Bienvenue dans Hyphn</span>
@@ -988,6 +994,7 @@ const Settings = {
           <span><strong>Oublier ${esc(d.name)} ?</strong> Il faudra scanner un nouveau QR pour le relier.</span>
           <div class="row" style="gap:8px"><button class="btn badf sm" type="button" data-act="forget">Oublier</button><button class="btn sm" type="button" data-act="cancel">Annuler</button></div>
         </div>` : ''}
+        <div class="line"><span>Connexion<span class="h">${S && S.connected ? 'Reliée' : 'En attente de l’iPhone'}</span></span><button class="btn sm" type="button" data-act="reconnect">Reconnecter</button></div>
         <div class="line"><span>Relier un autre iPhone<span class="h">Il remplace celui-ci</span></span><a class="btn sm" href="#pair">Relier</a></div>`
       : `<div class="line"><span>Aucun iPhone relié</span><a class="btn pri sm" href="#pair">Relier un iPhone</a></div>`;
     this.root.innerHTML = `

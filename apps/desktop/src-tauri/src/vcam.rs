@@ -181,7 +181,7 @@ pub const VCAM_SHA256: &str = env!("HYPHN_VCAM_SHA256");
 pub const OBS_SHA256: &str = env!("HYPHN_OBS_SHA256");
 
 
-fn sha256_hex(path: &Path) -> Option<String> {
+pub fn sha256_hex(path: &Path) -> Option<String> {
     use sha2::{Digest, Sha256};
     let bytes = std::fs::read(path).ok()?;
     Some(Sha256::digest(&bytes).iter().map(|x| format!("{x:02X}")).collect())
