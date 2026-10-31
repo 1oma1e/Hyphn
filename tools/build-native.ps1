@@ -20,21 +20,23 @@ $obj = Join-Path $base 'native-obj'
 New-Item -ItemType Directory -Force $out, $obj | Out-Null
 
 # /MT: no Visual C++ runtime needed on the PC (the Frame Server loads the DLL).
-$cl = '/nologo /std:c++20 /EHsc /O2 /MT /W3 /DUNICODE /D_UNICODE /DNOMINMAX /utf-8'
+# /Brepro: same bytes at every build, so the SHA-256 the app checks (build.rs)
+# does not change when nothing changed.
+$cl = '/nologo /std:c++20 /EHsc /O2 /MT /W3 /DUNICODE /D_UNICODE /DNOMINMAX /utf-8 /Brepro'
 $libs = 'mfplat.lib mf.lib mfuuid.lib mfsensorgroup.lib d3d11.lib dxgi.lib d2d1.lib dwrite.lib ole32.lib oleaut32.lib advapi32.lib propsys.lib user32.lib'
 
 $steps = @(
     "cd /d `"$src`"",
     "rc /nologo /fo `"$obj\feed.res`" feed.rc",
     "cl $cl /c /Fo`"$obj\\`" feed.cpp vcam.cpp",
-    "link /nologo /DLL /DEF:vcam.def /OUT:`"$out\hyphn_vcam.dll`" `"$obj\feed.obj`" `"$obj\vcam.obj`" `"$obj\feed.res`" $libs"
+    "link /nologo /Brepro /DLL /DEF:vcam.def /OUT:`"$out\hyphn_vcam.dll`" `"$obj\feed.obj`" `"$obj\vcam.obj`" `"$obj\feed.res`" $libs"
 )
 if (-not $NoObs) {
     $steps += @(
         "cd /d `"$obs`"",
-        "lib /nologo /def:obs.def /machine:x64 /out:`"$obj\obs.lib`"",
+        "lib /nologo /Brepro /def:obs.def /machine:x64 /out:`"$obj\obs.lib`"",
         "cl $cl /I`"$src`" /c /Fo`"$obj\obs\\`" plugin.cpp `"$src\feed.cpp`"",
-        "link /nologo /DLL /OUT:`"$out\hyphn-obs.dll`" `"$obj\obs\plugin.obj`" `"$obj\obs\feed.obj`" `"$obj\feed.res`" `"$obj\obs.lib`" $libs"
+        "link /nologo /Brepro /DLL /OUT:`"$out\hyphn-obs.dll`" `"$obj\obs\plugin.obj`" `"$obj\obs\feed.obj`" `"$obj\feed.res`" `"$obj\obs.lib`" $libs"
     )
     New-Item -ItemType Directory -Force (Join-Path $obj 'obs') | Out-Null
 }

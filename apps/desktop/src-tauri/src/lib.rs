@@ -366,7 +366,10 @@ async fn vcam_install(uninstall: bool, app: AppHandle) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())??;
     if code != 0 {
-        return Err(format!("L’installation a échoué (code {code})."));
+        // The script wrote why (same user, elevated): %TEMP%\hyphn-install.log.
+        let why = std::fs::read_to_string(std::env::temp_dir().join("hyphn-install.log")).unwrap_or_default();
+        let why = why.trim().trim_start_matches('\u{feff}');
+        return Err(if why.is_empty() { format!("L’installation a échoué (code {code}).") } else { format!("L’installation a échoué : {why}") });
     }
     if uninstall {
         app.state::<Hyphn>().lock().camera = false;

@@ -11,6 +11,15 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
+# Why it failed, read back by the app (same user, elevated): %TEMP%\hyphn-install.log
+$report = Join-Path $env:TEMP 'hyphn-install.log'
+function Fail([int]$code, [string]$why) {
+    Set-Content -Path $report -Value $why -Encoding UTF8
+    exit $code
+}
+trap { Fail 13 $_.Exception.Message }
+Remove-Item $report -ErrorAction SilentlyContinue
+
 $dest = Join-Path $env:ProgramFiles 'Hyphn'
 $dll = Join-Path $dest 'hyphn_vcam.dll'
 $obsExe = Join-Path $env:ProgramFiles 'obs-studio\bin\64bit\obs64.exe'
@@ -18,7 +27,8 @@ $obsPlugin = Join-Path $env:ProgramData 'obs-studio\plugins\hyphn-obs'
 $obsBin = Join-Path $obsPlugin 'bin\64bit'
 $obsDll = Join-Path $obsBin 'hyphn-obs.dll'
 $logs = Join-Path $env:ProgramData 'Hyphn'
-$regsvr = Join-Path $env:SystemRoot 'System32\regsvr32.exe'
+# The COM class of the camera, in HKLM (the camera service must find it).
+$clsid = 'HKLM:\SOFTWARE\Classes\CLSID\{10FA7DA4-A7FE-49E4-B4E9-1A77EDCFEB6E}'
 
 # A DLL in use (camera open in an app) cannot be overwritten, but it can be
 # renamed: the new one serves from the next opening.
@@ -43,21 +53,19 @@ function Place([string]$from, [string]$to, [string]$sha) {
     $got = (Get-FileHash $tmp -Algorithm SHA256).Hash
     if (-not $sha -or $got -ne $sha.ToUpperInvariant()) {
         Remove-Item $tmp -Force
-        exit 11
+        Fail 11 "Empreinte de $(Split-Path $from -Leaf) : $got, attendue $sha"
     }
     $old = Retire $to
     try { Move-Item $tmp $to -Force } catch {
         if ($old) { Move-Item $old $to -Force }
-        exit 12
+        Fail 12 "Copie impossible vers $to : $($_.Exception.Message)"
     }
     return $old
 }
 
 if ($Uninstall) {
-    if (Test-Path $dll) {
-        Start-Process $regsvr -ArgumentList '/s', '/u', "`"$dll`"" -Wait | Out-Null
-        Retire $dll | Out-Null
-    }
+    if (Test-Path $clsid) { Remove-Item $clsid -Recurse -Force }
+    Retire $dll | Out-Null
     Retire $obsDll | Out-Null
     foreach ($d in @($dest, $obsBin)) {
         Sweep $d
@@ -71,11 +79,16 @@ if ($Uninstall) {
 New-Item -ItemType Directory -Force $dest | Out-Null
 Sweep $dest
 $old = Place (Join-Path $Source 'hyphn_vcam.dll') $dll $VcamSha256
-$p = Start-Process $regsvr -ArgumentList '/s', "`"$dll`"" -Wait -PassThru
-if ($p.ExitCode -ne 0) {
+# Registered by hand (what DllRegisterServer does), without regsvr32.
+try {
+    New-Item -Path "$clsid\InprocServer32" -Force | Out-Null
+    Set-Item -Path $clsid -Value 'Hyphn'
+    Set-Item -Path "$clsid\InprocServer32" -Value $dll
+    New-ItemProperty -Path "$clsid\InprocServer32" -Name 'ThreadingModel' -Value 'Both' -PropertyType String -Force | Out-Null
+} catch {
     Remove-Item $dll -Force
     if ($old) { Move-Item $old $dll -Force }
-    exit 10
+    Fail 10 "Enregistrement impossible : $($_.Exception.Message)"
 }
 
 # Diagnostic log (vcam.log): only the camera service (Local Service) writes
