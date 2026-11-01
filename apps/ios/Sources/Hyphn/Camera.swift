@@ -314,6 +314,12 @@ final class Camera: NSObject, ObservableObject {
             dev.activeVideoMinFrameDuration = CMTime(value: 1, timescale: CMTimeScale(r))
             dev.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: CMTimeScale(r))
             self.fps = UInt32(r)
+            // A multi-lens camera picks another lens by itself (macro when
+            // something is close, a brighter one in low light): the picture
+            // jumps. A webcam must not: lenses change only on 0,5× / 1× / 2× / 5×.
+            if dev.isVirtualDevice {
+                dev.setPrimaryConstituentDeviceSwitchingBehavior(.restricted, restrictedSwitchingBehaviorConditions: [])
+            }
             dev.unlockForConfiguration()
         }
         session.commitConfiguration()
