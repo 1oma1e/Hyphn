@@ -128,8 +128,7 @@ enum Msg {
     case dropAck(ok: Bool, reason: String, duplicate: Bool)
     case dropCancel
     case dropDone(failed: UInt32, already: UInt32)
-    // ADR-0029: « Commencer » on the PC, and the anti-duplicate by identifier.
-    case dropStart
+    // ADR-0029: the anti-duplicate by identifier.
     case dropHave([String])
     case dropMissing([String])
     case other
@@ -418,8 +417,6 @@ extension Msg {
                 result = .dropAck(ok: ok, reason: reason, duplicate: duplicate)
             case 24:
                 result = .dropCancel
-            case 26:
-                result = .dropStart
             case 28:
                 var ids: [String] = []
                 while let (f, w) = try m.field() { if f == 1 && w == 2 { ids.append(try m.string()) } else { try m.skip(w) } }

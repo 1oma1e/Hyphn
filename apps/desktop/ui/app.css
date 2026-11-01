@@ -447,15 +447,10 @@ button { font-family: inherit; }
 .dstage { animation: dstep .55s cubic-bezier(.2,.9,.3,1) both; }
 @keyframes dstep { from { opacity: 0; transform: translateX(28px); filter: blur(6px); } }
 .dtitle { font-size: 22px; font-weight: 600; letter-spacing: -.025em; }
-.dtitle.big { font-size: 30px; letter-spacing: -.035em; margin: 8px 0 0; }
+.dtitle.dlg { font-size: 30px; letter-spacing: -.035em; margin: 8px 0 0; }
 .dq { margin-bottom: 22px; }
-.dhome { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 20px; padding: 6px 0; }
-.dhome .ic, .dpath .ic, .choice .ic { width: 60px; height: 60px; border-radius: 19px; display: grid; place-items: center; background: color-mix(in srgb, var(--cy) 12%, transparent); color: var(--cy); }
-.dhome .ic svg, .dpath .ic svg, .choice .ic svg { width: 28px; height: 28px; }
-.dgo { min-height: 56px; padding: 0 26px; font-size: 16px; box-shadow: 0 10px 40px color-mix(in srgb, var(--cy) 30%, transparent); }
-.dgo svg { transition: transform .25s; }
-.dgo:hover svg { transform: translateX(4px); }
-@media (max-width: 760px) { .dhome { grid-template-columns: 1fr; } }
+.dpath .ic, .choice .ic, .dhow .ic { width: 60px; height: 60px; border-radius: 19px; display: grid; place-items: center; background: color-mix(in srgb, var(--cy) 12%, transparent); color: var(--cy); }
+.dpath .ic svg, .choice .ic svg, .dhow .ic svg { width: 28px; height: 28px; }
 .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .choices.three { grid-template-columns: repeat(3, 1fr); }
 @media (max-width: 760px) { .choices, .choices.three { grid-template-columns: 1fr; } }
@@ -466,26 +461,20 @@ button { font-family: inherit; }
 .choice b { display: block; font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
 .choice small { display: block; margin-top: 4px; color: var(--tx2); font-size: 13px; }
 .choice em { position: absolute; top: 12px; right: 12px; font-style: normal; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--cy); padding: 3px 8px; border-radius: 99px; background: color-mix(in srgb, var(--cy) 12%, transparent); }
-.choice.rec { border-color: color-mix(in srgb, var(--cy) 40%, transparent); }
+.choice.dtip { border-color: color-mix(in srgb, var(--cy) 40%, transparent); }
 .dpath { display: flex; align-items: center; gap: 18px; padding: 18px; border-radius: 20px; background: var(--p2); border: 1px solid var(--ln2); }
 .dpath .mono { font-size: 17px; word-break: break-all; }
-.dphone { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 36px; padding: 10px 0; }
 .pfig { position: relative; width: 150px; height: 150px; display: grid; place-items: center; }
 .pfig .pbody { position: relative; z-index: 1; width: 74px; height: 120px; border-radius: 20px; display: grid; place-items: center; border: 2px solid var(--tx2); background: var(--p1); color: var(--tx3); transition: all .5s; }
 .pfig .pbody svg { width: 30px; height: 30px; }
 .pfig i { position: absolute; inset: 15px; border-radius: 50%; border: 1.5px solid var(--cy); opacity: 0; }
-.dphone.on .pbody { border-color: var(--cy); color: var(--cy); box-shadow: 0 0 34px color-mix(in srgb, var(--cy) 45%, transparent); animation: pnudge 2.4s ease-in-out infinite; }
-.dphone.on .pfig i { animation: pring 2.4s cubic-bezier(.2,.6,.3,1) infinite; }
-.dphone.on .pfig i:nth-child(2) { animation-delay: .8s; }
-.dphone.on .pfig i:nth-child(3) { animation-delay: 1.6s; }
 @keyframes pring { 0% { transform: scale(.6); opacity: .9; } 100% { transform: scale(1.5); opacity: 0; } }
 @keyframes pnudge { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-5px) rotate(-3deg); } }
-@media (max-width: 760px) { .dphone { grid-template-columns: 1fr; } }
-.drop-track span { position: relative; overflow: hidden; }
+@media (max-width: 760px) { .drop-track span { position: relative; overflow: hidden; }
 .drop-track span::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent); transform: translateX(-100%); animation: dshine 1.8s linear infinite; }
 @keyframes dshine { to { transform: translateX(100%); } }
 .dresult { display: flex; align-items: center; gap: 18px; }
 .dpop { width: 60px; height: 60px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--li); color: var(--on-li); box-shadow: 0 0 30px color-mix(in srgb, var(--li) 55%, transparent); animation: dpop .6s cubic-bezier(.3,1.6,.4,1) both; }
 .dpop svg { width: 28px; height: 28px; stroke-width: 2.6; }
 @keyframes dpop { from { transform: scale(.3); opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .dstage, .choice, .dpop, .dphone.on .pbody, .dphone.on .pfig i, .drop-track span::after { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .dstage, .choice, .dpop, 

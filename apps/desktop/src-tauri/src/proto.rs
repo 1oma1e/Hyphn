@@ -9,7 +9,7 @@ pub const MAX_MESSAGE: usize = 16 * 1024 * 1024;
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Envelope {
-    #[prost(oneof = "envelope::Msg", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28")]
+    #[prost(oneof = "envelope::Msg", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28")]
     pub msg: Option<envelope::Msg>,
 }
 
@@ -66,8 +66,6 @@ pub mod envelope {
         DropCancel(super::DropCancel),
         #[prost(message, tag = "25")]
         DropDone(super::DropDone),
-        #[prost(message, tag = "26")]
-        DropStart(super::DropStart),
         #[prost(message, tag = "27")]
         DropHave(super::DropHave),
         #[prost(message, tag = "28")]
@@ -374,9 +372,6 @@ pub struct DropDone {
     #[prost(uint32, tag = "2")]
     pub already: u32,
 }
-
-#[derive(Clone, PartialEq, prost::Message)]
-pub struct DropStart {}
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct DropHave {

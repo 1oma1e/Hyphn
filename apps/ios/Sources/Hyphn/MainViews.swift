@@ -16,8 +16,6 @@ struct RootView: View {
     @State private var scanning = false
     @State private var tab: AppTab = .home
     @State private var arrived = false
-    /// « Commencer » on the PC opened Drop (ADR-0029).
-    @State private var dropFromPC = false
 
     var body: some View {
         ZStack {
@@ -35,7 +33,7 @@ struct RootView: View {
             } else if link.pc == nil {
                 WelcomeView(scanning: $scanning).transition(.opacity)
             } else {
-                TabShell(tab: $tab, arrived: $arrived, scanning: $scanning, dropFromPC: $dropFromPC)
+                TabShell(tab: $tab, arrived: $arrived, scanning: $scanning)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
@@ -43,12 +41,6 @@ struct RootView: View {
         .animation(.spring(duration: 0.5), value: scanning)
         .onChange(of: link.wantsCam) { _, want in
             if want { tab = .cam; link.wantsCam = false }
-        }
-        .onChange(of: link.wantsDrop) { _, want in
-            guard want else { return }
-            link.wantsDrop = false
-            tab = .drop
-            dropFromPC = true
         }
         .onChange(of: link.pc) { _, pc in
             if pc == nil { tab = .home; camera.close() }
@@ -63,7 +55,6 @@ struct TabShell: View {
     @Binding var tab: AppTab
     @Binding var arrived: Bool
     @Binding var scanning: Bool
-    @Binding var dropFromPC: Bool
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -71,7 +62,7 @@ struct TabShell: View {
                 switch tab {
                 case .home: HomeView(tab: $tab, arrived: $arrived)
                 case .cam: CamView(tab: $tab)
-                case .drop: DropView(fromPC: $dropFromPC)
+                case .drop: DropView()
                 case .settings: SettingsView(scanning: $scanning)
                 }
             }
@@ -549,8 +540,6 @@ struct QualitySheet: View {
 struct DropView: View {
     @EnvironmentObject var link: PCLink
     @EnvironmentObject var dropper: Dropper
-    /// The PC pressed « Commencer » (DropStart): a word at the top.
-    @Binding var fromPC: Bool
     @State private var picked: [PhotosPickerItem] = []
     @State private var showPicker = false
     @State private var showAlbums = false
@@ -569,16 +558,6 @@ struct DropView: View {
                     Text("Vers \(link.pcName)").font(.geist(15)).foregroundStyle(Ink.tx2)
                 }
                 .padding(.top, 8)
-                if fromPC, dropper.phase == .idle {
-                    HStack(spacing: 10) {
-                        Image(systemName: "desktopcomputer").foregroundStyle(Ink.cy)
-                        Text("Ton PC attend : choisis ce que tu envoies.").font(.geist(14, .medium))
-                    }
-                    .padding(.horizontal, 14).frame(height: 44)
-                    .background(Ink.cy.opacity(0.1), in: Capsule())
-                    .overlay(Capsule().stroke(Ink.cy.opacity(0.4)))
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                }
                 content
                     .id(stage)
                     .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
@@ -589,7 +568,6 @@ struct DropView: View {
         }
         .scrollIndicators(.hidden)
         .animation(.spring(duration: 0.5), value: stage)
-        .animation(.spring(duration: 0.4), value: fromPC)
         .photosPicker(isPresented: $showPicker, selection: $picked, matching: .any(of: [.images, .videos]),
                       preferredItemEncoding: .current, photoLibrary: .shared())
         .fileImporter(isPresented: $showFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { r in
@@ -618,6 +596,7 @@ struct DropView: View {
         case .idle: return "choose"
         case .preparing: return "preparing"
         case .review: return "review"
+        case .waitingPC: return "waitingPC"
         case .sending: return "sending"
         case .done: return "done"
         case .failed: return "failed"
@@ -625,7 +604,6 @@ struct DropView: View {
     }
 
     private func start(_ s: Dropper.Source) {
-        fromPC = false
         dropper.send(s)
     }
 
@@ -676,13 +654,24 @@ struct DropView: View {
             case let .review(items, bytes):
                 card {
                     VStack(alignment: .leading, spacing: 12) {
-                        icon("sparkles", Ink.cy)
-                        Text("\(items) nouvel\(items > 1 ? "s" : "") élément\(items > 1 ? "s" : "")").font(.geist(26, .semibold)).tracking(-0.8)
-                        Text("\(Self.size(bytes)) jamais envoyés à \(link.pcName)\(dropper.already > 0 ? " · \(dropper.already) déjà dessus" : "").")
+                        icon("arrow.up.circle", Ink.cy)
+                        Text("Envoyer \(items) élément\(items > 1 ? "s" : "") ?").font(.geist(26, .semibold)).tracking(-0.8)
+                        Text("\(Self.size(bytes)) vers \(link.pcName)\(dropper.already > 0 ? " · \(dropper.already) déjà dessus, pas renvoyé\(dropper.already > 1 ? "s" : "")" : "").")
                             .font(.geist(14)).foregroundStyle(Ink.tx2)
+                        Text("Ton PC te demandera ensuite de confirmer.").font(.geist(13)).foregroundStyle(Ink.tx3)
                         Button("Envoyer") { dropper.confirmReview(true) }
                             .buttonStyle(PrimaryButtonStyle(fill: Ink.cy, text: .black)).padding(.top, 4)
                         Button("Annuler") { dropper.cancel() }.buttonStyle(GhostButtonStyle())
+                    }
+                }
+            case .waitingPC:
+                card {
+                    VStack(alignment: .leading, spacing: 14) {
+                        WaitingPC()
+                        Text("Confirme sur ton PC").font(.geist(24, .semibold)).tracking(-0.7)
+                        Text("\(link.pcName) affiche une fenêtre pour accepter l’envoi. La première fois, il te demande aussi où ranger les photos.")
+                            .font(.geist(14)).foregroundStyle(Ink.tx2)
+                        Button("Annuler") { dropper.cancel() }.buttonStyle(GhostButtonStyle()).padding(.top, 4)
                     }
                 }
             case .sending: card { sending }
@@ -815,6 +804,31 @@ struct DropView: View {
         guard d.rate > 0 else { return "calcul…" }
         let s = Double(max(0, d.bytes - d.bytesDone)) / d.rate
         return s < 60 ? "reste moins d’une minute" : "reste ≈ \(Int((s / 60).rounded(.up))) min"
+    }
+}
+
+/// The PC glowing, with waves around it, while it waits for the answer there.
+struct WaitingPC: View {
+    @State private var on = false
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<3, id: \.self) { i in
+                Circle().stroke(Ink.cy.opacity(0.5), lineWidth: 1.5)
+                    .frame(width: 60, height: 60)
+                    .scaleEffect(on ? 1.9 : 0.8)
+                    .opacity(on ? 0 : 0.9)
+                    .animation(.easeOut(duration: 2.4).repeatForever(autoreverses: false).delay(Double(i) * 0.8), value: on)
+            }
+            Image(systemName: "desktopcomputer")
+                .font(.system(size: 26)).foregroundStyle(Ink.cy)
+                .frame(width: 60, height: 60)
+                .background(Ink.cy.opacity(0.12), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
+                .shadow(color: Ink.cy.opacity(0.5), radius: 14)
+        }
+        .frame(width: 110, height: 90, alignment: .leading)
+        .onAppear { on = true }
+        .accessibilityHidden(true)
     }
 }
 

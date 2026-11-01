@@ -1019,63 +1019,51 @@ const Cam = {
 // ===================================================================
 // Drop
 // ===================================================================
-// Spec `Drop - Photos vers le PC` (ADR-0029): « Commencer le transfert », the
-// first-time steps (folder, sorting), « Regarde ton iPhone », then the send
-// in progress (E10) and its result. Rebuilt only when the step or the state
-// changes; the numbers are filled in place every second.
+// Spec `Drop - Photos vers le PC` (ADR-0030): Drop starts on the iPhone. At
+// rest the page explains how; when the iPhone asks, a confirmation opens
+// (the first time: folder, then sorting, then the answer); then the send in
+// progress (E10) and its result. Rebuilt only when the state changes; the
+// numbers are filled in place every second.
 const SORTS = [
   ['year_month', 'Année, puis mois', '2026 › 10 › IMG_1234.HEIC', true],
   ['year', 'Année', '2026 › IMG_1234.HEIC', false],
   ['flat', 'Tout ensemble', 'IMG_1234.HEIC', false],
 ];
+const SORT_NAME = { year_month: 'par année puis par mois', year: 'par année', flat: 'tous ensemble' };
 const Drop = {
   key: () => '',
   mount(root) {
     this.root = root;
     this.shape = '';
-    this.step = 'home';
+    this.ask = '';
+    this.askShape = '';
     this.folder = null;
-    this.asked = false;
     this.seen = '';
     if (!S) root.innerHTML = '';
   },
-  // The result of a send stays until « Nouveau transfert ».
+  // The result of a send stays until « OK ».
   resultKey: (d) => [d.state, d.files_done, d.bytes_done, d.message].join('|'),
   update() {
     const d = S.drop || {};
-    if (d.state === 'sending') this.step = 'home';
-    // Waiting for the iPhone: ask again as soon as it is there.
-    if (this.step === 'phone' && S.connected && !this.asked) this.ask();
     const showResult = (d.state === 'done' || d.state === 'failed') && this.seen !== this.resultKey(d);
-    const view = d.state === 'sending' ? 'sending' : this.step !== 'home' ? this.step : showResult ? 'result' : 'home';
-    const shape = [view, S.connected, !!S.device, this.folder && this.folder.path].join('|');
+    const view = d.state === 'sending' ? 'sending' : showResult ? 'result' : 'rest';
+    const shape = [view, d.state === 'preparing' || d.state === 'asking', S.connected, !!S.device].join('|');
     if (shape !== this.shape) {
       this.shape = shape;
-      const setup = ['folder', 'confirm', 'sort'].includes(view);
       this.root.innerHTML = `<main class="wrap enter">
-        <header class="row" style="justify-content:space-between;align-items:flex-end">
-          <div><h1 class="h1">Drop</h1><p class="sub">Les photos, vidéos et fichiers de l’iPhone, en qualité d’origine, vérifiés et sans doublon.</p></div>
-        </header>
-        ${this.stepper(view)}
-        <section class="card drop-now" data-view="${view}"><div class="dstage">${this.body(view, d)}</div></section>
-        ${setup ? '' : `<section class="card">
+        <header><h1 class="h1">Drop</h1><p class="sub">Les photos, vidéos et fichiers de l’iPhone, en qualité d’origine, vérifiés et sans doublon.</p></header>
+        <section class="card drop-now"><div class="dstage">${this.body(view, d)}</div></section>
+        <section class="card">
           <div class="row" style="justify-content:space-between">
-            <div><span class="lbl">Rangées dans</span><div class="mono" style="margin-top:8px;font-size:15px">${esc(settings.photos_dir)}</div></div>
-            <div class="row"><button class="btn sm" type="button" data-act="open">${I.folder}Ouvrir</button><a class="btn sm" href="#settings">Changer</a></div>
+            <div><span class="lbl">Rangées dans</span><div class="mono" style="margin-top:8px;font-size:15px">${settings.drop_setup_done ? esc(settings.photos_dir) : 'Choisi au premier envoi'}</div></div>
+            <div class="row">${settings.drop_setup_done ? `<button class="btn sm" type="button" data-act="open">${I.folder}Ouvrir</button>` : ''}<a class="btn sm" href="#settings">Changer</a></div>
           </div>
           <div class="months" id="d-months"></div>
-        </section>`}
+        </section>
       </main>`;
     }
+    this.confirmBox(d);
     this.fill(d);
-  },
-  // 1 Dossier · 2 Rangement · 3 iPhone · 4 Transfert (the first two only once).
-  stepper(view) {
-    if (view === 'home' || view === 'result') return '';
-    const names = settings.drop_setup_done ? ['iPhone', 'Transfert'] : ['Dossier', 'Rangement', 'iPhone', 'Transfert'];
-    const at = { folder: 'Dossier', confirm: 'Dossier', sort: 'Rangement', phone: 'iPhone', sending: 'Transfert' }[view];
-    const i = names.indexOf(at);
-    return `<ol class="dsteps">${names.map((n, k) => `<li class="${k < i ? 'done' : k === i ? 'on' : ''}"><b>${k < i ? I.check : k + 1}</b>${n}</li>`).join('')}</ol>`;
   },
   body(view, d) {
     if (view === 'sending') {
@@ -1094,46 +1082,79 @@ const Drop = {
         ? `<div class="dresult"><span class="dpop">${I.check}</span><div><div class="dtitle">${d.items_done ? `${kept} · vérifiés` : 'Tout est déjà sur le PC'}</div><div class="sub">${extra || 'Rangés par date de prise.'}</div></div></div>`
         : `<div class="ban bad">${I.alert}<span>${esc(d.message)}${d.items_done ? ` <strong>Déjà rangés : ${kept}.</strong>` : ''}</span></div>`;
       return `${head}<div class="row" style="margin-top:20px">
-        <button class="btn cy" type="button" data-act="start">${I.swap}Nouveau transfert</button>
-        ${d.files_done ? `<button class="btn" type="button" data-act="openLast">${I.folder}Ouvrir le dossier</button>` : ''}</div>`;
+        ${d.files_done ? `<button class="btn cy" type="button" data-act="openLast">${I.folder}Ouvrir le dossier</button>` : ''}
+        <button class="btn" type="button" data-act="seen">OK</button></div>`;
     }
-    if (view === 'folder') {
-      return `<div class="dq"><span class="lbl">Première fois</span><h2 class="dtitle big">Où ranger tes photos sur ce PC ?</h2></div>
+    // At rest: how to start, on the iPhone (ADR-0030).
+    const wait = d.state === 'preparing' || d.state === 'asking';
+    const status = !S.device ? 'Relie d’abord ton iPhone.'
+      : wait ? `<span class="dlive"></span>${esc(devName())} prépare un envoi…`
+        : S.connected ? `<span class="dlive"></span>${esc(devName())} est prêt.` : 'iPhone hors ligne : ouvre Hyphn dessus.';
+    const steps = [
+      [I.phone, 'Ouvre Hyphn sur l’iPhone', 'Puis l’onglet Drop, en bas.'],
+      [I.photo, 'Choisis ce que tu envoies', 'Des photos, un album, des fichiers ou tout le nouveau.'],
+      [I.check, 'Confirme sur l’iPhone, puis ici', 'La première fois, ce PC te demande où ranger.'],
+    ];
+    return `<div class="drest">
+        <div class="dq"><span class="lbl">Pour commencer</span><h2 class="dtitle dlg">Tout part de ton iPhone</h2><p class="sub dstatus">${status}</p></div>
+        <ol class="dhow">${steps.map(([ic, t, s], i) => `<li style="animation-delay:${(i * 0.08).toFixed(2)}s"><span class="ic">${ic}</span><b class="n">${i + 1}</b><div><div class="t">${t}</div><div class="sub">${s}</div></div></li>`).join('')}</ol>
+      </div>`;
+  },
+  // The confirmation, over the page, while the iPhone waits (ADR-0030).
+  confirmBox(d) {
+    if (d.state !== 'asking') {
+      if (this.ask) {
+        this.ask = '';
+        this.askShape = '';
+        layer.innerHTML = '';
+      }
+      return;
+    }
+    if (!this.ask) {
+      this.ask = settings.drop_setup_done ? 'accept' : 'folder';
+      this.folder = null;
+    }
+    const shape = [this.ask, this.folder && this.folder.path].join('|');
+    if (shape === this.askShape) return;
+    this.askShape = shape;
+    const names = settings.drop_setup_done && this.ask === 'accept' ? [] : ['Dossier', 'Rangement', 'Accord'];
+    const at = { folder: 0, confirm: 0, sort: 1, accept: 2 }[this.ask];
+    const dots = names.length ? `<ol class="dsteps sm">${names.map((n, k) => `<li class="${k < at ? 'done' : k === at ? 'on' : ''}"><b>${k < at ? I.check : k + 1}</b>${n}</li>`).join('')}</ol>` : '';
+    layer.innerHTML = `<div class="scrim" style="cursor:default"></div>
+      <div class="modal dask" role="dialog" aria-label="Confirmer l’envoi">${dots}<div class="dstage">${this.askBody(d)}</div></div>`;
+  },
+  askBody(d) {
+    const who = esc(devName());
+    if (this.ask === 'folder') {
+      return `<div class="dq"><span class="lbl">Première fois · ${who} veut envoyer</span><h2 class="dtitle dlg">Où ranger tes photos sur ce PC ?</h2></div>
         <div class="choices">
-          <button class="choice rec" type="button" data-act="suggest"><span class="ic">${I.bolt}</span><span><b>Laisser Hyphn choisir</b><small>Un dossier propre, sur le disque qui a le plus de place.</small></span><em>Conseillé</em></button>
+          <button class="choice dtip" type="button" data-act="suggest"><span class="ic">${I.bolt}</span><span><b>Laisser Hyphn choisir</b><small>Un dossier propre, sur le disque qui a le plus de place.</small></span><em>Conseillé</em></button>
           <button class="choice" type="button" data-act="pickDir"><span class="ic">${I.folder}</span><span><b>Choisir un dossier</b><small>Tu le choisis dans Windows.</small></span></button>
         </div>
-        <div class="row" style="margin-top:18px"><button class="btn sm" type="button" data-act="back">Retour</button></div>`;
+        <div class="row" style="margin-top:18px"><button class="btn sm bad" type="button" data-act="refuse">Refuser l’envoi</button></div>`;
     }
-    if (view === 'confirm') {
+    if (this.ask === 'confirm') {
       const f = this.folder || {};
-      return `<div class="dq"><span class="lbl">Dossier</span><h2 class="dtitle big">C’est bon pour toi ?</h2></div>
+      return `<div class="dq"><span class="lbl">Dossier</span><h2 class="dtitle dlg">C’est bon pour toi ?</h2></div>
         <div class="dpath"><span class="ic">${I.folder}</span><div><div class="mono">${esc(f.path)}</div><div class="sub">${f.free != null ? `${bytes(f.free)} libres sur ce disque` : 'Place libre inconnue'}</div></div></div>
         <div class="row" style="margin-top:22px">
           <button class="btn cy" type="button" data-act="okDir">${I.check}C’est bon</button>
           <button class="btn" type="button" data-act="pickDir">Choisir un autre</button>
         </div>`;
     }
-    if (view === 'sort') {
-      return `<div class="dq"><span class="lbl">Première fois</span><h2 class="dtitle big">Comment les ranger ?</h2></div>
-        <div class="choices three">${SORTS.map(([k, n, ex, rec]) => `<button class="choice${rec ? ' rec' : ''}" type="button" data-act="sort" data-v="${k}"><span><b>${n}</b><small class="mono">${ex}</small></span>${rec ? '<em>Conseillé</em>' : ''}</button>`).join('')}</div>
-        <p class="sub" style="margin-top:16px">Par la date où la photo a été prise. Tu pourras changer ça dans les Réglages.</p>`;
+    if (this.ask === 'sort') {
+      return `<div class="dq"><span class="lbl">Rangement</span><h2 class="dtitle dlg">Comment les ranger ?</h2></div>
+        <div class="choices three">${SORTS.map(([k, n, ex, tip]) => `<button class="choice${tip ? ' dtip' : ''}" type="button" data-act="sort" data-v="${k}"><span><b>${n}</b><small class="mono">${ex}</small></span>${tip ? '<em>Conseillé</em>' : ''}</button>`).join('')}</div>
+        <p class="sub" style="margin-top:16px">Selon la date où la photo a été prise. Tu pourras changer ça dans les Réglages.</p>`;
     }
-    if (view === 'phone') {
-      const on = S.connected;
-      return `<div class="dphone${on ? ' on' : ''}">
-          <div class="pfig"><i></i><i></i><i></i><span class="pbody">${I.phone}</span></div>
-          <div><h2 class="dtitle big">${on ? 'Regarde ton iPhone' : 'Ouvre Hyphn sur ton iPhone'}</h2>
-            <p class="sub" style="font-size:15px;line-height:1.55;max-width:460px">${on
-              ? 'Choisis ce que tu envoies : des photos, un album, des fichiers ou tout le nouveau. Le transfert s’affichera ici.'
-              : 'Dès qu’il est ouvert, il te propose quoi envoyer.'}</p>
-            <div class="row" style="margin-top:14px"><button class="btn sm" type="button" data-act="back">Retour</button></div></div>
-        </div>`;
-    }
-    const hint = !S.device ? 'Relie d’abord ton iPhone.' : S.connected ? 'Photos, albums, fichiers ou tout le nouveau. Rien n’est envoyé deux fois.' : 'Ouvre Hyphn sur l’iPhone pour commencer.';
-    return `<div class="dhome"><span class="ic">${I.swap}</span>
-        <div><div class="dtitle">Transfère tes photos sur ce PC</div><div class="sub">${hint}</div></div>
-        <button class="btn cy dgo" type="button" data-act="start" ${S.device ? '' : 'disabled'}>Commencer le transfert${I.arrow}</button>
+    const more = [d.already ? `${d.already} déjà sur le PC, pas renvoyé${d.already > 1 ? 's' : ''}` : '', `vers ${esc(settings.photos_dir)}, ${SORT_NAME[settings.sort] || ''}`].filter(Boolean);
+    return `<div class="dask-head"><span class="pfig sm"><i></i><i></i><span class="pbody">${I.phone}</span></span>
+        <div><span class="lbl">${who} veut envoyer</span>
+          <div class="dtitle dlg">${d.items} élément${d.items > 1 ? 's' : ''} · ${bytes(d.bytes)}</div></div></div>
+      <div class="sub" style="margin-top:14px;line-height:1.6">${more.join('<br>')}</div>
+      <div class="row" style="margin-top:22px">
+        <button class="btn cy" type="button" data-act="accept">${I.check}Accepter</button>
+        <button class="btn" type="button" data-act="refuse">Refuser</button>
       </div>`;
   },
   fill(d) {
@@ -1149,7 +1170,7 @@ const Drop = {
       set('#d-already', d.already ? `${d.already} déjà sur le PC` : '');
       const left = d.rate ? Math.max(0, d.bytes - d.bytes_done) / d.rate : 0;
       set('#d-left', !d.rate ? 'calcul…' : left < 60 ? 'reste moins d’une minute' : `reste ≈ ${Math.ceil(left / 60)} min`);
-      set('#d-cur', d.current ? `En cours : ${d.current}` : 'L’iPhone prépare l’envoi…');
+      set('#d-cur', d.current ? `En cours : ${d.current}` : 'Le transfert démarre…');
     }
     const months = S.drop_months || [];
     const key = JSON.stringify(months);
@@ -1161,41 +1182,39 @@ const Drop = {
         : '<div class="sub">Rien encore.</div>';
     }
   },
-  go(step) {
-    this.step = step;
-    this.update();
-  },
-  // « Regarde ton iPhone »: tells the iPhone to show its choices (E2).
-  async ask() {
-    this.asked = true;
-    this.asked = await invoke('drop_start');
+  askStep(step) {
+    this.ask = step;
+    this.confirmBox(S.drop || {});
   },
   acts: {
-    start: () => {
-      const d = S.drop || {};
-      Drop.seen = Drop.resultKey(d);
-      Drop.asked = false;
-      Drop.go(settings.drop_setup_done ? 'phone' : 'folder');
-      if (settings.drop_setup_done) Drop.ask();
-    },
-    back: () => Drop.go('home'),
     suggest: async () => {
       Drop.folder = await invoke('drop_suggest_dir');
-      Drop.go('confirm');
+      Drop.askStep('confirm');
     },
     pickDir: async () => {
       const path = await invoke('pick_photos_dir');
       if (!path) return;
       Drop.folder = { path, free: await invoke('drop_dir_free', { path }) };
-      Drop.go('confirm');
+      Drop.askStep('confirm');
     },
-    okDir: () => Drop.go('sort'),
+    okDir: () => Drop.askStep('sort'),
     sort: async (el) => {
       Object.assign(settings, { photos_dir: Drop.folder.path, sort: el.dataset.v, drop_setup_done: true });
       await saveSettings();
-      Drop.asked = false;
-      Drop.go('phone');
-      Drop.ask();
+      Drop.shape = '';
+      Drop.askStep('accept');
+    },
+    accept: () => {
+      layer.innerHTML = '';
+      invoke('drop_answer', { yes: true });
+    },
+    refuse: () => {
+      layer.innerHTML = '';
+      invoke('drop_answer', { yes: false });
+    },
+    seen: () => {
+      Drop.seen = Drop.resultKey(S.drop || {});
+      Drop.update();
     },
     cancel: () => invoke('drop_cancel'),
     open: () => invoke('open_photos_dir').catch((e) => toast(String(e), 'info')),
@@ -1367,8 +1386,8 @@ function onSnapshot(snap) {
   listen('vcam_installed', () => toast('Webcam Windows prête'));
   // « Afficher » touched on the iPhone: the PC shows the picture at once.
   listen('cam_phone_live', () => { if (route() !== 'cam') go('cam'); });
-  // A Drop send starts on the iPhone: its progress shows here.
-  listen('drop_started', () => { if (route() !== 'drop') go('drop'); });
+  // The iPhone asks to send (ADR-0030): its confirmation shows here.
+  listen('drop_ask', () => { if (route() !== 'drop') go('drop'); });
   // Evan picked a quality on the iPhone: the PC keeps it (spec `Cam - Flux v1`, E4).
   listen('cam_quality', (e) => {
     const c = Object.assign({}, CAM_DEFAULTS, settings.cam || {});

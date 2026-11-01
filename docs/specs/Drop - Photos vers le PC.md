@@ -7,7 +7,7 @@ statut: validee
 # Drop — Photos vers le PC (v1)
 
 ## But
-Envoyer des photos, vidéos, albums ou fichiers de l'iPhone vers le PC d'Evan, en qualité d'origine, vérifiés un par un, sans doublon, rangés par année et par mois, avec un parcours guidé ([[ADR-0029 Drop guide avec anti-doublon des la v1]]).
+Envoyer des photos, vidéos, albums ou fichiers de l'iPhone vers le PC d'Evan, en qualité d'origine, vérifiés un par un, sans doublon, rangés par année et par mois, avec un parcours guidé qui commence sur l'iPhone ([[ADR-0029 Drop guide avec anti-doublon des la v1]], [[ADR-0030 Drop commence sur l'iPhone et le PC confirme]]).
 
 ## Hors périmètre (v1)
 - Envoi écran verrouillé ou app fermée, reprise après coupure ([[ADR-0005 Drop par HTTPS et blocs]]).
@@ -17,12 +17,9 @@ Envoyer des photos, vidéos, albums ou fichiers de l'iPhone vers le PC d'Evan, e
 [[Parcours - Transfert]], écrans [[iPhone - Drop]] et [[PC - Drop]], dans le style actuel de l'app, étapes animées (choix d'Evan, 2026-11-01 : code direct).
 
 ## Exigences
-- **E1 — Commencer (PC).** Page Drop : un grand bouton « Commencer le transfert ». La **première fois** seulement, deux étapes avant :
-  1. « Où ranger tes photos ? » : « Choisir un dossier » (boîte de dialogue Windows) ou « Laisser Hyphn choisir » : le disque fixe avec le plus de place libre, `X:\Hyphn\Photos` si ce n'est pas le disque de Windows, sinon `Images\Hyphn`. Le PC montre le chemin et la place libre : « C'est bon » ou « Choisir un autre ».
-  2. « Comment les ranger ? » : Année puis mois (recommandé), Année, Tout ensemble.
-  Ensuite (et directement les fois suivantes) : « Regarde ton iPhone ». Dossier et rangement se changent dans [[PC - Reglages]].
-- **E2 — PC → iPhone.** « Commencer » envoie `DropStart` sur la liaison. Si Hyphn est ouvert sur l'iPhone, il passe sur l'onglet Drop, écran « Que veux-tu envoyer ? ». Sinon le PC dit « Ouvre Hyphn sur ton iPhone ». L'iPhone peut aussi commencer seul depuis son onglet Drop.
-- **E3 — Que veux-tu envoyer ? (iPhone).** Quatre choix : **Photos et vidéos** (sélecteur d'Apple), **Un album** (liste des albums avec leur nombre d'éléments), **Des fichiers** (app Fichiers, plusieurs), **Tout le nouveau** (tout ce que ce PC n'a jamais reçu ; l'iPhone montre d'abord combien et quelle taille, puis « Envoyer »). La première fois, avant la demande d'iOS, une étape explique pourquoi Hyphn a besoin des photos (`NSPhotoLibraryUsageDescription`).
+- **E1 — On commence sur l'iPhone** ([[ADR-0030 Drop commence sur l'iPhone et le PC confirme]]). Onglet Drop : « Que veux-tu envoyer ? » avec quatre choix : **Photos et vidéos** (sélecteur d'Apple), **Un album** (liste des albums avec leur nombre d'éléments), **Des fichiers** (app Fichiers, plusieurs), **Tout le nouveau** (tout ce que ce PC n'a jamais reçu). La première fois, avant la demande d'iOS, une étape explique pourquoi Hyphn a besoin des photos (`NSPhotoLibraryUsageDescription`).
+- **E2 — Confirmer sur l'iPhone.** Après le choix (et le tri anti-doublon E6), l'iPhone montre : « Envoyer 48 éléments · 1,2 Go vers PC-EVAN ? » (et « 12 déjà dessus »), avec « Envoyer » et « Annuler ». Puis « Confirme sur ton PC » jusqu'à la réponse du PC. Si tout est déjà sur le PC : « Tout est déjà sur le PC », rien n'est demandé au PC.
+- **E3 — Confirmer sur le PC.** À l'arrivée du plan, la fenêtre Hyphn s'ouvre sur Drop avec une fenêtre de confirmation. La **première fois**, étape par étape : (1) « Où ranger tes photos ? » : « Laisser Hyphn choisir » (le disque fixe avec le plus de place libre, `X:\Hyphn\Photos` si ce n'est pas le disque de Windows, sinon `Images\Hyphn`) ou « Choisir un dossier », puis « C'est bon ? » avec la place libre ; (2) « Comment les ranger ? » : Année puis mois (conseillé), Année, Tout ensemble ; (3) l'accord. Les fois suivantes, seulement l'accord : « Accepter » ou « Refuser ». Dossier et rangement se changent dans [[PC - Reglages]]. Sans réponse en 5 minutes, l'envoi s'arrête. Au repos, la page Drop explique comment commencer sur l'iPhone, en trois étapes.
 - **E4 — Originaux.** Les fichiers d'origine tels quels (HEIC, JPEG, DNG, MOV…), sans conversion : la photo ou la vidéo, plus la vidéo d'une Live Photo. Nom d'origine. Si l'original est sur iCloud, l'iPhone le télécharge d'abord (« Téléchargement iCloud… »).
 - **E5 — Liaison.** Une connexion TLS épinglée par envoi, comme celle de Cam ([[Core - Appairage QR]] E4), premier message `DropHello`. L'app reste ouverte : l'écran ne se met pas en veille ; si l'app passe en arrière-plan, l'envoi s'arrête et le fichier en cours est jeté.
 - **E6 — Anti-doublon.** Le PC garde un registre : identifiants Photos reçus et SHA-256 des fichiers rangés (avec leur chemin). Avant tout, l'iPhone envoie les identifiants choisis (`DropHave`) ; le PC répond ceux qui manquent (`DropMissing`) : les autres ne sont pas exportés et comptent « déjà sur le PC ». Ensuite chaque `DropFile` porte le SHA-256 calculé par l'iPhone : si ce contenu est déjà rangé (et le fichier existe toujours), le PC répond « doublon » et le fichier n'est pas envoyé.
@@ -42,7 +39,7 @@ Envoyer des photos, vidéos, albums ou fichiers de l'iPhone vers le PC d'Evan, e
 | Disque du PC plein | Arrêt + « Il manque X Go sur D: » |
 | Hash différent | Fichier effacé, renvoyé une fois ; sinon « non envoyé » |
 | Wi-Fi coupé, PC éteint, Hyphn en arrière-plan | Arrêt + message ; la reprise viendra plus tard |
-| « Commencer » sur le PC, Hyphn fermé sur l'iPhone | « Ouvre Hyphn sur ton iPhone » |
+| « Refuser » sur le PC | L'iPhone affiche « Refusé sur le PC », rien n'est envoyé |
 | Rien de nouveau | « Tout est déjà sur le PC » |
 
 ## Preuve

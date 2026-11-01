@@ -22,8 +22,10 @@ final class Dropper: ObservableObject {
     enum Phase: Equatable {
         case idle
         case preparing
-        /// « Tout le nouveau »: how much, before Evan says « Envoyer ».
+        /// How much, before Evan says « Envoyer » (ADR-0030).
         case review(items: Int, bytes: Int64)
+        /// The PC shows its confirmation; waiting for the answer there.
+        case waitingPC
         case sending
         case done(items: Int, bytes: Int64, failed: Int, already: Int)
         case failed(String)
@@ -73,7 +75,7 @@ final class Dropper: ObservableObject {
 
     var busy: Bool {
         switch phase {
-        case .preparing, .review, .sending: true
+        case .preparing, .review, .waitingPC, .sending: true
         default: false
         }
     }
@@ -83,7 +85,7 @@ final class Dropper: ObservableObject {
         Task { await run(source) }
     }
 
-    /// « Envoyer » on the review of « Tout le nouveau ».
+    /// « Envoyer » on the review (ADR-0030).
     func confirmReview(_ yes: Bool) {
         confirm?.resume(returning: yes)
         confirm = nil
@@ -169,16 +171,16 @@ final class Dropper: ObservableObject {
             conn = nil
             return finish(.done(items: 0, bytes: 0, failed: failed, already: already))
         }
-        if case .everythingNew = source {
-            phase = .review(items: plan.count, bytes: bytes)
-            let yes = await withCheckedContinuation { confirm = $0 }
-            guard yes, busy else { return }
-        }
+        // E2: Evan confirms here first, then on the PC.
+        phase = .review(items: plan.count, bytes: bytes)
+        let yes = await withCheckedContinuation { confirm = $0 }
+        guard yes, busy else { return }
         let fileCount = plan.reduce(0) { n, item in
             if case let .asset(_, r) = item { return n + r.count }
             return n + 1
         }
         c.send(.dropPlan(items: UInt32(plan.count), files: UInt32(fileCount), bytes: UInt64(bytes), already: UInt32(already)))
+        phase = .waitingPC
         guard case let .msg(.dropAck(ok, reason, _)) = await next() else { return lost() }
         guard ok else { return finish(.failed(reason)) }
 

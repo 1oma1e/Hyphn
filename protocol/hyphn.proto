@@ -44,7 +44,7 @@ message Envelope {
     DropAck drop_ack = 23;          // PC -> iPhone: answer to DropPlan and DropEnd
     DropCancel drop_cancel = 24;    // either side: « Annuler »
     DropDone drop_done = 25;        // iPhone -> PC: the whole send is over
-    DropStart drop_start = 26;      // PC -> iPhone (session): « Commencer » on the PC, show Drop
+    // 26: DropStart (PC -> iPhone), removed by ADR-0030; not reused.
     DropHave drop_have = 27;        // iPhone -> PC: the Photos items chosen
     DropMissing drop_missing = 28;  // PC -> iPhone: the ones it does not have yet
   }
@@ -96,8 +96,6 @@ message DropDone {
 }
 
 // ADR-0029: anti-duplicate by Photos identifier, before anything is exported.
-message DropStart {}
-
 message DropHave {
   repeated string asset_ids = 1;
 }

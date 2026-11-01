@@ -24,6 +24,7 @@ Choix d'Evan le 2026-11-01, code direct dans le style actuel :
 - Les fichiers de l'app Fichiers vont dans `<dossier>\Fichiers`, pas par mois.
 
 ## Conséquences
+- Le départ depuis le PC (« Commencer », `DropStart`) est remplacé par [[ADR-0030 Drop commence sur l'iPhone et le PC confirme]] : on commence sur l'iPhone, le PC confirme.
 - La spec [[Drop - Photos vers le PC]] est réécrite avec ces exigences.
 - Reste pour plus tard : envoi écran verrouillé et reprise après coupure ([[ADR-0005 Drop par HTTPS et blocs]]), PC → iPhone, câble.
 - Un fichier effacé à la main du dossier n'est pas renvoyé par « Tout le nouveau » (le registre se souvient de l'identifiant Photos) ; il l'est s'il est choisi à la main.

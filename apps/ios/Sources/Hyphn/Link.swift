@@ -37,8 +37,6 @@ final class PCLink: ObservableObject {
     @Published private(set) var camControl = CamControl()
     /// The PC asked for the picture while another tab was open.
     @Published var wantsCam = false
-    /// « Commencer le transfert » on the PC: open the Drop tab (ADR-0029).
-    @Published var wantsDrop = false
 
     let identity = DeviceIdentity.shared
     let info = DeviceInfo()
@@ -389,9 +387,6 @@ final class PCLink: ObservableObject {
             camera?.apply(c)
         case .keyRequest:
             camera?.requestKey()
-        case .dropStart:
-            // « Commencer » on the PC (ADR-0029): show the Drop choices.
-            wantsDrop = true
         case .forget:
             session?.close()
             forgetLocally(notice: "\(pcName) a oublié cet iPhone.")

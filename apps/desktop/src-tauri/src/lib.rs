@@ -295,11 +295,10 @@ fn drop_cancel(h: State<'_, Hyphn>) {
     h.hub.cancel_drop();
 }
 
-/// « Commencer le transfert » (spec `Drop - Photos vers le PC`, E2): the
-/// iPhone shows its choices. False when it is not connected.
+/// « Accepter » / « Refuser » in the PC's confirmation (ADR-0030).
 #[tauri::command]
-fn drop_start(h: State<'_, Hyphn>) -> bool {
-    h.hub.start_drop()
+fn drop_answer(yes: bool, h: State<'_, Hyphn>) {
+    h.hub.answer_drop(yes);
 }
 
 #[derive(Serialize)]
@@ -593,8 +592,10 @@ fn on_event(app: &AppHandle, e: UiEvent) {
                 }
             }
         }
-        UiEvent::DropStarted => {
-            let _ = app.emit("drop_started", ());
+        UiEvent::DropAsk => {
+            // The iPhone asks to send: the window comes up on Drop, even from the tray.
+            let _ = app.emit("drop_ask", ());
+            show_main(app);
         }
         UiEvent::Changed => {}
     }
@@ -744,7 +745,7 @@ pub fn run() {
             open_photos_dir,
             drop_cancel,
             open_drop_folder,
-            drop_start,
+            drop_answer,
             drop_suggest_dir,
             drop_dir_free,
             reconnect,
