@@ -81,6 +81,19 @@ struct VideoFrame {
     var data: Data
 }
 
+/// What a Drop send holds, with thumbnails for the PC (hyphn.proto `DropPlan`).
+struct DropPlan {
+    var items: UInt32
+    var files: UInt32
+    var bytes: UInt64
+    var already: UInt32
+    /// Up to 8 small JPEG thumbnails.
+    var previews: [Data]
+    var photos: UInt32
+    var videos: UInt32
+    var docs: UInt32
+}
+
 /// One file of a Drop send (hyphn.proto `DropFile`).
 struct DropFile {
     var name: String
@@ -121,7 +134,7 @@ enum Msg {
     case keyRequest
     // Drop v1 (spec `Drop - Photos vers le PC`).
     case dropHello
-    case dropPlan(items: UInt32, files: UInt32, bytes: UInt64, already: UInt32)
+    case dropPlan(DropPlan)
     case dropFile(DropFile)
     case dropChunk(Data)
     case dropEnd(sha256: Data, lastOfItem: Bool)
@@ -282,9 +295,11 @@ extension Msg {
             field = 16
         case .dropHello:
             field = 18
-        case let .dropPlan(items, files, bytes, already):
+        case let .dropPlan(p):
             field = 19
-            b.uint(1, UInt64(items)); b.uint(2, UInt64(files)); b.uint(3, bytes); b.uint(4, UInt64(already))
+            b.uint(1, UInt64(p.items)); b.uint(2, UInt64(p.files)); b.uint(3, p.bytes); b.uint(4, UInt64(p.already))
+            for j in p.previews { b.tag(5, 2); b.varint(UInt64(j.count)); b.data.append(j) }
+            b.uint(6, UInt64(p.photos)); b.uint(7, UInt64(p.videos)); b.uint(8, UInt64(p.docs))
         case let .dropFile(f):
             field = 20
             b.string(1, f.name); b.uint(2, f.size); b.int(3, f.takenUnix); b.uint(4, UInt64(f.year)); b.uint(5, UInt64(f.month))

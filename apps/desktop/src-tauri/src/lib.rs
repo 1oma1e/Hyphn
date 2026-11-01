@@ -301,6 +301,12 @@ fn drop_answer(yes: bool, h: State<'_, Hyphn>) {
     h.hub.answer_drop(yes);
 }
 
+/// Thumbnails of what the iPhone wants to send, for the confirmation.
+#[tauri::command]
+fn drop_previews(h: State<'_, Hyphn>) -> Vec<String> {
+    h.hub.drop_previews()
+}
+
 #[derive(Serialize)]
 struct FolderView {
     path: String,
@@ -746,6 +752,7 @@ pub fn run() {
             drop_cancel,
             open_drop_folder,
             drop_answer,
+            drop_previews,
             drop_suggest_dir,
             drop_dir_free,
             reconnect,

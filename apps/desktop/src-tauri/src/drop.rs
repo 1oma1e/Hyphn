@@ -154,6 +154,19 @@ pub struct DropIndex {
     pub files: BTreeMap<String, String>,
 }
 
+/// Standard base64 with padding (the thumbnails shown in the window).
+pub fn base64(b: &[u8]) -> String {
+    const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(b.len().div_ceil(3) * 4);
+    for c in b.chunks(3) {
+        let n = (c[0] as u32) << 16 | (*c.get(1).unwrap_or(&0) as u32) << 8 | *c.get(2).unwrap_or(&0) as u32;
+        for i in 0..4 {
+            out.push(if i <= c.len() { A[(n >> (18 - 6 * i) & 63) as usize] as char } else { '=' });
+        }
+    }
+    out
+}
+
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
@@ -354,6 +367,15 @@ mod tests {
         let mut f = Incoming::start(dir.path(), "year_month", &f).unwrap();
         f.chunk(b"pdf").unwrap();
         assert_eq!(f.finish(&Sha256::digest(b"pdf")).unwrap(), dir.path().join("Fichiers").join("devis.pdf"));
+    }
+
+    #[test]
+    fn base64_as_the_browser_reads_it() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"f"), "Zg==");
+        assert_eq!(base64(b"fo"), "Zm8=");
+        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+        assert_eq!(base64(&[0xFF, 0xD8, 0x01]), "/9gB");
     }
 
     #[test]

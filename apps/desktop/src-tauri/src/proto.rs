@@ -314,6 +314,14 @@ pub struct DropPlan {
     pub bytes: u64,
     #[prost(uint32, tag = "4")]
     pub already: u32,
+    #[prost(bytes = "vec", repeated, tag = "5")]
+    pub previews: Vec<Vec<u8>>,
+    #[prost(uint32, tag = "6")]
+    pub photos: u32,
+    #[prost(uint32, tag = "7")]
+    pub videos: u32,
+    #[prost(uint32, tag = "8")]
+    pub docs: u32,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]

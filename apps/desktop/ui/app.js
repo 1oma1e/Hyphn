@@ -1029,6 +1029,7 @@ const SORTS = [
   ['year', 'Année', '2026 › IMG_1234.HEIC', false],
   ['flat', 'Tout ensemble', 'IMG_1234.HEIC', false],
 ];
+const SIM_STEPS = ['Ouvre Drop sur l’iPhone', 'Choisis : photos, album, fichiers…', 'Vois l’aperçu et envoie', 'Confirme sur ce PC', 'C’est rangé et vérifié'];
 const SORT_NAME = { year_month: 'par année puis par mois', year: 'par année', flat: 'tous ensemble' };
 const Drop = {
   key: () => '',
@@ -1052,7 +1053,7 @@ const Drop = {
       this.shape = shape;
       this.root.innerHTML = `<main class="wrap enter">
         <header><h1 class="h1">Drop</h1><p class="sub">Les photos, vidéos et fichiers de l’iPhone, en qualité d’origine, vérifiés et sans doublon.</p></header>
-        <section class="card drop-now"><div class="dstage">${this.body(view, d)}</div></section>
+        <section class="card drop-now${view === 'rest' ? ' dsim-card' : ''}"><div class="dstage">${this.body(view, d)}</div></section>
         <section class="card">
           <div class="row" style="justify-content:space-between">
             <div><span class="lbl">Rangées dans</span><div class="mono" style="margin-top:8px;font-size:15px">${settings.drop_setup_done ? esc(settings.photos_dir) : 'Choisi au premier envoi'}</div></div>
@@ -1064,6 +1065,38 @@ const Drop = {
     }
     this.confirmBox(d);
     this.fill(d);
+    this.simRun(view === 'rest');
+  },
+  unmount() {
+    this.simRun(false);
+  },
+  // Plays the steps one after the other, 2.8 s each (the CSS follows data-s).
+  simRun(on) {
+    const el = $('#d-sim');
+    if (!on || !el) {
+      clearInterval(this.simT);
+      this.simT = 0;
+      return;
+    }
+    if (this.simT && this.simEl === el) return;
+    clearInterval(this.simT);
+    this.simEl = el;
+    this.simAt = -1;
+    const next = () => this.simShow((this.simAt + 1) % SIM_STEPS.length);
+    next();
+    this.simT = setInterval(next, 2800);
+  },
+  simShow(i) {
+    const el = $('#d-sim');
+    if (!el) return;
+    this.simAt = i;
+    el.dataset.s = String(i);
+    el.querySelectorAll('.sim-rail li').forEach((li, k) => {
+      li.classList.toggle('on', k === i);
+      li.classList.toggle('done', k < i);
+      // Restart the bar of the current step.
+      if (k === i) { li.classList.remove('on'); void li.offsetWidth; li.classList.add('on'); }
+    });
   },
   body(view, d) {
     if (view === 'sending') {
@@ -1085,19 +1118,33 @@ const Drop = {
         ${d.files_done ? `<button class="btn cy" type="button" data-act="openLast">${I.folder}Ouvrir le dossier</button>` : ''}
         <button class="btn" type="button" data-act="seen">OK</button></div>`;
     }
-    // At rest: how to start, on the iPhone (ADR-0030).
+    // At rest: a quick simulation of the steps, iPhone to PC (ADR-0030).
     const wait = d.state === 'preparing' || d.state === 'asking';
-    const status = !S.device ? 'Relie d’abord ton iPhone.'
+    const status = !S.device ? '<span class="dlive off"></span>Relie d’abord ton iPhone'
       : wait ? `<span class="dlive"></span>${esc(devName())} prépare un envoi…`
-        : S.connected ? `<span class="dlive"></span>${esc(devName())} est prêt.` : 'iPhone hors ligne : ouvre Hyphn dessus.';
-    const steps = [
-      [I.phone, 'Ouvre Hyphn sur l’iPhone', 'Puis l’onglet Drop, en bas.'],
-      [I.photo, 'Choisis ce que tu envoies', 'Des photos, un album, des fichiers ou tout le nouveau.'],
-      [I.check, 'Confirme sur l’iPhone, puis ici', 'La première fois, ce PC te demande où ranger.'],
-    ];
-    return `<div class="drest">
-        <div class="dq"><span class="lbl">Pour commencer</span><h2 class="dtitle dlg">Tout part de ton iPhone</h2><p class="sub dstatus">${status}</p></div>
-        <ol class="dhow">${steps.map(([ic, t, s], i) => `<li style="animation-delay:${(i * 0.08).toFixed(2)}s"><span class="ic">${ic}</span><b class="n">${i + 1}</b><div><div class="t">${t}</div><div class="sub">${s}</div></div></li>`).join('')}</ol>
+        : S.connected ? `<span class="dlive"></span>${esc(devName())} est prêt` : '<span class="dlive off"></span>iPhone hors ligne : ouvre Hyphn dessus';
+    const tiles = '<i></i>'.repeat(6);
+    return `<div class="dsim" id="d-sim" data-s="0">
+        <div class="dsim-head">
+          <div><span class="lbl">Pour commencer</span><h2 class="dtitle dlg">Tout part de ton iPhone</h2></div>
+          <span class="dstatus">${status}</span>
+        </div>
+        <div class="sim-stage" aria-hidden="true">
+          <div class="sim-phone"><div class="scr">
+            <div class="sc s0"><div class="h">Hyphn</div><div class="m">Accueil · Cam · Drop</div><div class="tabs4"><i></i><i></i><i class="on"></i><i></i></div><span class="tap"></span></div>
+            <div class="sc s1"><div class="h">Que veux-tu envoyer ?</div><div class="rows4"><i></i><i></i><i></i><i></i></div><span class="tap"></span></div>
+            <div class="sc s2"><div class="h">Envoyer 48 éléments ?</div><div class="thumbs6">${tiles}</div><div class="m">32 photos · 16 vidéos · 1,2 Go</div><div class="sbtn">Envoyer</div><span class="tap"></span></div>
+            <div class="sc s3"><div class="swait">${I.pc}</div><div class="h" style="text-align:center">Confirme sur ton PC</div></div>
+            <div class="sc s4"><div class="h">Envoi en cours</div><div class="sim-big">64 %</div><div class="sbar"><b></b></div><div class="m">38 Mo/s · reste ≈ 1 min</div></div>
+          </div></div>
+          <div class="sim-link"><em>Wi-Fi · chiffré</em><span></span><span></span><span></span></div>
+          <div class="sim-pc"><div class="mon"><div class="scr">
+            <div class="sc p0"><div class="pidle"><span class="plogo"></span><div class="h">Hyphn</div><div class="m">En attente de l’iPhone</div></div></div>
+            <div class="sc p3"><div class="pdlg"><div class="m">${esc(devName())} veut envoyer</div><div class="h">48 éléments · 1,2 Go</div><div class="thumbs6">${tiles}</div><div class="pbtns"><b>Accepter</b><b>Refuser</b></div></div><span class="tap"></span></div>
+            <div class="sc p4"><div class="pfolder"><div class="m">${esc(settings.drop_setup_done ? settings.photos_dir : 'Images › Hyphn')} › 2026 › 10</div><div class="drop6">${tiles}</div><div class="h">Vérifiés · sans doublon</div></div></div>
+          </div></div><div class="stand"></div><div class="base"></div></div>
+        </div>
+        <ol class="sim-rail">${SIM_STEPS.map((n, i) => `<li data-act="simGo" data-v="${i}"><b>0${i + 1}</b><span>${n}</span></li>`).join('')}</ol>
       </div>`;
   },
   // The confirmation, over the page, while the iPhone waits (ADR-0030).
@@ -1113,8 +1160,14 @@ const Drop = {
     if (!this.ask) {
       this.ask = settings.drop_setup_done ? 'accept' : 'folder';
       this.folder = null;
+      this.thumbs = [];
+      invoke('drop_previews').then((t) => {
+        this.thumbs = t;
+        this.askShape = '';
+        this.confirmBox(S.drop || {});
+      });
     }
-    const shape = [this.ask, this.folder && this.folder.path].join('|');
+    const shape = [this.ask, this.folder && this.folder.path, (this.thumbs || []).length].join('|');
     if (shape === this.askShape) return;
     this.askShape = shape;
     const names = settings.drop_setup_done && this.ask === 'accept' ? [] : ['Dossier', 'Rangement', 'Accord'];
@@ -1147,11 +1200,18 @@ const Drop = {
         <div class="choices three">${SORTS.map(([k, n, ex, tip]) => `<button class="choice${tip ? ' dtip' : ''}" type="button" data-act="sort" data-v="${k}"><span><b>${n}</b><small class="mono">${ex}</small></span>${tip ? '<em>Conseillé</em>' : ''}</button>`).join('')}</div>
         <p class="sub" style="margin-top:16px">Selon la date où la photo a été prise. Tu pourras changer ça dans les Réglages.</p>`;
     }
-    const more = [d.already ? `${d.already} déjà sur le PC, pas renvoyé${d.already > 1 ? 's' : ''}` : '', `vers ${esc(settings.photos_dir)}, ${SORT_NAME[settings.sort] || ''}`].filter(Boolean);
-    return `<div class="dask-head"><span class="pfig sm"><i></i><i></i><span class="pbody">${I.phone}</span></span>
-        <div><span class="lbl">${who} veut envoyer</span>
+    const kinds = [[d.photos, 'photo'], [d.videos, 'vidéo'], [d.docs, 'fichier']].filter(([n]) => n).map(([n, w]) => `${n} ${w}${n > 1 ? 's' : ''}`).join(' · ');
+    const more = [kinds, d.already ? `${d.already} déjà sur le PC, pas renvoyé${d.already > 1 ? 's' : ''}` : '', `Vers ${esc(settings.photos_dir)}, ${SORT_NAME[settings.sort] || ''}`].filter(Boolean);
+    // One line of 8: the last tile counts the rest.
+    const all = this.thumbs || [];
+    const list = d.items > all.length ? all.slice(0, 7) : all;
+    const thumbs = list.map((src, i) => `<img src="${src}" alt="" style="animation-delay:${(i * 0.05).toFixed(2)}s">`).join('');
+    const rest = d.items - list.length;
+    return `<div class="dask-head"><span class="ic">${I.phone}</span>
+        <div><span class="lbl">Aperçu · ${who} veut envoyer</span>
           <div class="dtitle dlg">${d.items} élément${d.items > 1 ? 's' : ''} · ${bytes(d.bytes)}</div></div></div>
-      <div class="sub" style="margin-top:14px;line-height:1.6">${more.join('<br>')}</div>
+      ${thumbs ? `<div class="dthumbs">${thumbs}${rest > 0 ? `<i>+${rest}</i>` : ''}</div>` : ''}
+      <div class="sub dkinds">${more.join('<br>')}</div>
       <div class="row" style="margin-top:22px">
         <button class="btn cy" type="button" data-act="accept">${I.check}Accepter</button>
         <button class="btn" type="button" data-act="refuse">Refuser</button>
@@ -1203,6 +1263,12 @@ const Drop = {
       await saveSettings();
       Drop.shape = '';
       Drop.askStep('accept');
+    },
+    simGo: (el) => {
+      Drop.simRun(false);
+      Drop.simShow(Number(el.dataset.v));
+      Drop.simRun(true);
+      Drop.simShow(Number(el.dataset.v));
     },
     accept: () => {
       layer.innerHTML = '';

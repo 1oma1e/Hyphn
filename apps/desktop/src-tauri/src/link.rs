@@ -78,6 +78,10 @@ pub struct DropProgress {
     pub failed: u32,
     /// Items left out because the PC already has them (E6).
     pub already: u32,
+    /// What the items are, for the PC's confirmation.
+    pub photos: u32,
+    pub videos: u32,
+    pub docs: u32,
     /// Why it stopped, when it did.
     pub message: String,
     /// Folder of the last file put in place (« Ouvrir le dossier »).
@@ -204,6 +208,8 @@ pub struct State {
     drop_index: crate::drop::DropIndex,
     /// Evan's answer to the iPhone's plan, awaited by the Drop connection.
     drop_answer: Option<tokio::sync::oneshot::Sender<bool>>,
+    /// Thumbnails sent with the plan (JPEG), shown in the confirmation.
+    drop_previews: Vec<Vec<u8>>,
 }
 
 /// Read by the snapshot.
@@ -287,6 +293,7 @@ impl Hub {
                 drop_target: (PathBuf::new(), String::new()),
                 drop_index,
                 drop_answer: None,
+                drop_previews: Vec::new(),
             }),
             notify,
             tls,
@@ -331,6 +338,11 @@ impl Hub {
     /// Photos folder and « Rangement », from the PC settings.
     pub fn set_drop_target(&self, dir: PathBuf, sort: String) {
         self.lock().drop_target = (dir, sort);
+    }
+
+    /// The plan's thumbnails, as `data:` URLs for the window (at most 8, small).
+    pub fn drop_previews(&self) -> Vec<String> {
+        self.lock().drop_previews.iter().map(|j| format!("data:image/jpeg;base64,{}", crate::drop::base64(j))).collect()
     }
 
     /// « Accepter » / « Refuser » in the PC's confirmation (ADR-0030).
@@ -758,6 +770,21 @@ impl Hub {
         if !self.is_paired(&fp) {
             return Ok(());
         }
+        // The iPhone opens one Drop connection at a time: one still choosing
+        // or waiting for Evan's answer is a dead one, it gives way.
+        let stale = {
+            let st = self.lock();
+            st.drop.busy() && st.drop.state != "sending"
+        };
+        if stale {
+            self.drop_stop.notify_waiters();
+            for _ in 0..20 {
+                if !self.lock().drop.busy() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        }
         let free = {
             let mut st = self.lock();
             let free = !st.drop.busy();
@@ -798,6 +825,9 @@ impl Hub {
                     {
                         let mut st = self.lock();
                         (st.drop.items, st.drop.files, st.drop.bytes, st.drop.already) = (p.items, p.files, p.bytes, p.already);
+                        (st.drop.photos, st.drop.videos, st.drop.docs) = (p.photos, p.videos, p.docs);
+                        // Small and few: anything else is not a thumbnail.
+                        st.drop_previews = p.previews.into_iter().filter(|j| j.len() <= 64 * 1024 && j.starts_with(&[0xFF, 0xD8])).take(8).collect();
                         st.drop.state = "asking".into();
                         st.drop_answer = Some(tx);
                     }
@@ -811,6 +841,9 @@ impl Hub {
                             }
                         },
                         _ = self.drop_stop.notified() => false,
+                        // The iPhone cancelled or went away while Evan was
+                        // deciding: the confirmation closes at once.
+                        _ = read_msg(&mut io) => break Err(String::new()),
                     };
                     self.lock().drop_answer = None;
                     if !yes {
@@ -1216,6 +1249,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn an_iphone_gone_while_the_pc_asks_frees_drop_at_once() {
+        let r = rig().await;
+        let photos = tempfile::tempdir().unwrap();
+        r.hub.set_drop_target(photos.path().to_path_buf(), "year_month".into());
+        let phone = Identity::generate("phone").unwrap();
+        let _ctl = pair(&r, &phone).await;
+        let mut io = connect(r.addr, &phone, r.hub.identity.fingerprint).await.unwrap();
+        send(&mut io, Msg::DropHello(proto::DropHello {})).await;
+        send(&mut io, Msg::DropPlan(proto::DropPlan { items: 1, files: 1, bytes: 9, already: 0, ..Default::default() })).await;
+        wait_until(|| r.hub.view().drop.state == "asking").await;
+        // Cancelled on the iPhone while the PC shows its confirmation.
+        send(&mut io, Msg::DropCancel(proto::DropCancel {})).await;
+        wait_until(|| r.hub.view().drop.state.is_empty()).await;
+
+        // A connection stuck before the plan gives way to a new one.
+        let mut old = connect(r.addr, &phone, r.hub.identity.fingerprint).await.unwrap();
+        send(&mut old, Msg::DropHello(proto::DropHello {})).await;
+        wait_until(|| r.hub.view().drop.state == "preparing").await;
+        let mut io = connect(r.addr, &phone, r.hub.identity.fingerprint).await.unwrap();
+        send(&mut io, Msg::DropHello(proto::DropHello {})).await;
+        send(&mut io, Msg::DropHave(proto::DropHave { asset_ids: vec!["X".into()] })).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::DropMissing(m)) if m.asset_ids == ["X"]));
+    }
+
+    #[tokio::test]
     async fn a_drop_refused_on_the_pc_sends_nothing() {
         let r = rig().await;
         let photos = tempfile::tempdir().unwrap();
@@ -1225,7 +1283,11 @@ mod tests {
         let mut io = connect(r.addr, &phone, r.hub.identity.fingerprint).await.unwrap();
         send(&mut io, Msg::DropHello(proto::DropHello {})).await;
         wait_until(|| r.hub.view().drop.state == "preparing").await;
-        send(&mut io, Msg::DropPlan(proto::DropPlan { items: 3, files: 3, bytes: 9, already: 0 })).await;
+        send(&mut io, Msg::DropPlan(proto::DropPlan { items: 3, files: 3, bytes: 9, photos: 3, previews: vec![vec![0xFF, 0xD8, 1], vec![1, 2]], ..Default::default() })).await;
+        // The confirmation shows the thumbnails (JPEG only) and what they are.
+        wait_until(|| r.hub.view().drop.state == "asking").await;
+        assert_eq!(r.hub.drop_previews(), vec!["data:image/jpeg;base64,/9gB".to_string()]);
+        assert_eq!(r.hub.view().drop.photos, 3);
         accept_on_pc(&r, false).await;
         assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if !a.ok && a.reason.contains("Refusé")));
         // Back to rest, no error shown on the PC.
@@ -1263,7 +1325,7 @@ mod tests {
         send(&mut io, Msg::DropHello(proto::DropHello {})).await;
         send(&mut io, Msg::DropHave(proto::DropHave { asset_ids: vec!["A1".into()] })).await;
         assert!(matches!(recv(&mut io).await, Some(Msg::DropMissing(m)) if m.asset_ids == ["A1"]));
-        send(&mut io, Msg::DropPlan(proto::DropPlan { items: 1, files: 1, bytes: 3_000_000, already: 0 })).await;
+        send(&mut io, Msg::DropPlan(proto::DropPlan { items: 1, files: 1, bytes: 3_000_000, already: 0, ..Default::default() })).await;
         accept_on_pc(&r, true).await;
         assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if a.ok));
         send(&mut io, Msg::DropFile(file.clone())).await;
@@ -1277,7 +1339,7 @@ mod tests {
         drop_chunks(&mut io, &data).await;
         send(&mut io, Msg::DropEnd(proto::DropEnd { sha256: sha.clone(), last_of_item: true })).await;
         assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if a.ok));
-        send(&mut io, Msg::DropDone(proto::DropDone { failed: 0, already: 0 })).await;
+        send(&mut io, Msg::DropDone(proto::DropDone { failed: 0, already: 0, ..Default::default() })).await;
         wait_until(|| r.hub.view().drop.state == "done").await;
         let d = r.hub.view().drop;
         assert_eq!((d.items_done, d.files_done, d.bytes_done), (1, 1, 3_000_000));
@@ -1293,12 +1355,12 @@ mod tests {
         send(&mut io, Msg::DropHello(proto::DropHello {})).await;
         send(&mut io, Msg::DropHave(proto::DropHave { asset_ids: vec!["A1".into(), "B2".into()] })).await;
         assert!(matches!(recv(&mut io).await, Some(Msg::DropMissing(m)) if m.asset_ids == ["B2"]));
-        send(&mut io, Msg::DropPlan(proto::DropPlan { items: 1, files: 1, bytes: 3_000_000, already: 1 })).await;
+        send(&mut io, Msg::DropPlan(proto::DropPlan { items: 1, files: 1, bytes: 3_000_000, already: 1, ..Default::default() })).await;
         accept_on_pc(&r, true).await;
         assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if a.ok));
         send(&mut io, Msg::DropFile(proto::DropFile { asset_id: "B2".into(), sha256: sha, ..file })).await;
         assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if a.ok && a.duplicate));
-        send(&mut io, Msg::DropDone(proto::DropDone { failed: 0, already: 2 })).await;
+        send(&mut io, Msg::DropDone(proto::DropDone { failed: 0, already: 2, ..Default::default() })).await;
         wait_until(|| r.hub.view().drop.state == "done").await;
         assert_eq!(r.hub.view().drop.already, 2);
         assert_eq!(std::fs::read_dir(&month).unwrap().count(), 1, "nothing stored twice");
@@ -1317,7 +1379,7 @@ mod tests {
         let _ctl = pair(&r, &phone).await;
         let mut io = connect(r.addr, &phone, r.hub.identity.fingerprint).await.unwrap();
         send(&mut io, Msg::DropHello(proto::DropHello {})).await;
-        send(&mut io, Msg::DropPlan(proto::DropPlan { items: 1, files: 1, bytes: u64::MAX / 4, already: 0 })).await;
+        send(&mut io, Msg::DropPlan(proto::DropPlan { items: 1, files: 1, bytes: u64::MAX / 4, already: 0, ..Default::default() })).await;
         accept_on_pc(&r, true).await;
         assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if !a.ok && a.reason.starts_with("Il manque")));
         wait_until(|| r.hub.view().drop.state == "failed").await;

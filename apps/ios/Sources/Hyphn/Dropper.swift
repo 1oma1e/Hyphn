@@ -45,6 +45,19 @@ final class Dropper: ObservableObject {
     @Published private(set) var rate: Double = 0
     /// Photos access refused: the view offers Settings.
     @Published private(set) var needsAccess = false
+    /// What is about to go, shown before « Envoyer » (and sent to the PC).
+    @Published private(set) var previews: [Preview] = []
+    @Published private(set) var photos = 0
+    @Published private(set) var videos = 0
+    @Published private(set) var docs = 0
+
+    struct Preview: Identifiable {
+        let id = UUID()
+        let image: UIImage?
+        let isVideo: Bool
+        /// For a file from the Files app.
+        let name: String?
+    }
 
     weak var link: PCLink?
 
@@ -152,8 +165,12 @@ final class Dropper: ObservableObject {
         var missing = ids
         if !ids.isEmpty {
             c.send(.dropHave(ids))
-            guard case let .msg(.dropMissing(m)) = await next() else { return lost() }
-            missing = m
+            switch await next() {
+            case let .msg(.dropMissing(m)): missing = m
+            // The PC refused at once (already receiving…): its own words.
+            case let .msg(.dropAck(false, reason, _)): return finish(.failed(reason))
+            default: return lost()
+            }
         }
         already = ids.count - missing.count
         let found = PHAsset.fetchAssets(withLocalIdentifiers: missing, options: nil)
@@ -171,7 +188,11 @@ final class Dropper: ObservableObject {
             conn = nil
             return finish(.done(items: 0, bytes: 0, failed: failed, already: already))
         }
-        // E2: Evan confirms here first, then on the PC.
+        // E2: Evan sees what goes and confirms here first, then on the PC.
+        photos = plan.filter { if case let .asset(a, _) = $0 { return a.mediaType == .image }; return false }.count
+        videos = plan.filter { if case let .asset(a, _) = $0 { return a.mediaType == .video }; return false }.count
+        docs = files.count
+        previews = await Self.previews(of: Array(plan.prefix(12)))
         phase = .review(items: plan.count, bytes: bytes)
         let yes = await withCheckedContinuation { confirm = $0 }
         guard yes, busy else { return }
@@ -179,7 +200,10 @@ final class Dropper: ObservableObject {
             if case let .asset(_, r) = item { return n + r.count }
             return n + 1
         }
-        c.send(.dropPlan(items: UInt32(plan.count), files: UInt32(fileCount), bytes: UInt64(bytes), already: UInt32(already)))
+        // A few small thumbnails for the PC's confirmation (not the photos themselves).
+        let thumbs = previews.prefix(8).compactMap { $0.image?.jpegData(compressionQuality: 0.6) }.filter { $0.count <= 64 * 1024 }
+        c.send(.dropPlan(DropPlan(items: UInt32(plan.count), files: UInt32(fileCount), bytes: UInt64(bytes), already: UInt32(already),
+                                  previews: thumbs, photos: UInt32(photos), videos: UInt32(videos), docs: UInt32(docs))))
         phase = .waitingPC
         guard case let .msg(.dropAck(ok, reason, _)) = await next() else { return lost() }
         guard ok else { return finish(.failed(reason)) }
@@ -224,6 +248,32 @@ final class Dropper: ObservableObject {
         conn?.sendAndClose(.dropDone(failed: UInt32(failed), already: UInt32(already)))
         conn = nil
         finish(.done(items: itemsDone, bytes: bytesDone, failed: failed, already: already))
+    }
+
+    /// Thumbnails from Photos (its own small cached versions), file names for files.
+    private static func previews(of items: [Item]) async -> [Preview] {
+        var out: [Preview] = []
+        for item in items {
+            switch item {
+            case let .asset(a, _):
+                out.append(Preview(image: await thumbnail(a), isVideo: a.mediaType == .video, name: nil))
+            case let .file(u):
+                out.append(Preview(image: nil, isVideo: false, name: u.lastPathComponent))
+            }
+        }
+        return out
+    }
+
+    private static func thumbnail(_ a: PHAsset) async -> UIImage? {
+        let o = PHImageRequestOptions()
+        o.deliveryMode = .highQualityFormat
+        o.resizeMode = .fast
+        o.isNetworkAccessAllowed = true
+        return await withCheckedContinuation { k in
+            PHImageManager.default().requestImage(for: a, targetSize: CGSize(width: 220, height: 220), contentMode: .aspectFill, options: o) { img, _ in
+                k.resume(returning: img)
+            }
+        }
     }
 
     /// Photos identifiers for the source, and how many could not be read.

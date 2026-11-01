@@ -59,6 +59,10 @@ message DropPlan {
   uint32 files = 2;       // files to send (a Live Photo is two)
   uint64 bytes = 3;       // total size, used to check the PC's free space
   uint32 already = 4;     // items left out: already on the PC (DropMissing)
+  repeated bytes previews = 5; // up to 8 small JPEG thumbnails, for the PC's confirmation
+  uint32 photos = 6;      // photos among the items
+  uint32 videos = 7;      // videos among the items
+  uint32 docs = 8;        // files from the Files app among the items
 }
 
 message DropFile {

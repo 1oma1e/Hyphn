@@ -654,10 +654,15 @@ struct DropView: View {
             case let .review(items, bytes):
                 card {
                     VStack(alignment: .leading, spacing: 12) {
-                        icon("arrow.up.circle", Ink.cy)
+                        Text("APERÇU").font(.geist(12, .bold)).tracking(1.5).foregroundStyle(Ink.cy)
                         Text("Envoyer \(items) élément\(items > 1 ? "s" : "") ?").font(.geist(26, .semibold)).tracking(-0.8)
-                        Text("\(Self.size(bytes)) vers \(link.pcName)\(dropper.already > 0 ? " · \(dropper.already) déjà dessus, pas renvoyé\(dropper.already > 1 ? "s" : "")" : "").")
+                        PreviewGrid(previews: dropper.previews, total: items)
+                        Text(Self.kinds(dropper) + " · \(Self.size(bytes)) vers \(link.pcName)")
                             .font(.geist(14)).foregroundStyle(Ink.tx2)
+                        if dropper.already > 0 {
+                            Text("\(dropper.already) déjà sur le PC : pas renvoyé\(dropper.already > 1 ? "s" : "").")
+                                .font(.geist(13)).foregroundStyle(Ink.li)
+                        }
                         Text("Ton PC te demandera ensuite de confirmer.").font(.geist(13)).foregroundStyle(Ink.tx3)
                         Button("Envoyer") { dropper.confirmReview(true) }
                             .buttonStyle(PrimaryButtonStyle(fill: Ink.cy, text: .black)).padding(.top, 4)
@@ -796,6 +801,12 @@ struct DropView: View {
             .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
     }
 
+    /// « 32 photos · 14 vidéos · 2 fichiers ».
+    static func kinds(_ d: Dropper) -> String {
+        let parts: [(Int, String)] = [(d.photos, "photo"), (d.videos, "vidéo"), (d.docs, "fichier")]
+        return parts.filter { $0.0 > 0 }.map { "\($0.0) \($0.1)\($0.0 > 1 ? "s" : "")" }.joined(separator: " · ")
+    }
+
     static func size(_ b: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: b, countStyle: .file)
     }
@@ -804,6 +815,58 @@ struct DropView: View {
         guard d.rate > 0 else { return "calcul…" }
         let s = Double(max(0, d.bytes - d.bytesDone)) / d.rate
         return s < 60 ? "reste moins d’une minute" : "reste ≈ \(Int((s / 60).rounded(.up))) min"
+    }
+}
+
+/// The first thumbnails of a send, the last tile counting the rest; they come
+/// in one after the other.
+struct PreviewGrid: View {
+    let previews: [Dropper.Preview]
+    let total: Int
+    @State private var shown = false
+
+    var body: some View {
+        let cols = Array(repeating: GridItem(.flexible(), spacing: 6), count: 4)
+        let room = total > previews.count ? previews.count - 1 : previews.count
+        LazyVGrid(columns: cols, spacing: 6) {
+            ForEach(Array(previews.prefix(max(room, 0)).enumerated()), id: \.element.id) { i, p in
+                tile(p)
+                    .opacity(shown ? 1 : 0)
+                    .scaleEffect(shown ? 1 : 0.85)
+                    .animation(.spring(duration: 0.45).delay(Double(i) * 0.04), value: shown)
+            }
+            if total > room, room >= 0 {
+                RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.06))
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay(Text("+\(total - room)").font(.mono(17, .semibold)).foregroundStyle(Ink.tx))
+                    .opacity(shown ? 1 : 0)
+                    .animation(.spring(duration: 0.45).delay(Double(room) * 0.04), value: shown)
+            }
+        }
+        .onAppear { shown = true }
+    }
+
+    @ViewBuilder private func tile(_ p: Dropper.Preview) -> some View {
+        Color.white.opacity(0.06)
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                if let img = p.image {
+                    Image(uiImage: img).resizable().scaledToFill()
+                } else {
+                    VStack(spacing: 4) {
+                        Image(systemName: "doc").font(.system(size: 20)).foregroundStyle(Ink.am)
+                        Text(p.name ?? "").font(.geist(9)).lineLimit(2).multilineTextAlignment(.center).foregroundStyle(Ink.tx2)
+                    }
+                    .padding(4)
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if p.isVideo {
+                    Image(systemName: "play.fill").font(.system(size: 10)).foregroundStyle(.white)
+                        .padding(5).background(.black.opacity(0.5), in: Circle()).padding(4)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
