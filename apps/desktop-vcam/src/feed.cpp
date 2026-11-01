@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <iterator>
 
 #include "hyphn_pipe.h"
 #include "resource.h"
@@ -25,12 +26,27 @@ namespace {
 constexpr ULONGLONG kStaleMs = 1500;  // no picture for this long: waiting screen
 constexpr uint32_t kMaxPayload = 16u << 20;
 
-const wchar_t* const kLangs[] = {
-    L"Je reviens bientôt", L"Be right back",  L"Vuelvo enseguida", L"Bin gleich zurück",
-    L"Torno subito",            L"Volto já", L"すぐ戻ります", L"곧 돌아올게요",
+// Same list and order as LANGS in apps/desktop/ui/app.js. `whole`: joined
+// letters (Arabic, Hindi) are shown at once, not letter by letter.
+struct Lang {
+    const wchar_t* text;
+    const wchar_t* locale;
+    bool whole;
 };
-constexpr int kLangCount = 8;
+const Lang kLangs[] = {
+    {L"Je reviens bientôt", L"fr-fr", false}, {L"Be right back", L"en-us", false},
+    {L"Vuelvo enseguida", L"es-es", false},   {L"Bin gleich zurück", L"de-de", false},
+    {L"Torno subito", L"it-it", false},       {L"Volto já", L"pt-pt", false},
+    {L"Ben zo terug", L"nl-nl", false},       {L"Zaraz wracam", L"pl-pl", false},
+    {L"Hemen dönüyorum", L"tr-tr", false},    {L"Скоро вернусь", L"ru-ru", false},
+    {L"Скоро повернуся", L"uk-ua", false},    {L"سأعود قريبًا", L"ar-sa", true},
+    {L"थोड़ी देर में वापस", L"hi-in", true},  {L"马上回来", L"zh-cn", false},
+    {L"すぐ戻ります", L"ja-jp", false},       {L"곧 돌아올게요", L"ko-kr", false},
+    {L"Quay lại ngay", L"vi-vn", false},      {L"Segera kembali", L"id-id", false},
+};
+constexpr int kLangCount = static_cast<int>(std::size(kLangs));
 constexpr double kLangSeconds = 2.6;
+constexpr double kPi = 3.14159265358979;
 
 D2D1_COLOR_F Rgba(uint32_t rgb, float a = 1.f) {
     return D2D1::ColorF(((rgb >> 16) & 255) / 255.f, ((rgb >> 8) & 255) / 255.f, (rgb & 255) / 255.f, a);
@@ -791,132 +807,239 @@ HRESULT Feed::Fill(BYTE* dst, LONG pitch, UINT32 w, UINT32 h, Pixel fmt, bool* v
     return Readback(out_.Get(), dst, pitch, w, h, fmt);
 }
 
-// The waiting screen: same design as the app (ui/app.css, .wait2). Drifting
-// coral, lime and cyan glows, the Hyphn mark breathing with a light running
-// along its bar, the message in Geist, languages taking turns.
-HRESULT Feed::DrawWait(const WaitState& st, bool videoExpected) {
+// The waiting screen: same design as the app (ui/app.css, .wait2): a neon
+// Hyphn sign hanging on two wires, light rays and dust (Animé only), packets
+// running along the bar both ways, the message letter by letter in Geist.
+// Sizes follow the mock-up drawn at 1280×720 (`s` = 1 there).
+HRESULT Feed::DrawWait(const WaitState& st, bool /*videoExpected*/) {
     LARGE_INTEGER now;
     QueryPerformanceCounter(&now);
     const double t = static_cast<double>(now.QuadPart - qpcStart_.QuadPart) / qpcFreq_.QuadPart;
     const float W = static_cast<float>(outW_), H = static_cast<float>(outH_);
+    const float s = H / 720.f, cx = W / 2;
+    const bool animated = st.style == 0;
     dc_->SetTarget(waitBitmap_.Get());
     dc_->BeginDraw();
     dc_->SetTransform(D2D1::Matrix3x2F::Identity());
     dc_->Clear(Rgba(0x05070A));
 
-    auto glow = [&](float cx, float cy, float r, uint32_t rgb, float a) {
-        D2D1_GRADIENT_STOP stops[] = {{0.f, Rgba(rgb, a)}, {0.72f, Rgba(rgb, 0.f)}, {1.f, Rgba(rgb, 0.f)}};
+    auto stops = [&](std::initializer_list<D2D1_GRADIENT_STOP> list) {
         ComPtr<ID2D1GradientStopCollection> sc;
-        ComPtr<ID2D1RadialGradientBrush> b;
-        if (FAILED(dc_->CreateGradientStopCollection(stops, 3, &sc))) return;
-        if (FAILED(dc_->CreateRadialGradientBrush(D2D1::RadialGradientBrushProperties(D2D1::Point2F(cx, cy), {}, r, r), sc.Get(), &b))) return;
-        dc_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), r, r), b.Get());
+        dc_->CreateGradientStopCollection(list.begin(), static_cast<UINT32>(list.size()), &sc);
+        return sc;
     };
-    if (st.style == 0) {
-        const float s = std::max(W, H);
-        auto wave = [&](double period, double phase) { return static_cast<float>(std::sin(t * 2 * 3.14159265 / period + phase)); };
-        glow(W * (0.30f + 0.10f * wave(26, 0)), H * (0.32f + 0.10f * wave(31, 1)), s * 0.42f * (1 + 0.08f * wave(22, 2)), 0xFF7A66, 0.42f);
-        glow(W * (0.74f - 0.12f * wave(31, 3)), H * (0.46f + 0.08f * wave(24, 4)), s * 0.40f, 0xB9F25A, 0.28f);
-        glow(W * (0.50f + 0.08f * wave(23, 5)), H * (0.86f - 0.12f * wave(27, 6)), s * 0.38f * (1 + 0.1f * wave(19, 1)), 0x5FD4F4, 0.26f);
-    } else {
-        glow(W * 0.5f, H * 0.45f, std::max(W, H) * 0.6f, 0x10141B, 1.f);
-    }
-    {
-        // Vignette.
-        D2D1_GRADIENT_STOP stops[] = {{0.f, Rgba(0x05070A, 0.f)}, {0.45f, Rgba(0x05070A, 0.f)}, {1.f, Rgba(0x05070A, 0.85f)}};
-        ComPtr<ID2D1GradientStopCollection> sc;
-        ComPtr<ID2D1RadialGradientBrush> b;
-        if (SUCCEEDED(dc_->CreateGradientStopCollection(stops, 3, &sc)) &&
-            SUCCEEDED(dc_->CreateRadialGradientBrush(D2D1::RadialGradientBrushProperties(D2D1::Point2F(W / 2, H / 2), {}, W * 0.62f, H * 0.62f), sc.Get(), &b)))
-            dc_->FillRectangle(D2D1::RectF(0, 0, W, H), b.Get());
-    }
+    auto linear = [&](D2D1_POINT_2F a, D2D1_POINT_2F b, std::initializer_list<D2D1_GRADIENT_STOP> list) {
+        ComPtr<ID2D1LinearGradientBrush> br;
+        if (auto sc = stops(list)) dc_->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(a, b), sc.Get(), &br);
+        return br;
+    };
+    auto radial = [&](float x, float y, float rx, float ry, std::initializer_list<D2D1_GRADIENT_STOP> list) {
+        ComPtr<ID2D1RadialGradientBrush> br;
+        if (auto sc = stops(list)) dc_->CreateRadialGradientBrush(D2D1::RadialGradientBrushProperties(D2D1::Point2F(x, y), {}, rx, ry), sc.Get(), &br);
+        if (br) dc_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x, y), rx, ry), br.Get());
+    };
+    auto solid = [&](uint32_t rgb, float a) {
+        ComPtr<ID2D1SolidColorBrush> br;
+        dc_->CreateSolidColorBrush(Rgba(rgb, a), &br);
+        return br;
+    };
+    auto frac = [](double x) { return x - std::floor(x); };
 
-    // The mark, a little above the middle.
-    const float dot = std::clamp(H * 0.026f, 10.f, 30.f) / 2;
-    const float barW = std::clamp(H * 0.064f, 26.f, 72.f), barH = std::clamp(H * 0.009f, 4.f, 9.f);
-    const float textSize = std::min(H * 0.095f, W * 0.075f);
-    const float cy = H * 0.5f - textSize * 0.95f;
-    const float cx = W * 0.5f;
-    ComPtr<ID2D1SolidColorBrush> solid;
-    dc_->CreateSolidColorBrush(Rgba(0xF1F3F6), &solid);
-    auto breathe = [&](double phase) { return static_cast<float>(0.93 + 0.07 * std::sin(t * 2 * 3.14159265 / 3.2 + phase)); };
-    const float left = cx - barW / 2 - dot + 2, right = cx + barW / 2 + dot - 2;
-    if (solid) {
-        float k = breathe(0);
-        dc_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(left, cy), dot * k, dot * k), solid.Get());
-        k = breathe(3.14159265);
-        dc_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(right, cy), dot * k, dot * k), solid.Get());
-    }
-    D2D1_ROUNDED_RECT bar = D2D1::RoundedRect(D2D1::RectF(cx - barW / 2, cy - barH / 2, cx + barW / 2, cy + barH / 2), barH / 2, barH / 2);
-    ComPtr<ID2D1SolidColorBrush> barBase;
-    if (SUCCEEDED(dc_->CreateSolidColorBrush(Rgba(0x3F5A1A), &barBase))) dc_->FillRoundedRectangle(bar, barBase.Get());
-    {
-        const double run = std::fmod(t, 2.4) / 2.4;
-        const float x0 = cx - barW / 2 - barW + static_cast<float>(Smooth(run)) * barW * 2;
-        D2D1_GRADIENT_STOP stops[] = {{0.f, Rgba(0xB9F25A, 0.f)}, {0.45f, Rgba(0xE7FFB8)}, {0.55f, Rgba(0xB9F25A)}, {1.f, Rgba(0xB9F25A, 0.f)}};
-        ComPtr<ID2D1GradientStopCollection> sc;
-        ComPtr<ID2D1LinearGradientBrush> b;
-        if (SUCCEEDED(dc_->CreateGradientStopCollection(stops, 4, &sc)) &&
-            SUCCEEDED(dc_->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(D2D1::Point2F(x0, cy), D2D1::Point2F(x0 + barW, cy)), sc.Get(), &b)))
-            dc_->FillRoundedRectangle(bar, b.Get());
-    }
+    // Ground: a touch lighter at the top and the bottom.
+    if (auto bg = linear({0, 0}, {0, H}, {{0.f, Rgba(0x07090D)}, {0.55f, Rgba(0x05070A)}, {1.f, Rgba(0x0A0C10)}}))
+        dc_->FillRectangle(D2D1::RectF(0, 0, W, H), bg.Get());
 
-    // The message.
-    const bool cycle = st.multi && st.message == kLangs[0];
-    std::wstring text = st.message;
-    float alpha = 1.f, dy = 0.f;
-    if (cycle) {
-        const int i = static_cast<int>(t / kLangSeconds) % kLangCount;
-        text = kLangs[i];
-        const double ph = std::fmod(t, kLangSeconds) / kLangSeconds;
-        const double in = Smooth(ph / 0.2), out = 1 - Smooth((ph - 0.8) / 0.2);
-        alpha = static_cast<float>(std::min(in, out));
-        dy = static_cast<float>((ph < 0.5 ? 1 - in : -(1 - out)) * textSize * 0.3);
-    }
-    IDWriteFontCollection* family = fonts_ ? fonts_.Get() : nullptr;
-    ComPtr<IDWriteTextFormat> fmt;
-    HRESULT hr = dwrite_->CreateTextFormat(family ? L"Geist" : L"Segoe UI", family, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
-                                           DWRITE_FONT_STRETCH_NORMAL, textSize, L"fr-fr", &fmt);
-    if (SUCCEEDED(hr)) {
-        fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-        fmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        ComPtr<IDWriteTextLayout> layout;
-        const float boxW = W * 0.88f, boxH = textSize * 2.6f;
-        if (SUCCEEDED(dwrite_->CreateTextLayout(text.c_str(), static_cast<UINT32>(text.size()), fmt.Get(), boxW, boxH, &layout))) {
-            ComPtr<IDWriteTextLayout1> l1;
-            if (SUCCEEDED(layout.As(&l1)))
-                l1->SetCharacterSpacing(0, -0.05f * textSize, 0, DWRITE_TEXT_RANGE{0, static_cast<UINT32>(text.size())});
-            const float top = H * 0.5f - boxH / 2 + textSize * 0.25f + dy;
-            D2D1_GRADIENT_STOP stops[] = {{0.f, Rgba(0xFFFFFF, alpha)}, {1.f, Rgba(0xC3CBD6, alpha)}};
-            ComPtr<ID2D1GradientStopCollection> sc;
-            ComPtr<ID2D1LinearGradientBrush> b;
-            if (SUCCEEDED(dc_->CreateGradientStopCollection(stops, 2, &sc)) &&
-                SUCCEEDED(dc_->CreateLinearGradientBrush(
-                    D2D1::LinearGradientBrushProperties(D2D1::Point2F(0, top + boxH * 0.3f), D2D1::Point2F(0, top + boxH * 0.7f)), sc.Get(), &b)))
-                dc_->DrawTextLayout(D2D1::Point2F((W - boxW) / 2, top), layout.Get(), b.Get(), D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+    ComPtr<ID2D1Factory> factory;
+    dc_->GetFactory(&factory);
+    if (animated) {
+        // Rays from a lamp above the screen, swaying slowly (conic gradient in CSS).
+        const float sway = static_cast<float>(4 * std::sin(t * 2 * kPi / 14 - kPi / 2));
+        const float glow = static_cast<float>(0.9 + 0.1 * std::sin(t * 2 * kPi / 14 - kPi / 2));
+        const D2D1_POINT_2F apex = D2D1::Point2F(cx, -122 * s);
+        struct Ray { float deg, half; uint32_t rgb; float a; };
+        const Ray rays[] = {{168, 6, 0xFFAA8C, 0.10f}, {180, 6, 0xFFC8AA, 0.07f}, {191, 5, 0xB9F25A, 0.05f}, {201, 6, 0xFFAA8C, 0.09f}};
+        const float len = H * 1.5f;
+        for (const Ray& r : rays) {
+            // Three nested wedges: bright in the middle, soft on the sides.
+            for (int k = 1; k <= 3; ++k) {
+                const float half = r.half * k / 3.f;
+                auto dir = [&](float deg) {
+                    const double a = (deg + sway) * kPi / 180;
+                    return D2D1::Point2F(apex.x + len * static_cast<float>(std::sin(a)), apex.y - len * static_cast<float>(std::cos(a)));
+                };
+                ComPtr<ID2D1PathGeometry> g;
+                ComPtr<ID2D1GeometrySink> sink;
+                if (!factory || FAILED(factory->CreatePathGeometry(&g)) || FAILED(g->Open(&sink))) continue;
+                sink->BeginFigure(apex, D2D1_FIGURE_BEGIN_FILLED);
+                sink->AddLine(dir(r.deg - half));
+                sink->AddLine(dir(r.deg + half));
+                sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+                sink->Close();
+                const float a = r.a / 3 * glow;
+                if (auto br = linear(apex, D2D1::Point2F(apex.x, apex.y + len), {{0.f, Rgba(r.rgb, a)}, {0.75f, Rgba(r.rgb, a * 0.4f)}, {1.f, Rgba(r.rgb, 0.f)}}))
+                    dc_->FillGeometry(g.Get(), br.Get());
+            }
+        }
+        radial(cx, 120 * s, 450 * s, 320 * s, {{0.f, Rgba(0xFF8C6E, 0.16f)}, {1.f, Rgba(0xFF8C6E, 0.f)}});
+
+        // Dust drifting up through the light.
+        struct Mote { float x, y, r; double off; };
+        const Mote dust[] = {{0.33f, 0.58f, 1.5f, 0}, {0.44f, 0.53f, 1.f, 3}, {0.55f, 0.64f, 2.f, 6}, {0.64f, 0.56f, 1.f, 9},
+                             {0.39f, 0.42f, 2.5f, 4.5}, {0.59f, 0.44f, 1.5f, 7.5}, {0.50f, 0.69f, 1.f, 1.5}};
+        for (const Mote& m : dust) {
+            const double p = frac((t + m.off) / 12);
+            const float a = static_cast<float>(std::min({1.0, p / 0.15, (1 - p) / 0.15}));
+            const float x = W * m.x + static_cast<float>(p) * 60 * s, y = H * m.y - static_cast<float>(p) * 220 * s;
+            if (auto br = solid(0xFFE9DE, a)) dc_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x, y), m.r * s, m.r * s), br.Get());
         }
     }
 
-    // The status line, small and spaced out.
-    const wchar_t* sub = !st.app ? L"OUVRE HYPHN SUR LE PC" : !st.phone ? L"IPHONE HORS LIGNE" : videoExpected ? L"L’IMAGE ARRIVE…" : nullptr;
-    if (sub) {
-        const float subSize = std::clamp(H * 0.019f, 10.f, 18.f);
-        ComPtr<IDWriteTextFormat> sf;
-        if (SUCCEEDED(dwrite_->CreateTextFormat(family ? L"Geist Mono" : L"Consolas", family, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_FONT_STYLE_NORMAL,
-                                                DWRITE_FONT_STRETCH_NORMAL, subSize, L"fr-fr", &sf))) {
-            sf->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-            ComPtr<IDWriteTextLayout> layout;
-            UINT32 n = static_cast<UINT32>(wcslen(sub));
-            if (SUCCEEDED(dwrite_->CreateTextLayout(sub, n, sf.Get(), W, subSize * 2, &layout))) {
-                ComPtr<IDWriteTextLayout1> l1;
-                if (SUCCEEDED(layout.As(&l1))) l1->SetCharacterSpacing(0, 0.22f * subSize, 0, DWRITE_TEXT_RANGE{0, n});
-                ComPtr<ID2D1SolidColorBrush> b;
-                if (SUCCEEDED(dc_->CreateSolidColorBrush(Rgba(0xF1F3F6, 0.55f), &b)))
-                    dc_->DrawTextLayout(D2D1::Point2F(0, H * 0.5f + textSize * 1.25f), layout.Get(), b.Get());
+    // Light under the sign, and the line of the floor.
+    radial(cx, 390 * s, 310 * s, 60 * s, {{0.f, Rgba(0xFF9678, 0.22f)}, {0.6f, Rgba(0xB9F25A, 0.06f)}, {1.f, Rgba(0xB9F25A, 0.f)}});
+    if (auto br = linear({0, 0}, {W, 0}, {{0.f, Rgba(0xFFC8B4, 0.f)}, {0.5f, Rgba(0xFFC8B4, 0.25f)}, {1.f, Rgba(0xFFC8B4, 0.f)}}))
+        dc_->FillRectangle(D2D1::RectF(0, 390 * s, W, 390 * s + std::max(1.f, s)), br.Get());
+
+    // The sign, swinging a little on its wires; it flickers now and then.
+    const float swing = animated ? static_cast<float>(-1.2 * std::cos(t * 2 * kPi / 7)) : 0.f;
+    float hum = 1.f;
+    if (animated) {
+        const double p = frac(t / 6);
+        if (p >= 0.47 && p < 0.48) hum = static_cast<float>(1 - (p - 0.47) / 0.01 * 0.45);
+        else if (p >= 0.48 && p < 0.49) hum = static_cast<float>(0.55 + (p - 0.48) / 0.01 * 0.45);
+        else if (p >= 0.49 && p < 0.51) hum = static_cast<float>(1 - (p - 0.49) / 0.02 * 0.3);
+        else if (p >= 0.51 && p < 0.52) hum = static_cast<float>(0.7 + (p - 0.51) / 0.01 * 0.3);
+    }
+    dc_->SetTransform(D2D1::Matrix3x2F::Rotation(swing, D2D1::Point2F(cx, 0)));
+    for (float wx : {-86 * s, 86 * s})
+        if (auto br = linear({0, 0}, {0, 186 * s}, {{0.f, Rgba(0xF1F3F6, 0.f)}, {1.f, Rgba(0xF1F3F6, 0.35f)}}))
+            dc_->FillRectangle(D2D1::RectF(cx + wx, 0, cx + wx + std::max(1.f, s), 186 * s), br.Get());
+
+    const float ty = 214 * s;
+    // Neon glow faked with wider, fainter strokes under the tube.
+    struct Halo { float extra, a; };
+    const Halo halos[] = {{44, 0.07f}, {24, 0.14f}, {12, 0.28f}, {5, 0.5f}};
+    auto ring = [&](float x, uint32_t core, uint32_t glow) {
+        const D2D1_ELLIPSE e = D2D1::Ellipse(D2D1::Point2F(x, ty), 25.5f * s, 25.5f * s);
+        for (const Halo& h : halos)
+            if (auto br = solid(glow, h.a * hum)) dc_->DrawEllipse(e, br.Get(), (5 + h.extra) * s);
+        if (auto br = solid(core, hum)) dc_->DrawEllipse(e, br.Get(), 5 * s);
+    };
+    const float barL = cx - 116 * s, barR = cx + 116 * s, barH = 9 * s;
+    for (const Halo& h : halos) {
+        const float e = h.extra * s / 2;
+        if (auto br = solid(0xFFFFFF, h.a * 0.8f * hum))
+            dc_->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(barL - e, ty - barH / 2 - e, barR + e, ty + barH / 2 + e), barH / 2 + e, barH / 2 + e), br.Get());
+    }
+    if (auto br = solid(0xFFFFFF, hum))
+        dc_->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(barL, ty - barH / 2, barR, ty + barH / 2), barH / 2, barH / 2), br.Get());
+    ring(cx - 142 * s, 0xFFD9CF, 0xFF7A66);
+    ring(cx + 142 * s, 0xD9F3FF, 0x5AC8FA);
+
+    // Packets between the PC and the iPhone: coral and lime one way, cyan the other.
+    struct Packet { bool toLeft; float w; uint32_t rgb, glow; double dur, off; };
+    const Packet packets[] = {{false, 22, 0xFF7A66, 0xFF7A66, 1.9, 0}, {false, 12, 0xFF9A88, 0xFF7A66, 1.4, 0.8},
+                              {false, 8, 0xB9F25A, 0xB9F25A, 2.6, 1.7},  {true, 26, 0x5AC8FA, 0x5AC8FA, 2.2, 0.4},
+                              {true, 10, 0x9BE1FF, 0x5AC8FA, 1.6, 1.1},  {true, 16, 0x5AC8FA, 0x5AC8FA, 3.0, 2.2}};
+    for (const Packet& p : packets) {
+        const double ph = frac((t + p.off) / p.dur);
+        const float e = static_cast<float>(Smooth(ph));
+        const float x = p.toLeft ? barR - e * (barR - barL) : barL + e * (barR - barL);
+        const float a = static_cast<float>(std::min({1.0, ph / 0.12, (1 - ph) / 0.2})) * hum;
+        const float k = ph < 0.12 ? static_cast<float>(0.4 + ph / 0.12 * 0.85) : ph < 0.8 ? static_cast<float>(1.25 - (ph - 0.12) / 0.68 * 0.25)
+                                                                                         : static_cast<float>(1 - (ph - 0.8) / 0.2 * 0.6);
+        const float hw = p.w * s * k / 2, hh = 2.5f * s;
+        if (auto br = solid(p.glow, a * 0.35f))
+            dc_->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x - hw - 5 * s, ty - hh - 4 * s, x + hw + 5 * s, ty + hh + 4 * s), 6 * s, 6 * s), br.Get());
+        if (auto br = solid(p.rgb, a)) dc_->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x - hw, ty - hh, x + hw, ty + hh), hh, hh), br.Get());
+    }
+    dc_->SetTransform(D2D1::Matrix3x2F::Identity());
+
+    // The message: thin Geist, centred under the floor line.
+    IDWriteFontCollection* family = fonts_ ? fonts_.Get() : nullptr;
+    const float size = std::min(92 * s, W * 0.074f);
+    const float textY = 495 * s;
+    auto format = [&](const wchar_t* locale) {
+        ComPtr<IDWriteTextFormat> f;
+        if (SUCCEEDED(dwrite_->CreateTextFormat(family ? L"Geist" : L"Segoe UI", family, DWRITE_FONT_WEIGHT_EXTRA_LIGHT, DWRITE_FONT_STYLE_NORMAL,
+                                                DWRITE_FONT_STRETCH_NORMAL, size, locale, &f))) {
+            f->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+            f->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        }
+        return f;
+    };
+    auto layoutOf = [&](IDWriteTextFormat* f, const wchar_t* text, UINT32 n, float boxW) {
+        ComPtr<IDWriteTextLayout> l;
+        if (SUCCEEDED(dwrite_->CreateTextLayout(text, n, f, boxW, size * 1.6f, &l))) {
+            ComPtr<IDWriteTextLayout1> l1;
+            if (SUCCEEDED(l.As(&l1))) l1->SetCharacterSpacing(0, -0.04f * size, 0, DWRITE_TEXT_RANGE{0, n});
+        }
+        return l;
+    };
+
+    if (!(st.multi && st.message == kLangs[0].text)) {
+        // A message of the user's own: still, wrapped if long.
+        if (auto f = format(L"fr-fr")) {
+            f->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+            f->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            ComPtr<IDWriteTextLayout> l;
+            const float boxW = W * 0.92f;
+            if (SUCCEEDED(dwrite_->CreateTextLayout(st.message.c_str(), static_cast<UINT32>(st.message.size()), f.Get(), boxW, size * 2.4f, &l)))
+                if (auto br = solid(0xF1F3F6, 1.f)) dc_->DrawTextLayout(D2D1::Point2F((W - boxW) / 2, textY - size * 1.2f), l.Get(), br.Get());
+        }
+    } else {
+        // Each letter comes up out of the blur 30 ms after the one before and
+        // leaves the same way; the line before may still be leaving.
+        const int cur = static_cast<int>(t / kLangSeconds);
+        const double ph = t - cur * kLangSeconds;
+        for (int back = 1; back >= 0; --back) {
+            const Lang& lang = kLangs[((cur - back) % kLangCount + kLangCount) % kLangCount];
+            const double local = ph + back * kLangSeconds;
+            auto f = format(lang.locale);
+            if (!f) continue;
+            const UINT32 n = static_cast<UINT32>(wcslen(lang.text));
+            auto full = layoutOf(f.Get(), lang.text, n, 100000.f);
+            if (!full) continue;
+            // Per letter: [start, length] in the text and its advance.
+            std::vector<DWRITE_CLUSTER_METRICS> clusters(n);
+            UINT32 count = 0;
+            if (lang.whole || FAILED(full->GetClusterMetrics(clusters.data(), n, &count))) {
+                DWRITE_TEXT_METRICS m{};
+                full->GetMetrics(&m);
+                clusters.assign(1, DWRITE_CLUSTER_METRICS{});
+                clusters[0].width = m.widthIncludingTrailingWhitespace;
+                clusters[0].length = static_cast<UINT16>(n);
+                count = 1;
+            }
+            float lineW = 0;
+            for (UINT32 i = 0; i < count; ++i) lineW += clusters[i].width;
+            float x = cx - lineW / 2;
+            UINT32 pos = 0;
+            for (UINT32 i = 0; i < count; ++i) {
+                const DWRITE_CLUSTER_METRICS& c = clusters[i];
+                const double q = local - i * 0.03;
+                float a = 0, dy = 0;
+                if (q > 0 && q < 0.936) {
+                    const double e = 1 - std::pow(1 - q / 0.936, 3);
+                    a = static_cast<float>(e);
+                    dy = static_cast<float>((1 - e) * 19 * s);
+                } else if (q >= 0.936 && q < 2.106) {
+                    a = 1;
+                } else if (q >= 2.106 && q < 2.527) {
+                    const double e = (q - 2.106) / 0.421;
+                    a = static_cast<float>(1 - e);
+                    dy = static_cast<float>(-e * 11 * s);
+                }
+                if (a > 0.003f) {
+                    auto one = layoutOf(f.Get(), lang.text + pos, c.length, c.width + size);
+                    if (one)
+                        if (auto br = solid(0xF1F3F6, a)) dc_->DrawTextLayout(D2D1::Point2F(x, textY - size * 0.8f + dy), one.Get(), br.Get(), D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+                }
+                x += c.width;
+                pos += c.length;
             }
         }
     }
-    hr = dc_->EndDraw();
+    HRESULT hr = dc_->EndDraw();
     dc_->SetTarget(nullptr);
     return hr;
 }

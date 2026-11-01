@@ -460,7 +460,14 @@ const CAM_DEFAULTS = {
   ev: 0, focus: 50, wb: 5600, afA: true, wbA: true, torch: false, stab: 0,
   msg: 'Je reviens bientôt', multi: true, wst: 0, prof: 1, lens: 1, front: false, mirror: false, turn: 0,
 };
-const LANGS = ['Je reviens bientôt', 'Be right back', 'Vuelvo enseguida', 'Bin gleich zurück', 'Torno subito', 'Volto já', 'すぐ戻ります', '곧 돌아올게요'];
+// [lang, text], 2.6 s each (same list and order in apps/desktop-vcam/src/feed.cpp).
+const LANGS = [
+  ['fr', 'Je reviens bientôt'], ['en', 'Be right back'], ['es', 'Vuelvo enseguida'], ['de', 'Bin gleich zurück'],
+  ['it', 'Torno subito'], ['pt', 'Volto já'], ['nl', 'Ben zo terug'], ['pl', 'Zaraz wracam'],
+  ['tr', 'Hemen dönüyorum'], ['ru', 'Скоро вернусь'], ['uk', 'Скоро повернуся'], ['ar', 'سأعود قريبًا'],
+  ['hi', 'थोड़ी देर में वापस'], ['zh', '马上回来'], ['ja', 'すぐ戻ります'], ['ko', '곧 돌아올게요'],
+  ['vi', 'Quay lại ngay'], ['id', 'Segera kembali'],
+];
 
 // Video from the iPhone (spec `Cam - Flux v1`): Annex-B packets over a local
 // WebSocket, decoded by WebCodecs on the graphics card. Only the newest frame
@@ -619,17 +626,27 @@ const LENS_L = ['0,5×', '1×', '2×', '5×'];
 // Windows webcam draws the same design itself (apps/desktop-vcam).
 function waitScreen(c, sub) {
   const cycle = c.multi && c.msg === CAM_DEFAULTS.msg;
+  // Letter by letter, 30 ms apart; Arabic and Hindi stay whole (joined letters).
+  const line = ([lang, t], i) => {
+    const parts = lang === 'ar' || lang === 'hi' ? [t] : Array.from(t);
+    return `<div class="wl" lang="${lang}"${lang === 'ar' ? ' dir="rtl"' : ''}>${parts.map((ch, j) =>
+      `<span style="animation-delay:${(i * 2.6 + j * 0.03).toFixed(2)}s">${ch === ' ' ? '&nbsp;' : esc(ch)}</span>`).join('')}</div>`;
+  };
   const text = cycle
-    ? `<div class="wmsg cycle" aria-label="${esc(c.msg)}">${LANGS.map((l, i) => `<span style="animation-delay:${(i * 2.6).toFixed(1)}s">${esc(l)}</span>`).join('')}</div>`
-    : `<div class="wmsg"><span class="still">${esc(c.msg)}</span></div>`;
+    ? `<div class="wmsg" aria-label="${esc(c.msg)}">${LANGS.map(line).join('')}</div>`
+    : `<div class="wmsg"><div class="wl still">${esc(c.msg)}</div></div>`;
   return `<div class="wait2${c.wst === 1 ? ' minimal' : ''}">
-    <div class="aurora" aria-hidden="true"><i class="a1"></i><i class="a2"></i><i class="a3"></i></div>
-    <div class="grain" aria-hidden="true"></div>
-    <div class="wcenter">
-      <div class="wmark" aria-hidden="true"><span class="d"></span><span class="b"><i></i></span><span class="d"></span></div>
-      ${text}
-      ${sub ? `<div class="wsub">${sub}</div>` : ''}
+    <div class="rays" aria-hidden="true"><i></i></div>
+    <div class="halo" aria-hidden="true"></div>
+    <div class="dust" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="neon" aria-hidden="true">
+      <span class="w"></span><span class="w"></span>
+      <div class="tube"><span class="ring"></span><span class="bar"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ring r"></span></div>
     </div>
+    <div class="floor" aria-hidden="true"></div>
+    <div class="hair" aria-hidden="true"></div>
+    ${text}
+    ${sub ? `<div class="wsub">${sub}</div>` : ''}
   </div>`;
 }
 
