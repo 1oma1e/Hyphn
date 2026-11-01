@@ -28,5 +28,7 @@ Une décision par fichier, numérotée. Modèle : `_modele.md`. Statuts : `propo
 | [[ADR-0023 Connexion gardee et reconnexion facile]] | Liaison gardée en arrière-plan (~30 s), essais toutes les 5 s, « Reconnecter » des deux côtés, reprise du direct en 5 min, écran d'attente en miroir dans la webcam | accepte (2026-11-01), miroir retiré par ADR-0024 |
 | [[ADR-0022 Webcam Windows par DLL qui decode]] | Phase 5 en avance : DLL Media Foundation qui décode le flux compressé reçu par tuyau nommé ; plugin OBS ; écran d'attente Animé ou Minimal | accepte (2026-10-31) |
 | [[ADR-0024 Ecran d'attente a l'endroit dans la webcam]] | La webcam envoie l'écran d'attente à l'endroit : les autres le lisent sur Discord (plus de miroir) | accepte (2026-11-01) |
+| [[ADR-0025 Tourner applique par l'iPhone]] | Bouton « Tourner » (90° par clic) à côté du miroir, appliqué par l'iPhone (`CamControl.turn`) | accepte (2026-11-01) |
+| [[ADR-0026 Recharger le service camera de Windows]] | Le service caméra de Windows garde l'ancienne DLL : arrêté après l'installation ; au lancement, à trancher | propose |
 
 Liens : [[00-Accueil]]
