@@ -346,6 +346,15 @@ impl Hub {
     }
 
     /// « Accepter » / « Refuser » in the PC's confirmation (ADR-0030).
+    /// « OK » on a finished send's window: back to rest, also after a reload
+    /// of the window.
+    pub fn dismiss_drop(&self) {
+        let mut st = self.lock();
+        if matches!(st.drop.state.as_str(), "done" | "failed") {
+            st.drop = DropProgress::default();
+        }
+    }
+
     pub fn answer_drop(&self, yes: bool) {
         if let Some(tx) = self.lock().drop_answer.take() {
             let _ = tx.send(yes);
@@ -1380,6 +1389,9 @@ mod tests {
         assert_eq!(r.hub.view().drop.already, 2);
         assert_eq!(std::fs::read_dir(&month).unwrap().count(), 1, "nothing stored twice");
         assert!(r.hub.store.drop_index().assets.contains("B2"));
+        // « OK » on the end window: back to rest for good.
+        r.hub.dismiss_drop();
+        assert!(r.hub.view().drop.state.is_empty());
     }
 
     #[tokio::test]

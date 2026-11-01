@@ -595,6 +595,7 @@ struct DropView: View {
         switch dropper.phase {
         case .idle: return "choose"
         case .preparing: return "preparing"
+        case .alreadySent: return "alreadySent"
         case .review: return "review"
         case .waitingPC: return "waitingPC"
         case .sending: return "sending"
@@ -649,6 +650,31 @@ struct DropView: View {
                             Text("Je prépare l’envoi…").font(.geist(17, .semibold))
                             Text("Je demande au PC ce qu’il a déjà.").font(.geist(13)).foregroundStyle(Ink.tx2)
                         }
+                    }
+                }
+            case let .alreadySent(already, total):
+                card {
+                    VStack(alignment: .leading, spacing: 12) {
+                        icon("arrow.triangle.2.circlepath", Ink.am)
+                        Text(already == total ? "Déjà envoyé\(total > 1 ? "s" : "")" : "\(already) déjà envoyé\(already > 1 ? "s" : "")")
+                            .font(.geist(26, .semibold)).tracking(-0.8)
+                        Text(already == total
+                             ? "\(total > 1 ? "Ces \(total) éléments sont" : "Cet élément est") déjà arrivé\(total > 1 ? "s" : "") sur \(link.pcName)."
+                             : "Sur les \(total) choisis, \(already) sont déjà arrivés sur \(link.pcName).")
+                            .font(.geist(15)).foregroundStyle(Ink.tx2)
+                        Text("Si tu les as supprimés du PC, renvoie-les. Ceux encore présents ne seront pas copiés deux fois.")
+                            .font(.geist(13)).foregroundStyle(Ink.tx3)
+                        if already < total {
+                            Button("Envoyer les \(total - already) nouveau\(total - already > 1 ? "x" : "")") { dropper.answerAlready(false) }
+                                .buttonStyle(PrimaryButtonStyle(fill: Ink.cy, text: .black)).padding(.top, 4)
+                            Button("Tout renvoyer") { dropper.answerAlready(true) }.buttonStyle(GhostButtonStyle())
+                        } else {
+                            Button("Les renvoyer") { dropper.answerAlready(true) }
+                                .buttonStyle(PrimaryButtonStyle(fill: Ink.cy, text: .black)).padding(.top, 4)
+                        }
+                        Button("Annuler") { dropper.cancel() }
+                            .font(.geist(15, .medium)).foregroundStyle(Ink.tx2)
+                            .frame(maxWidth: .infinity).padding(.top, 2)
                     }
                 }
             case let .review(items, bytes):

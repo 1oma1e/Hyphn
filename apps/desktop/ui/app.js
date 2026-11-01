@@ -1332,6 +1332,8 @@ const Drop = {
     },
     seen: () => {
       Drop.seen = Drop.resultKey(S.drop || {});
+      // Kept by the PC too: a reload of the window does not show it again.
+      invoke('drop_dismiss');
       layer.innerHTML = '';
       Drop.doneKey = '';
       Drop.update();

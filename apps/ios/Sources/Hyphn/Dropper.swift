@@ -21,6 +21,8 @@ final class Dropper: ObservableObject {
     enum Phase: Equatable {
         case idle
         case preparing
+        /// Some were already sent to this PC: send them again or not (E6).
+        case alreadySent(already: Int, total: Int)
         /// How much, before Evan says « Envoyer » (ADR-0030).
         case review(items: Int, bytes: Int64)
         /// The PC shows its confirmation; waiting for the answer there.
@@ -73,6 +75,7 @@ final class Dropper: ObservableObject {
     private var inbox: [Event] = []
     private var waiter: CheckedContinuation<Event, Never>?
     private var confirm: CheckedContinuation<Bool, Never>?
+    private var resend: CheckedContinuation<Bool?, Never>?
     private var peerCancelled = false
     private var timer: Timer?
     private var samples: [Int64] = []
@@ -87,7 +90,7 @@ final class Dropper: ObservableObject {
 
     var busy: Bool {
         switch phase {
-        case .preparing, .review, .waitingPC, .sending: true
+        case .preparing, .alreadySent, .review, .waitingPC, .sending: true
         default: false
         }
     }
@@ -103,9 +106,17 @@ final class Dropper: ObservableObject {
         confirm = nil
     }
 
+    /// The answer to « déjà envoyés »: true sends them again, false only the
+    /// new ones, nil cancels.
+    func answerAlready(_ again: Bool?) {
+        resend?.resume(returning: again)
+        resend = nil
+    }
+
     func cancel() {
         guard busy else { return }
         confirmReview(false)
+        answerAlready(nil)
         conn?.sendAndClose(.dropCancel)
         conn = nil
         finish(.failed("Envoi annulé."))
@@ -115,6 +126,7 @@ final class Dropper: ObservableObject {
     func stopForBackground() {
         guard busy else { return }
         confirmReview(false)
+        answerAlready(nil)
         finish(.failed("Envoi arrêté : Hyphn est passé en arrière-plan. Relance-le en gardant Hyphn ouvert."))
     }
 
@@ -182,7 +194,20 @@ final class Dropper: ObservableObject {
             case let other: return lost("liste", other)
             }
         }
-        already = ids.count - missing.count
+        // E6: already sent to this PC: Evan decides (he may have deleted them
+        // there). Sent again, a file still on the PC is not copied twice.
+        let known = ids.count - missing.count
+        already = known
+        if known > 0 {
+            phase = .alreadySent(already: known, total: ids.count)
+            let again = await withCheckedContinuation { resend = $0 }
+            guard busy, let again else { return }
+            if again {
+                missing = ids
+                already = 0
+            }
+            phase = .preparing
+        }
         let found = PHAsset.fetchAssets(withLocalIdentifiers: missing, options: nil)
         var byId: [String: PHAsset] = [:]
         found.enumerateObjects { a, _, _ in byId[a.localIdentifier] = a }
@@ -439,6 +464,7 @@ final class Dropper: ObservableObject {
         if case .msg(.dropCancel) = e {
             peerCancelled = true
             confirmReview(false)
+            answerAlready(nil)
         }
         if let w = waiter {
             waiter = nil

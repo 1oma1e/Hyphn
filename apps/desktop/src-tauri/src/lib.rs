@@ -301,6 +301,12 @@ fn drop_answer(yes: bool, h: State<'_, Hyphn>) {
     h.hub.answer_drop(yes);
 }
 
+/// « OK » after a send: the PC forgets the result (a reload does not show it again).
+#[tauri::command]
+fn drop_dismiss(h: State<'_, Hyphn>) {
+    h.hub.dismiss_drop();
+}
+
 /// Thumbnails of what the iPhone wants to send, for the confirmation.
 #[tauri::command]
 fn drop_previews(h: State<'_, Hyphn>) -> Vec<String> {
@@ -752,6 +758,7 @@ pub fn run() {
             drop_cancel,
             open_drop_folder,
             drop_answer,
+            drop_dismiss,
             drop_previews,
             drop_suggest_dir,
             drop_dir_free,

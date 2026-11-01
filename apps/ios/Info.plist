@@ -5,9 +5,9 @@
 	<key>CFBundleDisplayName</key>
 	<string>Hyphn</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.7.0</string>
+	<string>0.7.1</string>
 	<key>CFBundleVersion</key>
-	<string>9</string>
+	<string>10</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Hyphn uses the camera to read the PC's QR code and to become your PC's webcam.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
