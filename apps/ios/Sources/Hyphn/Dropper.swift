@@ -152,12 +152,22 @@ final class Dropper: ObservableObject {
 
         guard let c = link?.openDrop() else { return finish(.failed("Le PC n’est pas joignable : ouvre Hyphn sur le PC.")) }
         conn = c
-        c.onReady = { [weak self] in
+        inbox = []
+        // Only this send's connection speaks: the « closed » of a cancelled
+        // one comes late and must not end the next send (« Liaison perdue »).
+        c.onReady = { [weak self, weak c] in
+            guard let self, let c, self.conn === c else { return }
             c.send(.dropHello)
-            self?.post(.ready)
+            self.post(.ready)
         }
-        c.onMessage = { [weak self] m in self?.post(.msg(m)) }
-        c.onClose = { [weak self] _ in self?.post(.closed) }
+        c.onMessage = { [weak self, weak c] m in
+            guard let self, let c, self.conn === c else { return }
+            self.post(.msg(m))
+        }
+        c.onClose = { [weak self, weak c] _ in
+            guard let self, let c, self.conn === c else { return }
+            self.post(.closed)
+        }
         c.start()
         guard case .ready = await next() else { return lost() }
 

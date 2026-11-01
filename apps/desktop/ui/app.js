@@ -1029,6 +1029,8 @@ const SORTS = [
   ['year', 'Année', '2026 › IMG_1234.HEIC', false],
   ['flat', 'Tout ensemble', 'IMG_1234.HEIC', false],
 ];
+// Time on each step; the CSS animations follow (--simd in app.css).
+const SIM_MS = 4500;
 const SIM_STEPS = ['Ouvre Drop sur l’iPhone', 'Choisis : photos, album, fichiers…', 'Vois l’aperçu et envoie', 'Confirme sur ce PC', 'C’est rangé et vérifié'];
 const SORT_NAME = { year_month: 'par année puis par mois', year: 'par année', flat: 'tous ensemble' };
 const Drop = {
@@ -1070,7 +1072,7 @@ const Drop = {
   unmount() {
     this.simRun(false);
   },
-  // Plays the steps one after the other, 2.8 s each (the CSS follows data-s).
+  // Plays the steps one after the other, SIM_MS each (the CSS follows data-s).
   simRun(on) {
     const el = $('#d-sim');
     if (!on || !el) {
@@ -1084,7 +1086,7 @@ const Drop = {
     this.simAt = -1;
     const next = () => this.simShow((this.simAt + 1) % SIM_STEPS.length);
     next();
-    this.simT = setInterval(next, 2800);
+    this.simT = setInterval(next, SIM_MS);
   },
   simShow(i) {
     const el = $('#d-sim');
