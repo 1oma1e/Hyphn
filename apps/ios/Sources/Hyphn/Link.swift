@@ -37,6 +37,16 @@ final class PCLink: ObservableObject {
     @Published private(set) var camControl = CamControl()
     /// The PC asked for the picture while another tab was open.
     @Published var wantsCam = false
+    /// The last link events, newest first, shown in Réglages: to find the
+    /// cuts Evan sees when a device goes to sleep.
+    @Published private(set) var journal: [String] = []
+
+    func log(_ what: String) {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        journal.insert("\(f.string(from: Date()))  \(what)", at: 0)
+        if journal.count > 40 { journal.removeLast() }
+    }
 
     let identity = DeviceIdentity.shared
     let info = DeviceInfo()
@@ -69,7 +79,15 @@ final class PCLink: ObservableObject {
         foreground = true
         endBackgroundTask()
         info.start()
+        log("Hyphn au premier plan")
         if session != nil {
+            // The PC pings every 5 s: quiet for longer, the link died while
+            // away (sleep, Wi-Fi): start again now, not after the watchdog.
+            if Date().timeIntervalSince(lastHeard) > 7 {
+                log("Liaison muette au retour : reconnexion")
+                reconnectNow()
+                return
+            }
             // Still linked (short trip to another app): just refresh the status.
             send(.deviceStatus(info.current(withStorage: true)))
         } else if pc != nil {
@@ -82,6 +100,7 @@ final class PCLink: ObservableObject {
     /// link closes cleanly before the app is suspended.
     func enterBackground() {
         foreground = false
+        log("Hyphn en arrière-plan")
         info.stop()
         stopSearch()
         retry?.cancel()
@@ -98,6 +117,7 @@ final class PCLink: ObservableObject {
 
     private func backgroundExpired() {
         if !foreground {
+            log("Arrière-plan trop long : liaison fermée")
             session?.close()
             session = nil
             if pc != nil { phase = .offline("") }
@@ -245,6 +265,7 @@ final class PCLink: ObservableObject {
         retry?.cancel()
         stopSearch()
         phase = .searching
+        log("Recherche du PC…")
         // E3: the last known address...
         tryConnect(PinnedConnection(host: pc.host, port: pc.port, pinned: pc.fingerprint, identity: identity))
         // ...and Bonjour at the same time (E2).
@@ -259,6 +280,7 @@ final class PCLink: ObservableObject {
             try? await Task.sleep(for: .seconds(10))
             guard !Task.isCancelled, let self, self.session == nil else { return }
             self.stopSearch()
+            self.log("PC introuvable en 10 s, nouvel essai dans 5 s")
             self.phase = .offline("PC introuvable. Vérifie que Hyphn est ouvert sur le PC et que les deux sont sur le même Wi-Fi.")
             self.scheduleRetry()
         }
@@ -337,7 +359,8 @@ final class PCLink: ObservableObject {
         session = c
         if !attempts.contains(where: { $0 === c }) { attempts.append(c) }
         c.onMessage = { [weak self] m in self?.handle(m) }
-        c.onClose = { [weak self] _ in self?.sessionClosed(c) }
+        c.onClose = { [weak self] failure in self?.sessionClosed(c, failure) }
+        log("Relié à \(pcName)")
         watch(c)
         stopSearch()
         phase = .online
@@ -358,6 +381,7 @@ final class PCLink: ObservableObject {
                 try? await Task.sleep(for: .seconds(5))
                 guard let self, self.session === c else { return }
                 if Date().timeIntervalSince(self.lastHeard) > 15 {
+                    self.log("Rien reçu du PC depuis 15 s : liaison fermée")
                     c.close()
                     return
                 }
@@ -365,9 +389,14 @@ final class PCLink: ObservableObject {
         }
     }
 
-    private func sessionClosed(_ c: PinnedConnection) {
+    private func sessionClosed(_ c: PinnedConnection, _ failure: PinnedConnection.Failure? = nil) {
         attempts.removeAll { $0 === c }
         guard session === c else { return }
+        switch failure {
+        case let .network(e): log("Liaison coupée (\(e))")
+        case .closed: log("Liaison fermée par le PC")
+        default: log("Liaison fermée")
+        }
         session = nil
         camera?.stopStreaming()
         if foreground, pc != nil {

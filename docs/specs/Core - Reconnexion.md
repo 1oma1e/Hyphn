@@ -28,6 +28,8 @@ Deux choses différentes : le **lien** (appairage) est permanent jusqu'au bouton
 - **E7 — Hors ligne.** Rien trouvé en 10 s → « PC hors ligne », puis un nouvel essai toutes les 5 s tant que l'app est ouverte ; « Reconnecter » des deux côtés repart de zéro ([[ADR-0023 Connexion gardee et reconnexion facile]]).
 - **E8 — Port.** Le PC écoute sur un port fixe ; s'il est pris, sur un port au hasard, gardé ensuite. Le port annoncé par Bonjour est celui du QR et celui gardé par l'iPhone.
 
+- **E9 — Retour au premier plan et journal** (2026-11-01, coupures vues par Evan après une mise en veille). Au retour au premier plan, si l'iPhone n'a rien reçu du PC depuis plus de 7 s (le PC envoie un Ping toutes les 5 s), la liaison est tenue pour morte et refaite tout de suite, sans attendre le chien de garde de 15 s. Les deux côtés tiennent un journal de la liaison : le PC dans son terminal (heure, début et fin de session avec la raison, réponses de plus de 150 ms), l'iPhone dans Réglages › « Journal de la liaison » (40 derniers événements).
+
 ## Cas limites
 | Cas | Ce qui se passe |
 |---|---|

@@ -818,6 +818,41 @@ struct DropView: View {
     }
 }
 
+/// Réglages › « Journal de la liaison »: the last link events, to see what
+/// happened when the PC and the iPhone lost each other.
+struct LinkJournal: View {
+    @EnvironmentObject var link: PCLink
+    @State private var open = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button { withAnimation(.spring(duration: 0.4)) { open.toggle() } } label: {
+                HStack {
+                    Text("Journal de la liaison").font(.geist(15))
+                    Spacer()
+                    Image(systemName: open ? "chevron.up" : "chevron.down").foregroundStyle(Ink.tx3)
+                }
+                .padding(14)
+            }
+            .foregroundStyle(Ink.tx)
+            if open {
+                VStack(alignment: .leading, spacing: 6) {
+                    if link.journal.isEmpty {
+                        Text("Rien pour l’instant.").font(.geist(13)).foregroundStyle(Ink.tx3)
+                    }
+                    ForEach(Array(link.journal.enumerated()), id: \.offset) { _, line in
+                        Text(line).font(.mono(12)).foregroundStyle(Ink.tx2).textSelection(.enabled)
+                    }
+                }
+                .padding([.horizontal, .bottom], 14)
+            }
+        }
+        .background(Ink.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Ink.line))
+        .padding(.top, 12)
+    }
+}
+
 /// One choice of « Que veux-tu envoyer ? »: a glowing icon, a title, a line.
 struct ChoiceCard: View {
     let symbol: String
@@ -1113,6 +1148,8 @@ struct SettingsView: View {
                             .font(.geist(14)).foregroundStyle(Ink.tx2).padding([.horizontal, .bottom], 14)
                     }
                 }
+
+                LinkJournal()
 
                 Text("Hyphn \(DeviceInfo.appVersion) · protocole v\(protocolVersion)")
                     .font(.mono(12)).foregroundStyle(Ink.tx3)

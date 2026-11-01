@@ -225,6 +225,12 @@ button { font-family: inherit; }
 .vbox.peek { z-index: 5; right: 20px; bottom: 92px; width: 24%; height: 24%; border-radius: 14px; box-shadow: 0 0 0 1px rgba(255,255,255,.16), 0 18px 50px rgba(0,0,0,.55); }
 .ptag { position: absolute; left: 8px; top: 8px; padding: 3px 8px; border-radius: 8px; background: rgba(10,13,18,.7); backdrop-filter: blur(10px); font-size: 11px; font-weight: 600; color: #F1F3F6; opacity: 0; transition: opacity .3s; pointer-events: none; }
 .vbox.peek .ptag { opacity: 1; }
+/* « Cacher l'aperçu »: the × on the tile, and nothing left behind the waiting screen. */
+.pclose { position: absolute; right: 8px; top: 8px; width: 26px; height: 26px; border-radius: 9px; display: grid; place-items: center; border: 0; padding: 0; background: rgba(10,13,18,.7); backdrop-filter: blur(10px); color: #F1F3F6; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity .3s, background .2s; }
+.pclose svg { width: 14px; height: 14px; }
+.vbox.peek .pclose { opacity: 1; pointer-events: auto; }
+.vbox.peek .pclose:hover { background: rgba(255,122,102,.85); }
+.vbox.nopeek .scene.vid { opacity: 0; }
 @keyframes breathe { 50% { transform: translateX(-50%) translateY(-4px); } }
 @keyframes fadein { from { opacity: 0; } }
 @keyframes hop { 0%,100% { transform: none; opacity: .4; } 40% { transform: translateY(-6px); opacity: 1; } }

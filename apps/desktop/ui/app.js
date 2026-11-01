@@ -39,6 +39,8 @@ const I = {
   alert: svg('<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/>'),
   mirror: svg('<path d="M12 3v18" stroke-dasharray="2 2.5"/><path d="M9 6L3 18h6zM15 6l6 12h-6z"/>'),
   turn: svg('<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>'),
+  eye: svg('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
+  eyeOff: svg('<path d="M3 3l18 18M10.6 5.1A9.7 9.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7a9.5 9.5 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/>'),
   swap: svg('<path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/>'),
 };
 
@@ -698,6 +700,7 @@ const Cam = {
           <div class="vbox" id="c-vbox">
             <canvas class="scene vid" id="c-scene" role="img" aria-label="Image de la caméra de l’iPhone"></canvas>
             <span class="ptag">Aperçu · vous seul</span>
+            <button class="pclose" type="button" aria-label="Cacher l’aperçu" title="Cacher l’aperçu" data-act="peek">${I.close}</button>
           </div>
           <div id="c-wait"></div>
           <div class="hud" style="left:18px;top:18px" id="c-hudl"></div>
@@ -711,10 +714,10 @@ const Cam = {
     this.push();
     // While paused, the iPhone sends a small preview only while this page is
     // on screen (ADR-0027).
-    invoke('cam_preview', { on: !document.hidden });
+    this.pushPreview();
     // Hidden window (tray, minimized): no decoding for nobody to see.
     this.onVis = () => {
-      invoke('cam_preview', { on: !document.hidden });
+      this.pushPreview();
       document.hidden ? Video.stop() : Video.start($('#c-scene'));
     };
     document.addEventListener('visibilitychange', this.onVis);
@@ -726,6 +729,14 @@ const Cam = {
     Video.stop();
   },
   connected: () => !!(S && S.connected),
+  // The paused preview is on unless Evan hid it (dock or ×); hidden, the
+  // iPhone sends nothing at all while paused (ADR-0027).
+  peekOn() {
+    return this.cs.peek !== false;
+  },
+  pushPreview() {
+    invoke('cam_preview', { on: !document.hidden && this.peekOn() });
+  },
   // « live » lives in Rust (snapshot); the window only asks to change it.
   isLive: () => !!(S && S.cam.live),
   pushLens() {
@@ -756,7 +767,9 @@ const Cam = {
     const show = !live || !conn || !Video.fresh();
     // Paused with the preview coming in: the picture sits in a corner, over
     // the waiting screen, for this window only (ADR-0027).
-    $('#c-vbox').classList.toggle('peek', !live && conn && Video.fresh());
+    $('#c-vbox').classList.toggle('peek', !live && conn && Video.fresh() && this.peekOn());
+    // Hidden: the old picture must not stay behind the waiting screen either.
+    $('#c-vbox').classList.toggle('nopeek', !live && !this.peekOn());
     const key = [show, conn, c.wst, c.multi, c.msg, live, phone && phone.open, !!(S && S.device)].join('|');
     if (key === this.overlayKey) return;
     this.overlayKey = key;
@@ -783,6 +796,7 @@ const Cam = {
       <button class="db${c.mirror ? ' on' : ''}" type="button" aria-label="Miroir" aria-pressed="${!!c.mirror}" title="Miroir (l’écran d’attente reste à l’endroit)" data-act="mirror">${I.mirror}</button>
       <button class="db${c.turn ? ' on' : ''}" type="button" aria-label="Tourner de 90°" title="Tourner de 90° (${(c.turn | 0) * 90}°)" data-act="turn">${I.turn}</button>
       <button class="db" type="button" aria-label="Retourner la caméra" data-act="flipcam">${I.flip}</button>
+      ${live ? '' : `<button class="db${this.peekOn() ? ' on' : ''}" type="button" aria-label="${this.peekOn() ? 'Cacher' : 'Montrer'} l’aperçu" aria-pressed="${this.peekOn()}" title="${this.peekOn() ? 'Cacher l’aperçu (rien n’est envoyé en pause)' : 'Montrer l’aperçu, pour toi seul'}" data-act="peek">${this.peekOn() ? I.eye : I.eyeOff}</button>`}
       <span class="sep"></span>
       <button class="db${this.panel === 'info' ? ' on' : ''}" type="button" aria-label="Infos du flux" data-act="panel" data-v="info">${I.info}</button>
       <button class="db${this.panel === 'set' ? ' on' : ''}" type="button" aria-label="Réglages de la caméra" data-act="panel" data-v="set">${I.sliders}</button>`;
@@ -826,7 +840,7 @@ const Cam = {
       }
       this.dockKey = '';
     }
-    const dockKey = [this.connected(), this.isLive(), this.cs.front, this.cs.lens, this.cs.mirror, this.cs.turn].join('|');
+    const dockKey = [this.connected(), this.isLive(), this.cs.front, this.cs.lens, this.cs.mirror, this.cs.turn, this.peekOn()].join('|');
     if (dockKey !== this.dockKey) {
       this.dockKey = dockKey;
       this.paintDock();
@@ -976,6 +990,13 @@ const Cam = {
     },
     panel: (el) => Cam.openPanel(el.dataset.v),
     close: () => Cam.openPanel(Cam.panel),
+    peek: () => {
+      Cam.cs.peek = !Cam.peekOn();
+      Cam.dockKey = '';
+      Cam.pushPreview();
+      Cam.update();
+      Cam.save();
+    },
     mirror: () => {
       Cam.cs.mirror = !Cam.cs.mirror;
       Cam.paintDock();

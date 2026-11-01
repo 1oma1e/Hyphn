@@ -244,6 +244,27 @@ fn now_unix() -> u64 {
     now_ms() / 1000
 }
 
+/// « 18:42:07 », local time, for the link journal in the terminal.
+pub fn clock() -> String {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::SystemInformation::GetLocalTime;
+        let mut t = unsafe { std::mem::zeroed() };
+        unsafe { GetLocalTime(&mut t) };
+        format!("{:02}:{:02}:{:02}", t.wHour, t.wMinute, t.wSecond)
+    }
+    #[cfg(not(windows))]
+    {
+        format!("{}", now_unix() % 86_400)
+    }
+}
+
+/// One line of the link journal (terminal): when and why the link starts or
+/// ends, to find the cuts Evan sees when a device goes to sleep.
+fn journal(what: &str) {
+    eprintln!("{} hyphn: link: {what}", clock());
+}
+
 fn env(m: Msg) -> Envelope {
     m.into()
 }
@@ -656,15 +677,18 @@ impl Hub {
         });
         self.push_control();
         (self.notify)(UiEvent::Changed);
+        journal(&format!("session {id} started"));
 
         // Silence longer than SILENCE_LIMIT (no Pong, no status) ends the session.
-        loop {
+        let why = loop {
             let m = tokio::select! {
                 r = timeout(SILENCE_LIMIT, read_msg(&mut rd)) => match r {
                     Ok(Ok(Some(m))) => m,
-                    _ => break,
+                    Ok(Ok(None)) => break "closed by the iPhone".to_string(),
+                    Ok(Err(e)) => break format!("error: {e}"),
+                    Err(_) => break format!("no answer for {} s", SILENCE_LIMIT.as_secs()),
                 },
-                _ = kick.notified() => break,
+                _ = kick.notified() => break "replaced by a newer connection".to_string(),
             };
             match m.msg {
                 Some(Msg::DeviceStatus(s)) => {
@@ -674,6 +698,9 @@ impl Hub {
                 }
                 Some(Msg::Pong(p)) => {
                     let rtt = now_ms().saturating_sub(p.id).min(60_000) as u32;
+                    if rtt >= 150 {
+                        journal(&format!("session {id} slow answer: {rtt} ms"));
+                    }
                     if let Some(s) = self.lock().session.as_mut().filter(|s| s.id == id) {
                         s.rtt_ms = Some(rtt);
                     }
@@ -723,11 +750,12 @@ impl Hub {
                     // « Oublier » on the iPhone (E10).
                     let _ = self.store.forget(&hex);
                     self.lock().last_status = None;
-                    break;
+                    break "forgotten on the iPhone".to_string();
                 }
                 _ => {}
             }
-        }
+        };
+        journal(&format!("session {id} ended ({why})"));
         pinger.abort();
         {
             let mut st = self.lock();
