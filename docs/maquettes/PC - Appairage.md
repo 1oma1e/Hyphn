@@ -23,7 +23,7 @@ Ouvert par « + Ajouter » sur [[PC - Accueil]].
 Après le scan, le même code à 4 chiffres que sur l'iPhone s'affiche avec « Oui, relier » / « Non » (voir [[iPhone - Scan QR]]).
 
 ## Ce que contient le QR
-IP et port du PC, empreinte de son certificat, jeton à usage unique (valable 2 minutes), version du protocole. Rien de secret à long terme.
+IP et port du PC, empreinte de son certificat, jeton à usage unique (valable 1 minute), version du protocole. Rien de secret à long terme.
 
 ## États
 | État | Message |

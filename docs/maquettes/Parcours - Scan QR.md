@@ -9,7 +9,7 @@ sequenceDiagram
   participant P as PC (Hyphn)
   participant I as iPhone (Hyphn)
   E->>P: Clique « + Ajouter »
-  P->>P: Crée un jeton à usage unique (2 min)
+  P->>P: Crée un jeton à usage unique (1 min)
   P-->>E: Affiche le QR (IP, port, empreinte PC, jeton, version)
   E->>I: Touche « Scanner le QR code »
   I->>I: Lit le QR, demande l'accès réseau local la 1re fois

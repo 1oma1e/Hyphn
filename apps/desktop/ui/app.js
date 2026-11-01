@@ -359,7 +359,7 @@ const Pair = {
     const m = Math.floor(this.left / 60), s = String(this.left % 60).padStart(2, '0');
     const c = $('#p-clock'), tr = $('#p-track');
     if (c) c.textContent = `${m}:${s}`;
-    if (tr) tr.style.width = (this.left / 120 * 100).toFixed(1) + '%';
+    if (tr) tr.style.width = (this.left / this.offer.seconds_left * 100).toFixed(1) + '%';
   },
   paint() {
     let body = '';
@@ -382,7 +382,7 @@ const Pair = {
             <div class="st"><b>3</b>Vise ce code, c’est tout</div>
           </div>
           <div class="timer">
-            <div class="row" style="justify-content:space-between;font-size:13px;color:var(--tx2)"><span>Usage unique · expire dans</span><span class="mono" id="p-clock" style="color:var(--tx);font-size:20px">2:00</span></div>
+            <div class="row" style="justify-content:space-between;font-size:13px;color:var(--tx2)"><span>Usage unique · expire dans</span><span class="mono" id="p-clock" style="color:var(--tx);font-size:20px">1:00</span></div>
             <div class="track"><span id="p-track" style="width:100%"></span></div>
           </div>
           ${this.err ? `<div class="ban bad" style="margin-bottom:18px">${I.alert}<span>${esc(this.err)}</span></div>` : ''}

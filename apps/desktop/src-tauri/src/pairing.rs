@@ -19,11 +19,11 @@ pub const URI_PREFIX: &str = "HY";
 /// The QR of before ADR-0028: refused with « mets à jour ».
 #[cfg(test)]
 const OLD_PREFIX: &str = "HYPHN:";
-pub const TOKEN_TTL: Duration = Duration::from_secs(120);
+pub const TOKEN_TTL: Duration = Duration::from_secs(60);
 /// The QR carries the start of the PC fingerprint (96 bits, still impossible
 /// to forge, ADR-0028); the iPhone keeps the full one after the handshake.
 pub const QR_FINGERPRINT_LEN: usize = 12;
-/// 48 bits, single use, 2 minutes, each guess a TLS connection to the PC.
+/// 48 bits, single use, 1 minute (ADR-0028), each guess a TLS connection to the PC.
 pub const TOKEN_LEN: usize = 6;
 pub type Token = [u8; TOKEN_LEN];
 /// IPv4 (4) + port (2) + fingerprint start + token, in one base32 block.
