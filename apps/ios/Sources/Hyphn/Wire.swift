@@ -54,6 +54,8 @@ struct CamControl: Equatable {
     var mirror = false
     /// Quarter turns clockwise on top of the level picture, 0..3 (Cam dock on the PC).
     var turn: UInt32 = 0
+    /// Paused, PC Cam page on screen: send a small preview for the PC window (ADR-0027).
+    var preview = false
 }
 
 struct CamState {
@@ -346,6 +348,7 @@ extension Msg {
                     case 14: c.stabilization = UInt32(truncatingIfNeeded: v)
                     case 15: c.mirror = v != 0
                     case 16: c.turn = UInt32(truncatingIfNeeded: v) % 4
+                    case 17: c.preview = v != 0
                     default: break
                     }
                 }

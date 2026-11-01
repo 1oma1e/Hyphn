@@ -139,6 +139,7 @@ message CamControl {
   uint32 stabilization = 14; // 0 off, 1 standard, 2 cinematic
   bool mirror = 15;       // picture flipped left-right on the iPhone (never the waiting screen)
   uint32 turn = 16;       // quarter turns clockwise on top of the level picture, 0..3 (never the waiting screen)
+  bool preview = 17;      // paused, PC Cam page on screen: send a small preview (480p15) for the PC window only (ADR-0027)
 }
 
 message CamState {

@@ -218,6 +218,12 @@ button { font-family: inherit; }
 .pv { position: relative; width: 100%; aspect-ratio: 16/9; border-radius: 28px; overflow: hidden; background: #0A0C10; box-shadow: 0 0 0 1px var(--ln), 0 40px 120px rgba(0,0,0,.45); color: #F1F3F6; }
 .scene { position: absolute; inset: 0; transition: filter .3s, transform .5s cubic-bezier(.2,.9,.3,1); background: radial-gradient(120% 100% at 30% 20%, #2A1F19 0%, #15120F 45%, #0A0C10 100%); }
 .scene.vid { width: 100%; height: 100%; object-fit: contain; background: #000; }
+/* The picture box: full size live, a corner over the waiting screen while paused (ADR-0027). */
+.vbox { position: absolute; right: 0; bottom: 0; width: 100%; height: 100%; z-index: 1; overflow: hidden; border-radius: 0; transition: right .5s, bottom .5s, width .5s, height .5s, border-radius .5s, box-shadow .5s; transition-timing-function: cubic-bezier(.2,.9,.3,1); }
+/* The picture keeps the 16:9 of the frame: 24 % wide is 24 % high. */
+.vbox.peek { z-index: 5; right: 20px; bottom: 92px; width: 24%; height: 24%; border-radius: 14px; box-shadow: 0 0 0 1px rgba(255,255,255,.16), 0 18px 50px rgba(0,0,0,.55); }
+.ptag { position: absolute; left: 8px; top: 8px; padding: 3px 8px; border-radius: 8px; background: rgba(10,13,18,.7); backdrop-filter: blur(10px); font-size: 11px; font-weight: 600; color: #F1F3F6; opacity: 0; transition: opacity .3s; pointer-events: none; }
+.vbox.peek .ptag { opacity: 1; }
 @keyframes breathe { 50% { transform: translateX(-50%) translateY(-4px); } }
 @keyframes fadein { from { opacity: 0; } }
 @keyframes hop { 0%,100% { transform: none; opacity: .4; } 40% { transform: translateY(-6px); opacity: 1; } }
@@ -399,6 +405,7 @@ button { font-family: inherit; }
 .wsub { position: absolute; left: 0; right: 0; top: 80cqh; text-align: center; font: 500 clamp(9px, 1.9cqh, 15px) "Geist Mono", monospace; letter-spacing: .22em; text-transform: uppercase; color: rgba(241,243,246,.55); }
 .wsub a { color: #B9F25A; text-decoration: none; }
 /* « Minimal » : l'enseigne et le texte seuls, sans lumière ni mouvement autour. */
+.wait2.shown { animation: none; }
 .wait2.minimal .rays, .wait2.minimal .halo, .wait2.minimal .dust { display: none; }
 .wait2.minimal .neon, .wait2.minimal .tube { animation: none; transform: translateX(-50%); }
 .wait2.minimal .tube { transform: none; }

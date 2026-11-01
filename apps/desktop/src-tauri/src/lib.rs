@@ -359,6 +359,13 @@ fn cam_live(on: bool, h: State<'_, Hyphn>) {
     h.hub.set_live(on);
 }
 
+/// The Cam page is on screen (or not): while paused, the iPhone sends a small
+/// preview for the window only (ADR-0027).
+#[tauri::command]
+fn cam_preview(on: bool, h: State<'_, Hyphn>) {
+    h.hub.update_cam(|c| c.preview = on);
+}
+
 /// The window reads the picture here (WebSocket, `video.rs`).
 #[tauri::command]
 fn cam_video_url(h: State<'_, Hyphn>) -> String {
@@ -573,6 +580,8 @@ fn saved_cam(settings: &Settings) -> CamWanted {
                 num("stab", 0),
             )
         },
+        // Until the Cam page is on screen.
+        preview: false,
     }
 }
 
@@ -679,6 +688,7 @@ pub fn run() {
             cam_set,
             cam_lens,
             cam_live,
+            cam_preview,
             cam_video_url,
             vcam_install
         ])

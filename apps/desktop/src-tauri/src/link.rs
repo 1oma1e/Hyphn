@@ -63,6 +63,9 @@ pub struct CamWanted {
     /// Quarter turns clockwise (Cam dock button), 0..3.
     pub turn: u32,
     pub tune: Tune,
+    /// The Cam page is on screen on the PC: while paused, the iPhone sends a
+    /// small preview for the window only (ADR-0027).
+    pub preview: bool,
 }
 
 /// Picture settings applied by the iPhone camera itself (Réglages › Caméra).
@@ -101,6 +104,10 @@ pub struct PhoneCam {
     pub lens: u32,
     pub lens_count: u32,
 }
+
+/// Video readers whose name starts with this are Hyphn windows: the only ones
+/// that get the paused preview (ADR-0027).
+pub const WINDOW_SINK: &str = "window";
 
 /// Called with each video frame (the window, the Windows webcam, OBS);
 /// false = that reader was too slow and skipped it.
@@ -628,7 +635,10 @@ impl Hub {
                 let mut st = self.lock();
                 st.stats.frames += 1;
                 st.stats.bytes += f.data.len() as u64;
-                st.video_sinks.iter().map(|(_, s)| s.clone()).collect()
+                // Paused: only the preview for the window (ADR-0027); the
+                // webcam and OBS keep the waiting screen, they get nothing.
+                let live = st.cam.live;
+                st.video_sinks.iter().filter(|(n, _)| live || n.starts_with(WINDOW_SINK)).map(|(_, s)| s.clone()).collect()
             };
             let mut skipped = false;
             for sink in sinks {
@@ -671,6 +681,7 @@ impl State {
             stabilization: self.cam.tune.stab.min(2),
             mirror: self.cam.mirror,
             turn: self.cam.turn % 4,
+            preview: self.cam.preview && !self.cam.live,
         }
     }
 }
@@ -720,6 +731,7 @@ mod tests {
                 mirror: false,
                 turn: 0,
                 tune: Tune::default(),
+                preview: false,
             },
             Box::new(move |e| ev.lock().unwrap().push(e)),
         )
@@ -913,6 +925,33 @@ mod tests {
         assert_eq!((p[0], p[1]), (Codec::Hevc as u8, 1));
         assert_eq!(u32::from_le_bytes(p[10..14].try_into().unwrap()), 1920);
         assert_eq!(&p[18..], &frame.data[..]);
+    }
+
+    #[tokio::test]
+    async fn the_paused_preview_reaches_the_window_only() {
+        let r = rig().await;
+        let phone = Identity::generate("phone").unwrap();
+        let mut ctl = pair(&r, &phone).await;
+        assert!(matches!(recv(&mut ctl).await, Some(Msg::CamControl(c)) if !c.preview));
+        r.hub.update_cam(|c| c.preview = true);
+        assert!(matches!(recv(&mut ctl).await, Some(Msg::CamControl(c)) if c.preview && !c.live));
+        let count = |n: &Arc<Mutex<usize>>| *n.lock().unwrap();
+        let (win, cam) = (Arc::new(Mutex::new(0usize)), Arc::new(Mutex::new(0usize)));
+        let (w, c) = (win.clone(), cam.clone());
+        r.hub.set_video_sink("window-0", Some(Arc::new(move |_| { *w.lock().unwrap() += 1; true })));
+        r.hub.set_video_sink("vcam-0", Some(Arc::new(move |_| { *c.lock().unwrap() += 1; true })));
+        let mut media = connect(r.addr, &phone, r.hub.identity.fingerprint).await.unwrap();
+        send(&mut media, Msg::VideoHello(proto::VideoHello {})).await;
+        let frame = proto::VideoFrame { keyframe: true, codec: Codec::H264 as i32, width: 854, height: 480, ..Default::default() };
+        send(&mut media, Msg::VideoFrame(frame.clone())).await;
+        wait_until(|| count(&win) == 1).await;
+        assert_eq!(count(&cam), 0, "the webcam keeps the waiting screen");
+        // Live: the preview flag goes, everyone gets the picture.
+        r.hub.set_live(true);
+        assert!(matches!(recv(&mut ctl).await, Some(Msg::CamControl(c)) if c.live && !c.preview));
+        send(&mut media, Msg::VideoFrame(frame)).await;
+        wait_until(|| count(&cam) == 1).await;
+        assert_eq!(count(&win), 2);
     }
 
     #[tokio::test]

@@ -15,7 +15,7 @@ use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, 
 use tokio_tungstenite::tungstenite::http::StatusCode;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::link::{keyed_sink, video_packet, Hub};
+use crate::link::{keyed_sink, video_packet, Hub, WINDOW_SINK};
 
 /// Frames waiting for the window. Beyond that the window is behind: the frame
 /// is skipped and the iPhone sends a keyframe, rather than a growing delay.
@@ -55,7 +55,7 @@ async fn serve(hub: Arc<Hub>, tcp: TcpStream, path: String) {
     let Ok(ws) = tokio_tungstenite::accept_hdr_async(tcp, check).await else { return };
     let (mut out, mut inbox) = ws.split();
     let (tx, mut rx) = mpsc::channel::<Vec<u8>>(QUEUE);
-    let name = format!("window-{}", NEXT.fetch_add(1, Ordering::Relaxed));
+    let name = format!("{WINDOW_SINK}-{}", NEXT.fetch_add(1, Ordering::Relaxed));
     hub.set_video_sink(&name, Some(keyed_sink(move |f| tx.try_send(video_packet(f)).is_ok())));
     // The decoder starts from a keyframe, at once.
     hub.request_key();

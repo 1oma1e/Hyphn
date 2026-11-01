@@ -667,7 +667,10 @@ const Cam = {
     root.innerHTML = `
       <main class="cam-wrap enter">
         <div class="pv" id="c-pv">
-          <canvas class="scene vid" id="c-scene" role="img" aria-label="Image de la caméra de l’iPhone"></canvas>
+          <div class="vbox" id="c-vbox">
+            <canvas class="scene vid" id="c-scene" role="img" aria-label="Image de la caméra de l’iPhone"></canvas>
+            <span class="ptag">Aperçu · vous seul</span>
+          </div>
           <div id="c-wait"></div>
           <div class="hud" style="left:18px;top:18px" id="c-hudl"></div>
           <div class="hud" style="right:18px;top:18px" id="c-hudr"></div>
@@ -678,13 +681,20 @@ const Cam = {
     Video.start($('#c-scene'));
     this.paintDock();
     this.push();
+    // While paused, the iPhone sends a small preview only while this page is
+    // on screen (ADR-0027).
+    invoke('cam_preview', { on: !document.hidden });
     // Hidden window (tray, minimized): no decoding for nobody to see.
-    this.onVis = () => (document.hidden ? Video.stop() : Video.start($('#c-scene')));
+    this.onVis = () => {
+      invoke('cam_preview', { on: !document.hidden });
+      document.hidden ? Video.stop() : Video.start($('#c-scene'));
+    };
     document.addEventListener('visibilitychange', this.onVis);
   },
   unmount() {
     // The camera keeps going: Discord or OBS may be using the Windows webcam.
     document.removeEventListener('visibilitychange', this.onVis);
+    invoke('cam_preview', { on: false });
     Video.stop();
   },
   connected: () => !!(S && S.connected),
@@ -716,6 +726,9 @@ const Cam = {
     const live = this.isLive();
     const phone = S && S.cam.phone;
     const show = !live || !conn || !Video.fresh();
+    // Paused with the preview coming in: the picture sits in a corner, over
+    // the waiting screen, for this window only (ADR-0027).
+    $('#c-vbox').classList.toggle('peek', !live && conn && Video.fresh());
     const key = [show, conn, c.wst, c.multi, c.msg, live, phone && phone.open, !!(S && S.device)].join('|');
     if (key === this.overlayKey) return;
     this.overlayKey = key;
@@ -726,7 +739,11 @@ const Cam = {
     const sub = !S || !S.device ? 'Aucun iPhone relié · <a href="#pair">Relier</a>'
       : !conn ? 'iPhone hors ligne'
         : live ? 'L’image arrive…' : '';
+    // Already on screen (a new message, style…): no fade in again, the camera
+    // picture behind must never show through.
+    const shown = !!$('#c-wait .wait2');
     $('#c-wait').innerHTML = waitScreen(c, sub);
+    if (shown) $('#c-wait .wait2').classList.add('shown');
   },
   paintDock() {
     const c = this.cs;
@@ -883,9 +900,13 @@ const Cam = {
       <div class="tabs" role="tablist">${['Qualité', 'Caméra', 'Écran d’attente'].map((n, i) => `<button type="button" role="tab" aria-selected="${i === this.tab}" class="${i === this.tab ? 'on' : ''}" data-act="tab" data-v="${i}">${n}</button>`).join('')}</div>
       <div class="dbody">${body}</div>`;
   },
-  changed(send) {
-    this.overlayKey = '';
-    this.paintWait();
+  // `wait`: the change touches the waiting screen (message, style…); mirror,
+  // turn and lens never do, so it stays as it is.
+  changed(send, wait = true) {
+    if (wait) {
+      this.overlayKey = '';
+      this.paintWait();
+    }
     if (this.panel === 'set') {
       const scroll = $('.dbody') ? $('.dbody').scrollTop : 0;
       this.paintDrawer();
@@ -931,19 +952,19 @@ const Cam = {
       Cam.cs.mirror = !Cam.cs.mirror;
       Cam.paintDock();
       Cam.pushLens();
-      Cam.changed(false);
+      Cam.changed(false, false);
     },
     turn: () => {
       Cam.cs.turn = ((Cam.cs.turn | 0) + 1) % 4;
       Cam.paintDock();
       Cam.pushLens();
-      Cam.changed(false);
+      Cam.changed(false, false);
     },
     flipcam: () => {
       Cam.cs.front = !Cam.cs.front;
       Cam.paintDock();
       Cam.pushLens();
-      Cam.changed(false);
+      Cam.changed(false, false);
     },
     slide: (el) => {
       const k = el.dataset.k;

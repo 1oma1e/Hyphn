@@ -1,7 +1,8 @@
 // Cam (spec `Cam - Flux v1`): capture, preview, hardware encoding
 // (VideoToolbox, RULES Énergie 3: on iPhone HEVC and H.264 always use the media engine) and the media connection. Opening the Cam
 // tab starts the camera paused (ADR-0018); nothing is encoded or sent while
-// paused, and the media connection closes 30 s after a pause (Énergie 2).
+// paused, except a small preview while the PC Cam page is on screen
+// (ADR-0027), and the media connection closes 30 s after the last frame (Énergie 2).
 
 @preconcurrency import AVFoundation
 import Foundation
@@ -30,8 +31,22 @@ final class Camera: NSObject, ObservableObject {
     private var mediaCloser: Task<Void, Never>?
     private var statsTimer: Timer?
     private let pump = FramePump()
+    /// Frames are encoded and sent: live, or the paused preview.
+    private var sending = false
+    /// Height and frame rate the capture was last set up with.
+    private var format: (height: UInt32, fps: UInt32)?
 
     static let lensFactors: [CGFloat] = [0.5, 1, 2, 5]
+    /// The paused preview for the PC window (ADR-0027): small, to spare the battery.
+    static let previewQuality: (height: UInt32, fps: UInt32, kbps: UInt32) = (480, 15, 1_500)
+
+    /// Paused, with the PC Cam page on screen.
+    private var previewing: Bool { !live && control.preview && isOpen && !denied }
+
+    /// What the camera captures and the encoder sends.
+    private var wanted: (height: UInt32, fps: UInt32, kbps: UInt32) {
+        previewing ? Self.previewQuality : (control.height, control.fps, control.bitrateKbps)
+    }
 
     var state: CamState {
         CamState(open: isOpen, live: live, width: UInt32(size.width), height: UInt32(size.height), fps: fps,
@@ -71,13 +86,16 @@ final class Camera: NSObject, ObservableObject {
 
     /// Called when the app leaves the foreground or the PC is gone.
     func stopStreaming() {
+        // No PC to watch a preview; it asks again once back.
+        control.preview = false
         setLive(false)
         closeMedia()
     }
 
     private func startSession() {
         denied = false
-        configure(front: control.front, lens: control.lens, height: control.height, fps: control.fps)
+        let w = wanted
+        configure(front: control.front, lens: control.lens, height: w.height, fps: w.fps)
         let s = session
         work.async { if !s.isRunning { s.startRunning() } }
         // The PC may have asked for the picture before the tab opened.
@@ -88,22 +106,29 @@ final class Camera: NSObject, ObservableObject {
     // MARK: Settings from the PC, and from the buttons here
 
     func apply(_ c: CamControl) {
-        let reconfigure = c.front != control.front || c.height != control.height || c.fps != control.fps
         let relens = c.lens != control.lens
         let retune = !Self.sameTune(c, control)
         let remirror = c.mirror != control.mirror || c.turn != control.turn
         control = c
         if remirror, let r = rotation { applyRotation(r.videoRotationAngleForHorizonLevelCapture) }
-        if isOpen, !denied {
-            if reconfigure { configure(front: c.front, lens: c.lens, height: c.height, fps: c.fps) }
-            else {
-                if relens { setZoom(c.lens) }
-                if retune { applyTune() }
-            }
+        let wasConfigured = setLive(c.live && isOpen)
+        if isOpen, !denied, !wasConfigured {
+            if relens { setZoom(c.lens) }
+            if retune { applyTune() }
         }
-        pump.configure(codec: c.codec, bitrateKbps: c.bitrateKbps, fps: c.fps, height: c.height)
-        setLive(c.live && isOpen)
         report()
+    }
+
+    /// Sets the capture and the encoder to `wanted` (live or preview); true
+    /// when the capture had to be set up again (lens and tune included).
+    @discardableResult
+    private func applyFormat() -> Bool {
+        let w = wanted
+        pump.configure(codec: control.codec, bitrateKbps: w.kbps, fps: w.fps, height: w.height)
+        guard isOpen, !denied else { return false }
+        guard front != control.front || format?.height != w.height || format?.fps != w.fps else { return false }
+        configure(front: control.front, lens: control.lens, height: w.height, fps: w.fps)
+        return true
     }
 
     /// The PC window or the Windows webcam starts decoding: next frame is a keyframe.
@@ -120,7 +145,8 @@ final class Camera: NSObject, ObservableObject {
 
     func flip() {
         control.front.toggle()
-        configure(front: control.front, lens: control.lens, height: control.height, fps: control.fps)
+        let w = wanted
+        configure(front: control.front, lens: control.lens, height: w.height, fps: w.fps)
         report(byUser: true)
     }
 
@@ -188,10 +214,24 @@ final class Camera: NSObject, ObservableObject {
 
     // MARK: Live
 
-    private func setLive(_ on: Bool) {
+    /// Live or paused, then the capture format and the sending that follow.
+    /// True when the capture was set up again.
+    @discardableResult
+    private func setLive(_ on: Bool) -> Bool {
         let on = on && isOpen && !denied
-        guard on != live else { return }
-        live = on
+        if on != live {
+            live = on
+            // From the preview to live: the webcam and OBS start now, from a keyframe.
+            if on, sending { pump.requestKey() }
+        }
+        let reconfigured = applyFormat()
+        setSending(live || previewing)
+        return reconfigured
+    }
+
+    private func setSending(_ on: Bool) {
+        guard on != sending else { return }
+        sending = on
         if on {
             mediaCloser?.cancel()
             mediaCloser = nil
@@ -220,11 +260,11 @@ final class Camera: NSObject, ObservableObject {
         c.onClose = { [weak self, weak c] _ in
             guard let self, let c, self.pump.connection === c else { return }
             self.pump.connection = nil
-            // Lost while live (Wi-Fi hiccup): try again once the session is back.
-            if self.live {
+            // Lost while sending (Wi-Fi hiccup): try again once the session is back.
+            if self.sending {
                 Task { @MainActor [weak self] in
                     try? await Task.sleep(for: .seconds(1))
-                    if let self, self.live, self.pump.connection == nil { self.openMedia() }
+                    if let self, self.sending, self.pump.connection == nil { self.openMedia() }
                 }
             }
         }
@@ -277,6 +317,7 @@ final class Camera: NSObject, ObservableObject {
             dev.unlockForConfiguration()
         }
         session.commitConfiguration()
+        format = (height, fps)
         setZoom(lens)
         applyTune()
 

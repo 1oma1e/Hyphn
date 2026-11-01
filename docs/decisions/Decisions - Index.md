@@ -30,5 +30,6 @@ Une décision par fichier, numérotée. Modèle : `_modele.md`. Statuts : `propo
 | [[ADR-0024 Ecran d'attente a l'endroit dans la webcam]] | La webcam envoie l'écran d'attente à l'endroit : les autres le lisent sur Discord (plus de miroir) | accepte (2026-11-01) |
 | [[ADR-0025 Tourner applique par l'iPhone]] | Bouton « Tourner » (90° par clic) à côté du miroir, appliqué par l'iPhone (`CamControl.turn`) | accepte (2026-11-01) |
 | [[ADR-0026 Recharger le service camera de Windows]] | Le service caméra de Windows garde l'ancienne DLL : arrêté après l'installation, et au lancement si la DLL chargée n'est pas la bonne (A+) | accepte (2026-11-01) |
+| [[ADR-0027 Apercu en coin pendant la pause]] | En pause, petit aperçu (15 images/s, 1,5 Mb/s) dans un coin de la fenêtre PC seulement, quand la page Cam est visible ; jamais vers la webcam ni OBS | accepte (2026-11-01) |
 
 Liens : [[00-Accueil]]
