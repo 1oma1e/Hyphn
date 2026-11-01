@@ -1049,7 +1049,8 @@ const Drop = {
   update() {
     const d = S.drop || {};
     const showResult = (d.state === 'done' || d.state === 'failed') && this.seen !== this.resultKey(d);
-    const view = d.state === 'sending' ? 'sending' : showResult ? 'result' : 'rest';
+    // Done: a window with what arrived (below); failed: said in the page.
+    const view = d.state === 'sending' ? 'sending' : showResult && d.state === 'failed' ? 'result' : 'rest';
     const shape = [view, d.state === 'preparing' || d.state === 'asking', S.connected, !!S.device].join('|');
     if (shape !== this.shape) {
       this.shape = shape;
@@ -1066,6 +1067,7 @@ const Drop = {
       </main>`;
     }
     this.confirmBox(d);
+    this.doneBox(d, showResult && d.state === 'done');
     this.fill(d);
     this.simRun(view === 'rest');
   },
@@ -1102,12 +1104,24 @@ const Drop = {
   },
   body(view, d) {
     if (view === 'sending') {
-      return `<span class="lbl">Envoi depuis ${esc(devName())}</span>
-        <div class="drop-big"><span class="mono" id="d-pct">0 %</span><span class="sub" id="d-left"></span></div>
-        <div class="track drop-track"><span id="d-bar" style="width:0%"></span></div>
-        <div class="row drop-stats"><span class="mono" id="d-bytes"></span><span class="mono" id="d-items"></span><span class="mono" id="d-rate"></span><span class="mono" id="d-already"></span></div>
-        <div class="sub drop-cur" id="d-cur"></div>
-        <div class="row" style="margin-top:18px"><button class="btn bad" type="button" data-act="cancel">${I.close}Annuler</button></div>`;
+      // E10: the percentage lives here, the PC knows what really arrived.
+      const wire = '<span class="wire"><i></i><i></i><i></i></span>';
+      return `<div class="dsend">
+        <div class="dring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="bg" cx="60" cy="60" r="52"/><circle class="fg" id="d-ring" cx="60" cy="60" r="52" pathLength="100" stroke-dasharray="0 100"/></svg>
+          <div class="dpct"><span class="mono" id="d-pct">0</span><small>%</small></div></div>
+        <div class="dsend-r">
+          <span class="lbl">Réception depuis ${esc(devName())}</span>
+          <div class="dflow" aria-hidden="true"><span class="node">${I.phone}<em>iPhone</em></span>${wire}<span class="node pc">${I.pc}<em>Vérifié</em></span>${wire}<span class="node fold">${I.folder}<em>Rangé</em></span></div>
+          <div class="dfacts">
+            <div><small>Reçu</small><b class="mono" id="d-bytes">—</b></div>
+            <div><small>Éléments</small><b class="mono" id="d-items">—</b></div>
+            <div><small>Vitesse</small><b class="mono" id="d-rate">—</b></div>
+            <div><small>Reste</small><b class="mono" id="d-left">—</b></div>
+          </div>
+          <div class="dcur"><span class="dlive"></span><span id="d-cur"></span><span class="sub" id="d-already" style="margin:0 0 0 auto"></span></div>
+          <div class="row" style="margin-top:16px"><button class="btn sm bad" type="button" data-act="cancel">${I.close}Annuler</button></div>
+        </div>
+      </div>`;
     }
     if (view === 'result') {
       const ok = d.state === 'done';
@@ -1147,6 +1161,42 @@ const Drop = {
           </div></div><div class="stand"></div><div class="base"></div></div>
         </div>
         <ol class="sim-rail">${SIM_STEPS.map((n, i) => `<li data-act="simGo" data-v="${i}"><b>0${i + 1}</b><span>${n}</span></li>`).join('')}</ol>
+      </div>`;
+  },
+  // E10: what arrived, over the page, until « OK ».
+  doneBox(d, on) {
+    if (!on) {
+      if (this.doneKey) {
+        this.doneKey = '';
+        if (d.state !== 'asking') layer.innerHTML = '';
+      }
+      return;
+    }
+    const key = this.resultKey(d) + '|' + (this.thumbs || []).length;
+    if (key === this.doneKey) return;
+    if (this.doneThumbs !== this.resultKey(d)) {
+      // The thumbnails sent with the plan: the first items that arrived. Once.
+      this.doneThumbs = this.resultKey(d);
+      invoke('drop_previews').then((t) => { this.thumbs = t; this.update(); });
+    }
+    this.doneKey = key;
+    const all = this.thumbs || [];
+    const list = d.items_done > all.length ? all.slice(0, 7) : all;
+    const rest = d.items_done - list.length;
+    const thumbs = list.map((src, i) => `<img src="${src}" alt="" style="animation-delay:${(0.25 + i * 0.06).toFixed(2)}s">`).join('');
+    const kinds = [[d.photos, 'photo'], [d.videos, 'vidéo'], [d.docs, 'fichier']].filter(([n]) => n).map(([n, w]) => `${n} ${w}${n > 1 ? 's' : ''}`).join(' · ');
+    const extra = [d.already ? `${d.already} déjà sur le PC` : '', d.failed ? `${d.failed} non envoyé${d.failed > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ');
+    layer.innerHTML = `<div class="scrim" style="cursor:default"></div>
+      <div class="modal dask ddone" role="dialog" aria-label="Transfert terminé">
+        <div class="dask-head"><span class="dpop">${I.check}</span>
+          <div><span class="lbl">Reçu de ${esc(devName())}</span>
+            <div class="dtitle dlg">${d.items_done ? `${d.items_done} élément${d.items_done > 1 ? 's' : ''} · ${bytes(d.bytes_done)}` : 'Tout était déjà là'}</div></div></div>
+        ${thumbs && d.items_done ? `<div class="dthumbs">${thumbs}${rest > 0 ? `<i>+${rest}</i>` : ''}</div>` : ''}
+        <div class="sub dkinds">${[d.items_done ? `${kinds ? kinds + ' · ' : ''}vérifiés un par un` : '', extra, d.folder ? `Dans ${esc(d.folder)}` : ''].filter(Boolean).join('<br>')}</div>
+        <div class="row" style="margin-top:22px">
+          ${d.files_done ? `<button class="btn cy" type="button" data-act="openLast">${I.folder}Ouvrir le dossier</button>` : ''}
+          <button class="btn" type="button" data-act="seen">OK</button>
+        </div>
       </div>`;
   },
   // The confirmation, over the page, while the iPhone waits (ADR-0030).
@@ -1223,16 +1273,16 @@ const Drop = {
     const set = (id, t) => { const el = $(id); if (el && el.textContent !== t) el.textContent = t; };
     if (d.state === 'sending') {
       const pct = d.bytes ? Math.min(100, Math.floor(d.bytes_done / d.bytes * 100)) : 0;
-      set('#d-pct', pct + ' %');
-      const bar = $('#d-bar');
-      if (bar) bar.style.width = pct + '%';
-      set('#d-bytes', `${bytes(d.bytes_done)} / ${bytes(d.bytes)}`);
-      set('#d-items', `${d.items_done} / ${d.items} éléments`);
-      set('#d-rate', d.rate ? `${bytes(d.rate)}/s` : '');
-      set('#d-already', d.already ? `${d.already} déjà sur le PC` : '');
+      set('#d-pct', String(pct));
+      const ring = $('#d-ring');
+      if (ring) ring.setAttribute('stroke-dasharray', `${pct} 100`);
+      set('#d-bytes', `${bytes(d.bytes_done)} sur ${bytes(d.bytes)}`);
+      set('#d-items', `${d.items_done} sur ${d.items}`);
+      set('#d-rate', d.rate ? `${bytes(d.rate)}/s` : 'calcul…');
       const left = d.rate ? Math.max(0, d.bytes - d.bytes_done) / d.rate : 0;
-      set('#d-left', !d.rate ? 'calcul…' : left < 60 ? 'reste moins d’une minute' : `reste ≈ ${Math.ceil(left / 60)} min`);
-      set('#d-cur', d.current ? `En cours : ${d.current}` : 'Le transfert démarre…');
+      set('#d-left', !d.rate ? 'calcul…' : left < 60 ? '< 1 min' : `≈ ${Math.ceil(left / 60)} min`);
+      set('#d-cur', d.current ? d.current : 'Le transfert démarre…');
+      set('#d-already', d.already ? `${d.already} déjà sur le PC` : '');
     }
     const months = S.drop_months || [];
     const key = JSON.stringify(months);
@@ -1282,11 +1332,16 @@ const Drop = {
     },
     seen: () => {
       Drop.seen = Drop.resultKey(S.drop || {});
+      layer.innerHTML = '';
+      Drop.doneKey = '';
       Drop.update();
     },
     cancel: () => invoke('drop_cancel'),
     open: () => invoke('open_photos_dir').catch((e) => toast(String(e), 'info')),
-    openLast: () => invoke('open_drop_folder').catch((e) => toast(String(e), 'info')),
+    openLast: () => {
+      invoke('open_drop_folder').catch((e) => toast(String(e), 'info'));
+      Drop.acts.seen();
+    },
   },
 };
 

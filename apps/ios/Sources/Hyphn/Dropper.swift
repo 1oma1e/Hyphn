@@ -16,7 +16,6 @@ final class Dropper: ObservableObject {
         case picks([String])
         case album(PHAssetCollection)
         case files([URL])
-        case everythingNew
     }
 
     enum Phase: Equatable {
@@ -296,13 +295,6 @@ final class Dropper: ObservableObject {
         case let .album(c):
             var ids: [String] = []
             PHAsset.fetchAssets(in: c, options: nil).enumerateObjects { a, _, _ in ids.append(a.localIdentifier) }
-            return (ids, 0)
-        case .everythingNew:
-            let o = PHFetchOptions()
-            o.predicate = NSPredicate(format: "mediaType == %d || mediaType == %d", PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue)
-            o.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
-            var ids: [String] = []
-            PHAsset.fetchAssets(with: o).enumerateObjects { a, _, _ in ids.append(a.localIdentifier) }
             return (ids, 0)
         case .files:
             return ([], 0)

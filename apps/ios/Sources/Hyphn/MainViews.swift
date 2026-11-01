@@ -710,37 +710,30 @@ struct DropView: View {
         }
     }
 
-    /// « Que veux-tu envoyer ? » (E3): four choices, coming in one after the other.
+    /// « Que veux-tu envoyer ? » (E1): one big card for photos, two beside
+    /// it for an album and files, coming in one after the other.
     private var choose: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Que veux-tu envoyer ?").font(.geist(22, .semibold)).tracking(-0.6).padding(.top, 4)
-            let rows: [(String, String, String, Color, () -> Void)] = [
-                ("photo.on.rectangle.angled", "Photos et vidéos", "Tu les choisis une par une", Ink.cy, { withPhotos { showPicker = true } }),
-                ("rectangle.stack", "Un album", "Tout un album d’un coup", Ink.li, { withPhotos { showAlbums = true } }),
-                ("folder", "Des fichiers", "Depuis l’app Fichiers", Ink.am, { showFiles = true }),
-                ("sparkles", "Tout le nouveau", "Tout ce que ton PC n’a pas encore", Ink.co, { withPhotos { start(.everythingNew) } }),
-            ]
-            ForEach(Array(rows.enumerated()), id: \.offset) { i, r in
-                Button(action: r.4) {
-                    HStack(spacing: 14) {
-                        icon(r.0, r.3)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(r.1).font(.geist(17, .semibold)).foregroundStyle(Ink.tx)
-                            Text(r.2).font(.geist(13)).foregroundStyle(Ink.tx2)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(Ink.tx3)
-                    }
-                    .padding(14)
-                    .background(Ink.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Ink.line))
+            Button { withPhotos { showPicker = true } } label: {
+                ChoiceCard(symbol: "photo.on.rectangle.angled", color: Ink.cy, title: "Photos et vidéos",
+                           text: "Choisis-les dans ta photothèque, en qualité d’origine.", big: true)
+            }
+            .buttonStyle(PressStyle())
+            .modifier(Arrive(shown: shown, index: 0, online: online))
+            HStack(spacing: 12) {
+                Button { withPhotos { showAlbums = true } } label: {
+                    ChoiceCard(symbol: "rectangle.stack.fill", color: Ink.li, title: "Un album", text: "Tout l’album d’un coup.", big: false)
                 }
                 .buttonStyle(PressStyle())
-                .disabled(!online)
-                .opacity(shown ? (online ? 1 : 0.45) : 0)
-                .offset(y: shown ? 0 : 18)
-                .animation(.spring(duration: 0.55).delay(Double(i) * 0.07), value: shown)
+                .modifier(Arrive(shown: shown, index: 1, online: online))
+                Button { showFiles = true } label: {
+                    ChoiceCard(symbol: "folder.fill", color: Ink.am, title: "Des fichiers", text: "Depuis l’app Fichiers.", big: false)
+                }
+                .buttonStyle(PressStyle())
+                .modifier(Arrive(shown: shown, index: 2, online: online))
             }
+            .disabled(!online)
             if !online {
                 Text("PC hors ligne : ouvre Hyphn sur le PC.").font(.geist(13)).foregroundStyle(Ink.am)
             } else {
@@ -750,39 +743,26 @@ struct DropView: View {
         }
     }
 
+    /// E10: no percentage here (the PC knows what really arrived): the
+    /// photos flying to the PC, and the file going now.
     private var sending: some View {
         let d = dropper
-        let pct = d.bytes > 0 ? min(100, Int(d.bytesDone * 100 / d.bytes)) : 0
-        return VStack(alignment: .leading, spacing: 12) {
-            Text("ENVOI EN COURS").font(.geist(12, .bold)).tracking(1.5).foregroundStyle(Ink.cy)
-            HStack(alignment: .firstTextBaseline) {
-                Text("\(pct) %").font(.mono(46, .semibold)).contentTransition(.numericText())
-                    .animation(.snappy, value: pct)
-                Spacer()
-                Text(Self.left(d)).font(.geist(13)).foregroundStyle(Ink.tx2)
+        return VStack(alignment: .leading, spacing: 14) {
+            SendingFlow()
+            Text("Envoi en cours").font(.geist(26, .semibold)).tracking(-0.8)
+            Text("Suis la progression sur \(link.pcName).").font(.geist(14)).foregroundStyle(Ink.tx2)
+            HStack(spacing: 10) {
+                Image(systemName: "doc").font(.system(size: 13)).foregroundStyle(Ink.cy)
+                Text(d.current.isEmpty ? "Préparation…" : d.current).font(.geist(14)).lineLimit(1).truncationMode(.middle)
+                    .contentTransition(.opacity).animation(.easeOut, value: d.current)
             }
-            GeometryReader { g in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.08))
-                    Capsule().fill(Ink.cy).frame(width: g.size.width * CGFloat(pct) / 100)
-                        .shadow(color: Ink.cy.opacity(0.6), radius: 8)
-                        .animation(.linear(duration: 0.4), value: pct)
-                }
-            }
-            .frame(height: 8)
-            Text("\(Self.size(d.bytesDone)) / \(Self.size(d.bytes)) · \(d.itemsDone) / \(d.items) éléments")
-                .font(.mono(13)).foregroundStyle(Ink.tx2)
-            HStack(spacing: 14) {
-                if d.rate > 0 { Text("\(Self.size(Int64(d.rate)))/s") }
-                if d.already > 0 { Text("\(d.already) déjà sur le PC") }
-            }
-            .font(.mono(13)).foregroundStyle(Ink.tx2)
-            Text(d.current).font(.geist(14)).lineLimit(1).truncationMode(.middle)
+            .padding(.horizontal, 12).frame(height: 38)
+            .background(Color.white.opacity(0.05), in: Capsule())
             if let c = d.cloud {
                 Text("Téléchargement iCloud… \(Int(c * 100)) %").font(.geist(13)).foregroundStyle(Ink.am)
             }
             Text("Garde Hyphn ouvert pendant l’envoi.").font(.geist(13)).foregroundStyle(Ink.tx3)
-            Button("Annuler") { d.cancel() }.buttonStyle(GhostButtonStyle()).padding(.top, 4)
+            Button("Annuler") { d.cancel() }.buttonStyle(GhostButtonStyle()).padding(.top, 2)
         }
     }
 
@@ -810,11 +790,93 @@ struct DropView: View {
     static func size(_ b: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: b, countStyle: .file)
     }
+}
 
-    static func left(_ d: Dropper) -> String {
-        guard d.rate > 0 else { return "calcul…" }
-        let s = Double(max(0, d.bytes - d.bytesDone)) / d.rate
-        return s < 60 ? "reste moins d’une minute" : "reste ≈ \(Int((s / 60).rounded(.up))) min"
+/// One choice of « Que veux-tu envoyer ? »: a glowing icon, a title, a line.
+struct ChoiceCard: View {
+    let symbol: String
+    let color: Color
+    let title: String
+    let text: String
+    let big: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: big ? 14 : 10) {
+            HStack {
+                Image(systemName: symbol)
+                    .font(.system(size: big ? 26 : 21, weight: .medium)).foregroundStyle(color)
+                    .frame(width: big ? 58 : 46, height: big ? 58 : 46)
+                    .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: big ? 18 : 15, style: .continuous))
+                    .shadow(color: color.opacity(0.35), radius: 14)
+                Spacer()
+                Image(systemName: "arrow.up.right").font(.system(size: 13, weight: .bold)).foregroundStyle(Ink.tx3)
+            }
+            Spacer(minLength: 0)
+            Text(title).font(.geist(big ? 22 : 17, .semibold)).tracking(-0.5).foregroundStyle(Ink.tx)
+            Text(text).font(.geist(13)).foregroundStyle(Ink.tx2).multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(big ? 20 : 16)
+        .frame(maxWidth: .infinity, minHeight: big ? 190 : 160, alignment: .topLeading)
+        .background(
+            LinearGradient(colors: [color.opacity(big ? 0.16 : 0.1), Color.clear], startPoint: .topLeading, endPoint: .bottomTrailing),
+            in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .background(Ink.card, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(color.opacity(0.28)))
+    }
+}
+
+/// The choice cards come in one after the other.
+struct Arrive: ViewModifier {
+    let shown: Bool
+    let index: Int
+    let online: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? (online ? 1 : 0.45) : 0)
+            .offset(y: shown ? 0 : 20)
+            .scaleEffect(shown ? 1 : 0.96)
+            .animation(.spring(duration: 0.6).delay(Double(index) * 0.08), value: shown)
+    }
+}
+
+/// While sending: photos leave the iPhone and fly to the PC, one after the other.
+struct SendingFlow: View {
+    @State private var go = false
+    private let colors: [Color] = [Ink.cy, Ink.li, Ink.co, Ink.am]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            end("iphone", Ink.tx)
+            ZStack {
+                Capsule().fill(Color.white.opacity(0.08)).frame(height: 3)
+                GeometryReader { g in
+                    ForEach(0..<4, id: \.self) { i in
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(colors[i])
+                            .frame(width: 18, height: 18)
+                            .shadow(color: colors[i].opacity(0.7), radius: 8)
+                            .offset(x: go ? g.size.width - 18 : 0, y: g.size.height / 2 - 9)
+                            .opacity(go ? 0 : 1)
+                            .scaleEffect(go ? 0.6 : 1)
+                            .animation(.easeIn(duration: 1.6).repeatForever(autoreverses: false).delay(Double(i) * 0.4), value: go)
+                    }
+                }
+            }
+            .frame(height: 40)
+            .padding(.horizontal, 8)
+            end("desktopcomputer", Ink.cy)
+        }
+        .onAppear { go = true }
+        .accessibilityHidden(true)
+    }
+
+    private func end(_ symbol: String, _ color: Color) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 22)).foregroundStyle(color)
+            .frame(width: 52, height: 52)
+            .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
