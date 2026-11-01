@@ -81,6 +81,20 @@ struct VideoFrame {
     var data: Data
 }
 
+/// One file of a Drop send (hyphn.proto `DropFile`).
+struct DropFile {
+    var name: String
+    var size: UInt64
+    var takenUnix: Int64
+    var year: UInt32
+    var month: UInt32
+    /// Photos identifier; empty for a file from the Files app.
+    var assetId: String
+    var sha256: Data
+    var isFile: Bool
+    var lastOfItem: Bool
+}
+
 enum RefusedReason: Int {
     case unknown = 0, expired, alreadyUsed, unknownToken, wrongVersion, unknownDevice, busy
 }
@@ -107,13 +121,17 @@ enum Msg {
     case keyRequest
     // Drop v1 (spec `Drop - Photos vers le PC`).
     case dropHello
-    case dropPlan(items: UInt32, files: UInt32, bytes: UInt64)
-    case dropFile(name: String, size: UInt64, takenUnix: Int64, year: UInt32, month: UInt32)
+    case dropPlan(items: UInt32, files: UInt32, bytes: UInt64, already: UInt32)
+    case dropFile(DropFile)
     case dropChunk(Data)
     case dropEnd(sha256: Data, lastOfItem: Bool)
-    case dropAck(ok: Bool, reason: String)
+    case dropAck(ok: Bool, reason: String, duplicate: Bool)
     case dropCancel
-    case dropDone(failed: UInt32)
+    case dropDone(failed: UInt32, already: UInt32)
+    // ADR-0029: « Commencer » on the PC, and the anti-duplicate by identifier.
+    case dropStart
+    case dropHave([String])
+    case dropMissing([String])
     case other
 }
 
@@ -265,12 +283,13 @@ extension Msg {
             field = 16
         case .dropHello:
             field = 18
-        case let .dropPlan(items, files, bytes):
+        case let .dropPlan(items, files, bytes, already):
             field = 19
-            b.uint(1, UInt64(items)); b.uint(2, UInt64(files)); b.uint(3, bytes)
-        case let .dropFile(name, size, takenUnix, year, month):
+            b.uint(1, UInt64(items)); b.uint(2, UInt64(files)); b.uint(3, bytes); b.uint(4, UInt64(already))
+        case let .dropFile(f):
             field = 20
-            b.string(1, name); b.uint(2, size); b.int(3, takenUnix); b.uint(4, UInt64(year)); b.uint(5, UInt64(month))
+            b.string(1, f.name); b.uint(2, f.size); b.int(3, f.takenUnix); b.uint(4, UInt64(f.year)); b.uint(5, UInt64(f.month))
+            b.string(6, f.assetId); b.bytes(7, f.sha256); b.bool(8, f.isFile); b.bool(9, f.lastOfItem)
         case let .dropChunk(data):
             field = 21
             b.bytes(1, data)
@@ -279,9 +298,12 @@ extension Msg {
             b.bytes(1, sha); b.bool(2, last)
         case .dropCancel:
             field = 24
-        case let .dropDone(failed):
+        case let .dropDone(failed, already):
             field = 25
-            b.uint(1, UInt64(failed))
+            b.uint(1, UInt64(failed)); b.uint(2, UInt64(already))
+        case let .dropHave(ids):
+            field = 27
+            for id in ids { b.tag(1, 2); b.varint(UInt64(id.utf8.count)); b.data.append(Data(id.utf8)) }
         default:
             return Data()
         }
@@ -386,15 +408,22 @@ extension Msg {
             case 17:
                 result = .keyRequest
             case 23:
-                var ok = false, reason = ""
+                var ok = false, reason = "", duplicate = false
                 while let (f, w) = try m.field() {
                     if f == 1 && w == 0 { ok = try m.varint() != 0 }
                     else if f == 2 && w == 2 { reason = try m.string() }
+                    else if f == 3 && w == 0 { duplicate = try m.varint() != 0 }
                     else { try m.skip(w) }
                 }
-                result = .dropAck(ok: ok, reason: reason)
+                result = .dropAck(ok: ok, reason: reason, duplicate: duplicate)
             case 24:
                 result = .dropCancel
+            case 26:
+                result = .dropStart
+            case 28:
+                var ids: [String] = []
+                while let (f, w) = try m.field() { if f == 1 && w == 2 { ids.append(try m.string()) } else { try m.skip(w) } }
+                result = .dropMissing(ids)
             default:
                 result = .other
             }

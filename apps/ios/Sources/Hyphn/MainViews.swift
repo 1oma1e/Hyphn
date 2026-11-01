@@ -16,6 +16,8 @@ struct RootView: View {
     @State private var scanning = false
     @State private var tab: AppTab = .home
     @State private var arrived = false
+    /// « Commencer » on the PC opened Drop (ADR-0029).
+    @State private var dropFromPC = false
 
     var body: some View {
         ZStack {
@@ -33,7 +35,7 @@ struct RootView: View {
             } else if link.pc == nil {
                 WelcomeView(scanning: $scanning).transition(.opacity)
             } else {
-                TabShell(tab: $tab, arrived: $arrived, scanning: $scanning)
+                TabShell(tab: $tab, arrived: $arrived, scanning: $scanning, dropFromPC: $dropFromPC)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
@@ -41,6 +43,12 @@ struct RootView: View {
         .animation(.spring(duration: 0.5), value: scanning)
         .onChange(of: link.wantsCam) { _, want in
             if want { tab = .cam; link.wantsCam = false }
+        }
+        .onChange(of: link.wantsDrop) { _, want in
+            guard want else { return }
+            link.wantsDrop = false
+            tab = .drop
+            dropFromPC = true
         }
         .onChange(of: link.pc) { _, pc in
             if pc == nil { tab = .home; camera.close() }
@@ -55,6 +63,7 @@ struct TabShell: View {
     @Binding var tab: AppTab
     @Binding var arrived: Bool
     @Binding var scanning: Bool
+    @Binding var dropFromPC: Bool
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -62,7 +71,7 @@ struct TabShell: View {
                 switch tab {
                 case .home: HomeView(tab: $tab, arrived: $arrived)
                 case .cam: CamView(tab: $tab)
-                case .drop: DropView()
+                case .drop: DropView(fromPC: $dropFromPC)
                 case .settings: SettingsView(scanning: $scanning)
                 }
             }
@@ -535,87 +544,214 @@ struct QualitySheet: View {
     }
 }
 
-// MARK: - Drop (spec `Drop - Photos vers le PC`)
+// MARK: - Drop (spec `Drop - Photos vers le PC`, ADR-0029)
 
 struct DropView: View {
     @EnvironmentObject var link: PCLink
     @EnvironmentObject var dropper: Dropper
+    /// The PC pressed « Commencer » (DropStart): a word at the top.
+    @Binding var fromPC: Bool
     @State private var picked: [PhotosPickerItem] = []
+    @State private var showPicker = false
+    @State private var showAlbums = false
+    @State private var showFiles = false
+    /// First time: why Hyphn needs the photos, before iOS asks (E3).
+    @State private var explain: (() -> Void)?
+    @State private var shown = false
 
     private var online: Bool { link.phase == .online }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Drop").font(.geist(34, .semibold)).tracking(-1.2)
-                Text("Vers \(link.pcName)").font(.geist(15)).foregroundStyle(Ink.tx2)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Drop").font(.geist(34, .semibold)).tracking(-1.2)
+                    Text("Vers \(link.pcName)").font(.geist(15)).foregroundStyle(Ink.tx2)
+                }
+                .padding(.top, 8)
+                if fromPC, dropper.phase == .idle {
+                    HStack(spacing: 10) {
+                        Image(systemName: "desktopcomputer").foregroundStyle(Ink.cy)
+                        Text("Ton PC attend : choisis ce que tu envoies.").font(.geist(14, .medium))
+                    }
+                    .padding(.horizontal, 14).frame(height: 44)
+                    .background(Ink.cy.opacity(0.1), in: Capsule())
+                    .overlay(Capsule().stroke(Ink.cy.opacity(0.4)))
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+                content
+                    .id(stage)
+                    .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
+                                            removal: .move(edge: .leading).combined(with: .opacity)))
             }
-            .padding(.top, 8)
-            content
-                .padding(20)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Ink.card, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(Ink.line))
-            Spacer()
+            .padding(.horizontal, 18)
+            .padding(.bottom, 110)
         }
-        .padding(.horizontal, 18)
-        .padding(.bottom, 96)
-        .animation(.spring(duration: 0.45), value: dropper.phase)
+        .scrollIndicators(.hidden)
+        .animation(.spring(duration: 0.5), value: stage)
+        .animation(.spring(duration: 0.4), value: fromPC)
+        .photosPicker(isPresented: $showPicker, selection: $picked, matching: .any(of: [.images, .videos]),
+                      preferredItemEncoding: .current, photoLibrary: .shared())
+        .fileImporter(isPresented: $showFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { r in
+            if case let .success(urls) = r, !urls.isEmpty { start(.files(urls)) }
+        }
+        .sheet(isPresented: $showAlbums) {
+            AlbumList { album in
+                showAlbums = false
+                start(.album(album))
+            }
+            .presentationDetents([.medium, .large])
+        }
         .onChange(of: picked) { _, items in
             guard !items.isEmpty else { return }
             let ids = items.compactMap(\.itemIdentifier)
             picked = []
-            dropper.send(ids)
+            start(.picks(ids))
+        }
+        .onAppear { shown = true }
+    }
+
+    /// Which screen, for the slide between steps.
+    private var stage: String {
+        if explain != nil { return "explain" }
+        switch dropper.phase {
+        case .idle: return "choose"
+        case .preparing: return "preparing"
+        case .review: return "review"
+        case .sending: return "sending"
+        case .done: return "done"
+        case .failed: return "failed"
+        }
+    }
+
+    private func start(_ s: Dropper.Source) {
+        fromPC = false
+        dropper.send(s)
+    }
+
+    /// Runs `then` once Photos access is there; the first time, through the
+    /// explanation step.
+    private func withPhotos(_ then: @escaping () -> Void) {
+        if PHPhotoLibrary.authorizationStatus(for: .readWrite) == .notDetermined {
+            explain = then
+        } else {
+            then()
         }
     }
 
     @ViewBuilder private var content: some View {
-        switch dropper.phase {
-        case .idle:
-            VStack(alignment: .leading, spacing: 14) {
-                Image(systemName: "photo.on.rectangle.angled")
-                    .font(.system(size: 26)).foregroundStyle(Ink.cy)
-                    .frame(width: 60, height: 60)
-                    .background(Ink.cy.opacity(0.12), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
-                Text("Envoie tes photos au PC").font(.geist(22, .semibold)).tracking(-0.6)
-                Text("En qualité d’origine, vérifiées une par une, rangées par année et par mois.")
-                    .font(.geist(14)).foregroundStyle(Ink.tx2)
-                PhotosPicker(selection: $picked, matching: .any(of: [.images, .videos]),
-                             preferredItemEncoding: .current, photoLibrary: .shared()) {
-                    HStack { Image(systemName: "photo.stack"); Text("Choisir dans Photos") }
+        if let next = explain {
+            card {
+                VStack(alignment: .leading, spacing: 14) {
+                    icon("lock.shield", Ink.cy)
+                    Text("Hyphn a besoin de tes photos").font(.geist(22, .semibold)).tracking(-0.6)
+                    Text("Seulement pour envoyer celles que tu choisis à ton PC, directement et chiffrées. Rien ne part ailleurs.")
+                        .font(.geist(14)).foregroundStyle(Ink.tx2)
+                    Text("iOS va te demander l’accès : choisis « Allow Full Access » pour tout pouvoir envoyer.")
+                        .font(.geist(13)).foregroundStyle(Ink.tx3)
+                    Button("Continuer") {
+                        Task {
+                            _ = await Dropper.askPhotos()
+                            explain = nil
+                            next()
+                        }
+                    }
+                    .buttonStyle(PrimaryButtonStyle(fill: Ink.cy, text: .black))
+                    Button("Plus tard") { explain = nil }.buttonStyle(GhostButtonStyle())
                 }
-                .buttonStyle(PrimaryButtonStyle(fill: Ink.cy, text: .black))
+            }
+        } else {
+            switch dropper.phase {
+            case .idle: choose
+            case .preparing:
+                card {
+                    HStack(spacing: 14) {
+                        ProgressView().tint(Ink.cy)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Je prépare l’envoi…").font(.geist(17, .semibold))
+                            Text("Je demande au PC ce qu’il a déjà.").font(.geist(13)).foregroundStyle(Ink.tx2)
+                        }
+                    }
+                }
+            case let .review(items, bytes):
+                card {
+                    VStack(alignment: .leading, spacing: 12) {
+                        icon("sparkles", Ink.cy)
+                        Text("\(items) nouvel\(items > 1 ? "s" : "") élément\(items > 1 ? "s" : "")").font(.geist(26, .semibold)).tracking(-0.8)
+                        Text("\(Self.size(bytes)) jamais envoyés à \(link.pcName)\(dropper.already > 0 ? " · \(dropper.already) déjà dessus" : "").")
+                            .font(.geist(14)).foregroundStyle(Ink.tx2)
+                        Button("Envoyer") { dropper.confirmReview(true) }
+                            .buttonStyle(PrimaryButtonStyle(fill: Ink.cy, text: .black)).padding(.top, 4)
+                        Button("Annuler") { dropper.cancel() }.buttonStyle(GhostButtonStyle())
+                    }
+                }
+            case .sending: card { sending }
+            case let .done(items, bytes, failed, already):
+                card {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Image(systemName: "checkmark").font(.system(size: 22, weight: .bold)).foregroundStyle(Ink.onLi)
+                            .frame(width: 56, height: 56).background(Ink.li, in: Circle())
+                            .shadow(color: Ink.li.opacity(0.5), radius: 14)
+                            .scaleEffect(shown ? 1 : 0.3)
+                        Text(items > 0 ? "\(items) élément\(items > 1 ? "s" : "") sur le PC" : "Tout est déjà sur le PC")
+                            .font(.geist(24, .semibold)).tracking(-0.7)
+                        Text([items > 0 ? "\(Self.size(bytes)) · vérifiés un par un" : nil,
+                              already > 0 ? "\(already) déjà dessus" : nil].compactMap { $0 }.joined(separator: " · "))
+                            .font(.geist(14)).foregroundStyle(Ink.tx2)
+                        if failed > 0 {
+                            Text("\(failed) non envoyé\(failed > 1 ? "s" : "") (introuvable, ou impossible à télécharger depuis iCloud).")
+                                .font(.geist(13)).foregroundStyle(Ink.am)
+                        }
+                        Button("Envoyer autre chose") { dropper.reset() }.buttonStyle(GhostButtonStyle()).padding(.top, 4)
+                    }
+                }
+            case let .failed(message):
+                card {
+                    VStack(spacing: 14) {
+                        Problem(title: "Envoi arrêté", text: message, settings: dropper.needsAccess)
+                        Button("OK") { dropper.reset() }.buttonStyle(GhostButtonStyle())
+                    }
+                }
+            }
+        }
+    }
+
+    /// « Que veux-tu envoyer ? » (E3): four choices, coming in one after the other.
+    private var choose: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Que veux-tu envoyer ?").font(.geist(22, .semibold)).tracking(-0.6).padding(.top, 4)
+            let rows: [(String, String, String, Color, () -> Void)] = [
+                ("photo.on.rectangle.angled", "Photos et vidéos", "Tu les choisis une par une", Ink.cy, { withPhotos { showPicker = true } }),
+                ("rectangle.stack", "Un album", "Tout un album d’un coup", Ink.li, { withPhotos { showAlbums = true } }),
+                ("folder", "Des fichiers", "Depuis l’app Fichiers", Ink.am, { showFiles = true }),
+                ("sparkles", "Tout le nouveau", "Tout ce que ton PC n’a pas encore", Ink.co, { withPhotos { start(.everythingNew) } }),
+            ]
+            ForEach(Array(rows.enumerated()), id: \.offset) { i, r in
+                Button(action: r.4) {
+                    HStack(spacing: 14) {
+                        icon(r.0, r.3)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(r.1).font(.geist(17, .semibold)).foregroundStyle(Ink.tx)
+                            Text(r.2).font(.geist(13)).foregroundStyle(Ink.tx2)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(Ink.tx3)
+                    }
+                    .padding(14)
+                    .background(Ink.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Ink.line))
+                }
+                .buttonStyle(PressStyle())
                 .disabled(!online)
-                .opacity(online ? 1 : 0.5)
-                .padding(.top, 4)
-                if !online {
-                    Text("PC hors ligne : ouvre Hyphn sur le PC.").font(.geist(13)).foregroundStyle(Ink.am)
-                }
+                .opacity(shown ? (online ? 1 : 0.45) : 0)
+                .offset(y: shown ? 0 : 18)
+                .animation(.spring(duration: 0.55).delay(Double(i) * 0.07), value: shown)
             }
-        case .preparing:
-            HStack(spacing: 12) {
-                ProgressView().tint(Ink.cy)
-                Text("Je prépare \(dropper.items) élément\(dropper.items > 1 ? "s" : "")…").font(.geist(17, .semibold))
-            }
-        case .sending:
-            sending
-        case let .done(items, bytes, failed):
-            VStack(alignment: .leading, spacing: 12) {
-                Image(systemName: "checkmark").font(.system(size: 22, weight: .bold)).foregroundStyle(Ink.onLi)
-                    .frame(width: 52, height: 52).background(Ink.li, in: Circle())
-                    .shadow(color: Ink.li.opacity(0.5), radius: 14)
-                Text("\(items) élément\(items > 1 ? "s" : "") sur le PC").font(.geist(22, .semibold)).tracking(-0.6)
-                Text("\(Self.size(bytes)) · vérifiés un par un").font(.geist(14)).foregroundStyle(Ink.tx2)
-                if failed > 0 {
-                    Text("\(failed) non envoyé\(failed > 1 ? "s" : "") (introuvable ou pas téléchargeable depuis iCloud).")
-                        .font(.geist(13)).foregroundStyle(Ink.am)
-                }
-                Button("Envoyer d’autres photos") { dropper.reset() }.buttonStyle(GhostButtonStyle()).padding(.top, 4)
-            }
-        case let .failed(message):
-            VStack(spacing: 14) {
-                Problem(title: "Envoi arrêté", text: message, settings: dropper.needsAccess)
-                Button("OK") { dropper.reset() }.buttonStyle(GhostButtonStyle())
+            if !online {
+                Text("PC hors ligne : ouvre Hyphn sur le PC.").font(.geist(13)).foregroundStyle(Ink.am)
+            } else {
+                Text("En qualité d’origine, vérifié un par un. Rien n’est envoyé deux fois.")
+                    .font(.geist(13)).foregroundStyle(Ink.tx3).padding(.top, 2)
             }
         }
     }
@@ -627,6 +763,7 @@ struct DropView: View {
             Text("ENVOI EN COURS").font(.geist(12, .bold)).tracking(1.5).foregroundStyle(Ink.cy)
             HStack(alignment: .firstTextBaseline) {
                 Text("\(pct) %").font(.mono(46, .semibold)).contentTransition(.numericText())
+                    .animation(.snappy, value: pct)
                 Spacer()
                 Text(Self.left(d)).font(.geist(13)).foregroundStyle(Ink.tx2)
             }
@@ -641,9 +778,11 @@ struct DropView: View {
             .frame(height: 8)
             Text("\(Self.size(d.bytesDone)) / \(Self.size(d.bytes)) · \(d.itemsDone) / \(d.items) éléments")
                 .font(.mono(13)).foregroundStyle(Ink.tx2)
-            if d.rate > 0 {
-                Text("\(Self.size(Int64(d.rate)))/s").font(.mono(13)).foregroundStyle(Ink.tx2)
+            HStack(spacing: 14) {
+                if d.rate > 0 { Text("\(Self.size(Int64(d.rate)))/s") }
+                if d.already > 0 { Text("\(d.already) déjà sur le PC") }
             }
+            .font(.mono(13)).foregroundStyle(Ink.tx2)
             Text(d.current).font(.geist(14)).lineLimit(1).truncationMode(.middle)
             if let c = d.cloud {
                 Text("Téléchargement iCloud… \(Int(c * 100)) %").font(.geist(13)).foregroundStyle(Ink.am)
@@ -651,6 +790,21 @@ struct DropView: View {
             Text("Garde Hyphn ouvert pendant l’envoi.").font(.geist(13)).foregroundStyle(Ink.tx3)
             Button("Annuler") { d.cancel() }.buttonStyle(GhostButtonStyle()).padding(.top, 4)
         }
+    }
+
+    private func card<C: View>(@ViewBuilder _ c: () -> C) -> some View {
+        c()
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Ink.card, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(Ink.line))
+    }
+
+    private func icon(_ name: String, _ color: Color) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 22)).foregroundStyle(color)
+            .frame(width: 52, height: 52)
+            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
     }
 
     static func size(_ b: Int64) -> String {
@@ -661,6 +815,54 @@ struct DropView: View {
         guard d.rate > 0 else { return "calcul…" }
         let s = Double(max(0, d.bytes - d.bytesDone)) / d.rate
         return s < 60 ? "reste moins d’une minute" : "reste ≈ \(Int((s / 60).rounded(.up))) min"
+    }
+}
+
+/// A row that sinks a little under the finger.
+struct PressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.spring(duration: 0.2), value: configuration.isPressed)
+    }
+}
+
+/// « Un album »: the albums with their number of items (E3).
+struct AlbumList: View {
+    let pick: (PHAssetCollection) -> Void
+    @State private var albums: [(PHAssetCollection, Int)] = []
+
+    var body: some View {
+        NavigationStack {
+            List(albums, id: \.0.localIdentifier) { a, n in
+                Button { pick(a) } label: {
+                    HStack {
+                        Text(a.localizedTitle ?? "Album").font(.geist(16)).foregroundStyle(Ink.tx)
+                        Spacer()
+                        Text("\(n)").font(.mono(14)).foregroundStyle(Ink.tx2)
+                    }
+                }
+            }
+            .navigationTitle("Un album")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .task { albums = Self.load() }
+    }
+
+    /// Favorites, videos, selfies… then Evan's own albums; empty ones left out.
+    static func load() -> [(PHAssetCollection, Int)] {
+        var out: [(PHAssetCollection, Int)] = []
+        let add = { (c: PHAssetCollection) in
+            let n = PHAsset.fetchAssets(in: c, options: nil).count
+            if n > 0 { out.append((c, n)) }
+        }
+        let smart: [PHAssetCollectionSubtype] = [.smartAlbumFavorites, .smartAlbumVideos, .smartAlbumSelfPortraits,
+                                                 .smartAlbumLivePhotos, .smartAlbumScreenshots, .smartAlbumPanoramas]
+        for s in smart {
+            PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: s, options: nil).enumerateObjects { c, _, _ in add(c) }
+        }
+        PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil).enumerateObjects { c, _, _ in add(c) }
+        return out
     }
 }
 

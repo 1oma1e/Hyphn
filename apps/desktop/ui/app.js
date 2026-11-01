@@ -1019,54 +1019,122 @@ const Cam = {
 // ===================================================================
 // Drop
 // ===================================================================
-// Spec `Drop - Photos vers le PC`: the send in progress (E7), the folder and
-// the last months received (E9). Rebuilt only when the state changes; the
-// numbers are filled in place every second.
+// Spec `Drop - Photos vers le PC` (ADR-0029): « Commencer le transfert », the
+// first-time steps (folder, sorting), « Regarde ton iPhone », then the send
+// in progress (E10) and its result. Rebuilt only when the step or the state
+// changes; the numbers are filled in place every second.
+const SORTS = [
+  ['year_month', 'Année, puis mois', '2026 › 10 › IMG_1234.HEIC', true],
+  ['year', 'Année', '2026 › IMG_1234.HEIC', false],
+  ['flat', 'Tout ensemble', 'IMG_1234.HEIC', false],
+];
 const Drop = {
   key: () => '',
   mount(root) {
     this.root = root;
     this.shape = '';
+    this.step = 'home';
+    this.folder = null;
+    this.asked = false;
+    this.seen = '';
     if (!S) root.innerHTML = '';
   },
+  // The result of a send stays until « Nouveau transfert ».
+  resultKey: (d) => [d.state, d.files_done, d.bytes_done, d.message].join('|'),
   update() {
     const d = S.drop || {};
-    const shape = [d.state, S.connected, !!S.device].join('|');
+    if (d.state === 'sending') this.step = 'home';
+    // Waiting for the iPhone: ask again as soon as it is there.
+    if (this.step === 'phone' && S.connected && !this.asked) this.ask();
+    const showResult = (d.state === 'done' || d.state === 'failed') && this.seen !== this.resultKey(d);
+    const view = d.state === 'sending' ? 'sending' : this.step !== 'home' ? this.step : showResult ? 'result' : 'home';
+    const shape = [view, S.connected, !!S.device, this.folder && this.folder.path].join('|');
     if (shape !== this.shape) {
       this.shape = shape;
+      const setup = ['folder', 'confirm', 'sort'].includes(view);
       this.root.innerHTML = `<main class="wrap enter">
-        <header><h1 class="h1">Drop</h1><p class="sub">Les photos et vidéos de l’iPhone, en qualité d’origine, rangées par année et par mois.</p></header>
-        <section class="card drop-now">${this.now(d)}</section>
-        <section class="card">
+        <header class="row" style="justify-content:space-between;align-items:flex-end">
+          <div><h1 class="h1">Drop</h1><p class="sub">Les photos, vidéos et fichiers de l’iPhone, en qualité d’origine, vérifiés et sans doublon.</p></div>
+        </header>
+        ${this.stepper(view)}
+        <section class="card drop-now" data-view="${view}"><div class="dstage">${this.body(view, d)}</div></section>
+        ${setup ? '' : `<section class="card">
           <div class="row" style="justify-content:space-between">
             <div><span class="lbl">Rangées dans</span><div class="mono" style="margin-top:8px;font-size:15px">${esc(settings.photos_dir)}</div></div>
             <div class="row"><button class="btn sm" type="button" data-act="open">${I.folder}Ouvrir</button><a class="btn sm" href="#settings">Changer</a></div>
           </div>
           <div class="months" id="d-months"></div>
-        </section>
+        </section>`}
       </main>`;
     }
     this.fill(d);
   },
-  now(d) {
-    if (d.state === 'sending') {
+  // 1 Dossier · 2 Rangement · 3 iPhone · 4 Transfert (the first two only once).
+  stepper(view) {
+    if (view === 'home' || view === 'result') return '';
+    const names = settings.drop_setup_done ? ['iPhone', 'Transfert'] : ['Dossier', 'Rangement', 'iPhone', 'Transfert'];
+    const at = { folder: 'Dossier', confirm: 'Dossier', sort: 'Rangement', phone: 'iPhone', sending: 'Transfert' }[view];
+    const i = names.indexOf(at);
+    return `<ol class="dsteps">${names.map((n, k) => `<li class="${k < i ? 'done' : k === i ? 'on' : ''}"><b>${k < i ? I.check : k + 1}</b>${n}</li>`).join('')}</ol>`;
+  },
+  body(view, d) {
+    if (view === 'sending') {
       return `<span class="lbl">Envoi depuis ${esc(devName())}</span>
         <div class="drop-big"><span class="mono" id="d-pct">0 %</span><span class="sub" id="d-left"></span></div>
         <div class="track drop-track"><span id="d-bar" style="width:0%"></span></div>
-        <div class="row drop-stats"><span class="mono" id="d-bytes"></span><span class="mono" id="d-items"></span><span class="mono" id="d-rate"></span></div>
+        <div class="row drop-stats"><span class="mono" id="d-bytes"></span><span class="mono" id="d-items"></span><span class="mono" id="d-rate"></span><span class="mono" id="d-already"></span></div>
         <div class="sub drop-cur" id="d-cur"></div>
         <div class="row" style="margin-top:18px"><button class="btn bad" type="button" data-act="cancel">${I.close}Annuler</button></div>`;
     }
-    if (d.state === 'done' || d.state === 'failed') {
+    if (view === 'result') {
       const ok = d.state === 'done';
       const kept = `${d.items_done} élément${d.items_done > 1 ? 's' : ''} · ${bytes(d.bytes_done)}`;
+      const extra = [d.already ? `${d.already} déjà sur le PC` : '', d.failed ? `${d.failed} non envoyé${d.failed > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ');
       const head = ok
-        ? `<div class="ban ok">${I.check}<span><strong>${kept} · vérifiés</strong>${d.failed ? ` · ${d.failed} non envoyé${d.failed > 1 ? 's' : ''}` : ''}</span></div>`
+        ? `<div class="dresult"><span class="dpop">${I.check}</span><div><div class="dtitle">${d.items_done ? `${kept} · vérifiés` : 'Tout est déjà sur le PC'}</div><div class="sub">${extra || 'Rangés par date de prise.'}</div></div></div>`
         : `<div class="ban bad">${I.alert}<span>${esc(d.message)}${d.items_done ? ` <strong>Déjà rangés : ${kept}.</strong>` : ''}</span></div>`;
-      return `${head}<div class="row" style="margin-top:16px">${d.files_done ? `<button class="btn cy" type="button" data-act="openLast">${I.folder}Ouvrir le dossier</button>` : ''}</div>`;
+      return `${head}<div class="row" style="margin-top:20px">
+        <button class="btn cy" type="button" data-act="start">${I.swap}Nouveau transfert</button>
+        ${d.files_done ? `<button class="btn" type="button" data-act="openLast">${I.folder}Ouvrir le dossier</button>` : ''}</div>`;
     }
-    const hint = !S.device ? 'Relie d’abord ton iPhone.' : S.connected ? 'Sur l’iPhone : Drop, puis « Choisir dans Photos ».' : 'Ouvre Hyphn sur l’iPhone.';
-    return `<div class="drop-idle"><span class="ic">${I.swap}</span><div><div style="font-size:20px;font-weight:600;letter-spacing:-.02em">Envoie des photos depuis l’iPhone</div><div class="sub">${hint}</div></div></div>`;
+    if (view === 'folder') {
+      return `<div class="dq"><span class="lbl">Première fois</span><h2 class="dtitle big">Où ranger tes photos sur ce PC ?</h2></div>
+        <div class="choices">
+          <button class="choice rec" type="button" data-act="suggest"><span class="ic">${I.bolt}</span><span><b>Laisser Hyphn choisir</b><small>Un dossier propre, sur le disque qui a le plus de place.</small></span><em>Conseillé</em></button>
+          <button class="choice" type="button" data-act="pickDir"><span class="ic">${I.folder}</span><span><b>Choisir un dossier</b><small>Tu le choisis dans Windows.</small></span></button>
+        </div>
+        <div class="row" style="margin-top:18px"><button class="btn sm" type="button" data-act="back">Retour</button></div>`;
+    }
+    if (view === 'confirm') {
+      const f = this.folder || {};
+      return `<div class="dq"><span class="lbl">Dossier</span><h2 class="dtitle big">C’est bon pour toi ?</h2></div>
+        <div class="dpath"><span class="ic">${I.folder}</span><div><div class="mono">${esc(f.path)}</div><div class="sub">${f.free != null ? `${bytes(f.free)} libres sur ce disque` : 'Place libre inconnue'}</div></div></div>
+        <div class="row" style="margin-top:22px">
+          <button class="btn cy" type="button" data-act="okDir">${I.check}C’est bon</button>
+          <button class="btn" type="button" data-act="pickDir">Choisir un autre</button>
+        </div>`;
+    }
+    if (view === 'sort') {
+      return `<div class="dq"><span class="lbl">Première fois</span><h2 class="dtitle big">Comment les ranger ?</h2></div>
+        <div class="choices three">${SORTS.map(([k, n, ex, rec]) => `<button class="choice${rec ? ' rec' : ''}" type="button" data-act="sort" data-v="${k}"><span><b>${n}</b><small class="mono">${ex}</small></span>${rec ? '<em>Conseillé</em>' : ''}</button>`).join('')}</div>
+        <p class="sub" style="margin-top:16px">Par la date où la photo a été prise. Tu pourras changer ça dans les Réglages.</p>`;
+    }
+    if (view === 'phone') {
+      const on = S.connected;
+      return `<div class="dphone${on ? ' on' : ''}">
+          <div class="pfig"><i></i><i></i><i></i><span class="pbody">${I.phone}</span></div>
+          <div><h2 class="dtitle big">${on ? 'Regarde ton iPhone' : 'Ouvre Hyphn sur ton iPhone'}</h2>
+            <p class="sub" style="font-size:15px;line-height:1.55;max-width:460px">${on
+              ? 'Choisis ce que tu envoies : des photos, un album, des fichiers ou tout le nouveau. Le transfert s’affichera ici.'
+              : 'Dès qu’il est ouvert, il te propose quoi envoyer.'}</p>
+            <div class="row" style="margin-top:14px"><button class="btn sm" type="button" data-act="back">Retour</button></div></div>
+        </div>`;
+    }
+    const hint = !S.device ? 'Relie d’abord ton iPhone.' : S.connected ? 'Photos, albums, fichiers ou tout le nouveau. Rien n’est envoyé deux fois.' : 'Ouvre Hyphn sur l’iPhone pour commencer.';
+    return `<div class="dhome"><span class="ic">${I.swap}</span>
+        <div><div class="dtitle">Transfère tes photos sur ce PC</div><div class="sub">${hint}</div></div>
+        <button class="btn cy dgo" type="button" data-act="start" ${S.device ? '' : 'disabled'}>Commencer le transfert${I.arrow}</button>
+      </div>`;
   },
   fill(d) {
     const set = (id, t) => { const el = $(id); if (el && el.textContent !== t) el.textContent = t; };
@@ -1078,9 +1146,10 @@ const Drop = {
       set('#d-bytes', `${bytes(d.bytes_done)} / ${bytes(d.bytes)}`);
       set('#d-items', `${d.items_done} / ${d.items} éléments`);
       set('#d-rate', d.rate ? `${bytes(d.rate)}/s` : '');
+      set('#d-already', d.already ? `${d.already} déjà sur le PC` : '');
       const left = d.rate ? Math.max(0, d.bytes - d.bytes_done) / d.rate : 0;
       set('#d-left', !d.rate ? 'calcul…' : left < 60 ? 'reste moins d’une minute' : `reste ≈ ${Math.ceil(left / 60)} min`);
-      set('#d-cur', d.current ? `En cours : ${d.current}` : 'Préparation sur l’iPhone…');
+      set('#d-cur', d.current ? `En cours : ${d.current}` : 'L’iPhone prépare l’envoi…');
     }
     const months = S.drop_months || [];
     const key = JSON.stringify(months);
@@ -1092,7 +1161,42 @@ const Drop = {
         : '<div class="sub">Rien encore.</div>';
     }
   },
+  go(step) {
+    this.step = step;
+    this.update();
+  },
+  // « Regarde ton iPhone »: tells the iPhone to show its choices (E2).
+  async ask() {
+    this.asked = true;
+    this.asked = await invoke('drop_start');
+  },
   acts: {
+    start: () => {
+      const d = S.drop || {};
+      Drop.seen = Drop.resultKey(d);
+      Drop.asked = false;
+      Drop.go(settings.drop_setup_done ? 'phone' : 'folder');
+      if (settings.drop_setup_done) Drop.ask();
+    },
+    back: () => Drop.go('home'),
+    suggest: async () => {
+      Drop.folder = await invoke('drop_suggest_dir');
+      Drop.go('confirm');
+    },
+    pickDir: async () => {
+      const path = await invoke('pick_photos_dir');
+      if (!path) return;
+      Drop.folder = { path, free: await invoke('drop_dir_free', { path }) };
+      Drop.go('confirm');
+    },
+    okDir: () => Drop.go('sort'),
+    sort: async (el) => {
+      Object.assign(settings, { photos_dir: Drop.folder.path, sort: el.dataset.v, drop_setup_done: true });
+      await saveSettings();
+      Drop.asked = false;
+      Drop.go('phone');
+      Drop.ask();
+    },
     cancel: () => invoke('drop_cancel'),
     open: () => invoke('open_photos_dir').catch((e) => toast(String(e), 'info')),
     openLast: () => invoke('open_drop_folder').catch((e) => toast(String(e), 'info')),

@@ -434,3 +434,58 @@ button { font-family: inherit; }
 .drop-cur { margin-top: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .months { display: flex; flex-direction: column; margin-top: 18px; border-top: 1px solid var(--ln); }
 .month { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--ln); font-size: 15px; }
+
+/* Drop, guided start (ADR-0029) */
+.dsteps { display: flex; gap: 8px; list-style: none; margin: 0; padding: 0; flex-wrap: wrap; }
+.dsteps li { display: flex; align-items: center; gap: 9px; padding: 8px 14px 8px 8px; border-radius: 99px; border: 1px solid var(--ln); color: var(--tx3); font-size: 14px; transition: all .4s; }
+.dsteps li b { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; background: color-mix(in srgb, var(--tx) 8%, transparent); }
+.dsteps li b svg { width: 13px; height: 13px; }
+.dsteps li.on { color: var(--tx); border-color: color-mix(in srgb, var(--cy) 55%, transparent); background: color-mix(in srgb, var(--cy) 8%, transparent); }
+.dsteps li.on b { background: var(--cy); color: var(--on-cy); box-shadow: 0 0 14px color-mix(in srgb, var(--cy) 60%, transparent); }
+.dsteps li.done { color: var(--tx2); }
+.dsteps li.done b { background: color-mix(in srgb, var(--li) 18%, transparent); color: var(--li); }
+.dstage { animation: dstep .55s cubic-bezier(.2,.9,.3,1) both; }
+@keyframes dstep { from { opacity: 0; transform: translateX(28px); filter: blur(6px); } }
+.dtitle { font-size: 22px; font-weight: 600; letter-spacing: -.025em; }
+.dtitle.big { font-size: 30px; letter-spacing: -.035em; margin: 8px 0 0; }
+.dq { margin-bottom: 22px; }
+.dhome { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 20px; padding: 6px 0; }
+.dhome .ic, .dpath .ic, .choice .ic { width: 60px; height: 60px; border-radius: 19px; display: grid; place-items: center; background: color-mix(in srgb, var(--cy) 12%, transparent); color: var(--cy); }
+.dhome .ic svg, .dpath .ic svg, .choice .ic svg { width: 28px; height: 28px; }
+.dgo { min-height: 56px; padding: 0 26px; font-size: 16px; box-shadow: 0 10px 40px color-mix(in srgb, var(--cy) 30%, transparent); }
+.dgo svg { transition: transform .25s; }
+.dgo:hover svg { transform: translateX(4px); }
+@media (max-width: 760px) { .dhome { grid-template-columns: 1fr; } }
+.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.choices.three { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 760px) { .choices, .choices.three { grid-template-columns: 1fr; } }
+.choice { position: relative; display: flex; align-items: center; gap: 16px; text-align: left; padding: 20px; border-radius: 20px; border: 1px solid var(--ln2); background: var(--p2); color: var(--tx); font: inherit; cursor: pointer; transition: transform .25s, border-color .25s, background .25s; animation: dstep .55s cubic-bezier(.2,.9,.3,1) both; }
+.choice:nth-child(2) { animation-delay: .07s; }
+.choice:nth-child(3) { animation-delay: .14s; }
+.choice:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--cy) 60%, transparent); background: color-mix(in srgb, var(--cy) 6%, transparent); }
+.choice b { display: block; font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
+.choice small { display: block; margin-top: 4px; color: var(--tx2); font-size: 13px; }
+.choice em { position: absolute; top: 12px; right: 12px; font-style: normal; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--cy); padding: 3px 8px; border-radius: 99px; background: color-mix(in srgb, var(--cy) 12%, transparent); }
+.choice.rec { border-color: color-mix(in srgb, var(--cy) 40%, transparent); }
+.dpath { display: flex; align-items: center; gap: 18px; padding: 18px; border-radius: 20px; background: var(--p2); border: 1px solid var(--ln2); }
+.dpath .mono { font-size: 17px; word-break: break-all; }
+.dphone { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 36px; padding: 10px 0; }
+.pfig { position: relative; width: 150px; height: 150px; display: grid; place-items: center; }
+.pfig .pbody { position: relative; z-index: 1; width: 74px; height: 120px; border-radius: 20px; display: grid; place-items: center; border: 2px solid var(--tx2); background: var(--p1); color: var(--tx3); transition: all .5s; }
+.pfig .pbody svg { width: 30px; height: 30px; }
+.pfig i { position: absolute; inset: 15px; border-radius: 50%; border: 1.5px solid var(--cy); opacity: 0; }
+.dphone.on .pbody { border-color: var(--cy); color: var(--cy); box-shadow: 0 0 34px color-mix(in srgb, var(--cy) 45%, transparent); animation: pnudge 2.4s ease-in-out infinite; }
+.dphone.on .pfig i { animation: pring 2.4s cubic-bezier(.2,.6,.3,1) infinite; }
+.dphone.on .pfig i:nth-child(2) { animation-delay: .8s; }
+.dphone.on .pfig i:nth-child(3) { animation-delay: 1.6s; }
+@keyframes pring { 0% { transform: scale(.6); opacity: .9; } 100% { transform: scale(1.5); opacity: 0; } }
+@keyframes pnudge { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-5px) rotate(-3deg); } }
+@media (max-width: 760px) { .dphone { grid-template-columns: 1fr; } }
+.drop-track span { position: relative; overflow: hidden; }
+.drop-track span::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent); transform: translateX(-100%); animation: dshine 1.8s linear infinite; }
+@keyframes dshine { to { transform: translateX(100%); } }
+.dresult { display: flex; align-items: center; gap: 18px; }
+.dpop { width: 60px; height: 60px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--li); color: var(--on-li); box-shadow: 0 0 30px color-mix(in srgb, var(--li) 55%, transparent); animation: dpop .6s cubic-bezier(.3,1.6,.4,1) both; }
+.dpop svg { width: 28px; height: 28px; stroke-width: 2.6; }
+@keyframes dpop { from { transform: scale(.3); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .dstage, .choice, .dpop, .dphone.on .pbody, .dphone.on .pfig i, .drop-track span::after { animation: none; } }

@@ -295,6 +295,34 @@ fn drop_cancel(h: State<'_, Hyphn>) {
     h.hub.cancel_drop();
 }
 
+/// « Commencer le transfert » (spec `Drop - Photos vers le PC`, E2): the
+/// iPhone shows its choices. False when it is not connected.
+#[tauri::command]
+fn drop_start(h: State<'_, Hyphn>) -> bool {
+    h.hub.start_drop()
+}
+
+#[derive(Serialize)]
+struct FolderView {
+    path: String,
+    /// Free bytes on its disk, None if unknown.
+    free: Option<u64>,
+}
+
+/// « Laisser Hyphn choisir » (E1, ADR-0029).
+#[tauri::command]
+fn drop_suggest_dir(app: AppHandle) -> FolderView {
+    let pictures = app.path().picture_dir().unwrap_or_else(|_| PathBuf::from(r"C:\Users\Public\Pictures"));
+    let (dir, free) = drop::suggest_dir(&pictures);
+    FolderView { path: dir.display().to_string(), free }
+}
+
+/// Free space for a folder picked by hand.
+#[tauri::command]
+fn drop_dir_free(path: String) -> Option<u64> {
+    drop::free_space(&PathBuf::from(path))
+}
+
 /// « Ouvrir le dossier » after a send: where the last file went.
 #[tauri::command]
 fn open_drop_folder(app: AppHandle, h: State<'_, Hyphn>) -> Result<(), String> {
@@ -716,6 +744,9 @@ pub fn run() {
             open_photos_dir,
             drop_cancel,
             open_drop_folder,
+            drop_start,
+            drop_suggest_dir,
+            drop_dir_free,
             reconnect,
             cam_set,
             cam_lens,

@@ -44,6 +44,9 @@ message Envelope {
     DropAck drop_ack = 23;          // PC -> iPhone: answer to DropPlan and DropEnd
     DropCancel drop_cancel = 24;    // either side: « Annuler »
     DropDone drop_done = 25;        // iPhone -> PC: the whole send is over
+    DropStart drop_start = 26;      // PC -> iPhone (session): « Commencer » on the PC, show Drop
+    DropHave drop_have = 27;        // iPhone -> PC: the Photos items chosen
+    DropMissing drop_missing = 28;  // PC -> iPhone: the ones it does not have yet
   }
 }
 
@@ -52,9 +55,10 @@ message Envelope {
 message DropHello {}
 
 message DropPlan {
-  uint32 items = 1;       // photos and videos chosen
+  uint32 items = 1;       // photos, videos and files to send
   uint32 files = 2;       // files to send (a Live Photo is two)
   uint64 bytes = 3;       // total size, used to check the PC's free space
+  uint32 already = 4;     // items left out: already on the PC (DropMissing)
 }
 
 message DropFile {
@@ -63,6 +67,10 @@ message DropFile {
   int64 taken_unix = 3;   // when the photo was taken (file date on the PC)
   uint32 year = 4;        // taken, in the iPhone's calendar: the folder
   uint32 month = 5;       // 1..12
+  string asset_id = 6;    // Photos local identifier; empty for a file
+  bytes sha256 = 7;       // known before sending: the PC may answer « duplicate »
+  bool is_file = 8;       // from the Files app: goes to <folder>\Fichiers
+  bool last_of_item = 9;  // when the PC answers « duplicate », the item may be complete
 }
 
 message DropChunk {
@@ -77,12 +85,25 @@ message DropEnd {
 message DropAck {
   bool ok = 1;
   string reason = 2;      // when not ok, shown on the iPhone
+  bool duplicate = 3;     // answer to DropFile: already on the PC, do not send it
 }
 
 message DropCancel {}
 
 message DropDone {
   uint32 failed = 1;      // items that could not be sent
+  uint32 already = 2;     // items already on the PC (by identifier or by content)
+}
+
+// ADR-0029: anti-duplicate by Photos identifier, before anything is exported.
+message DropStart {}
+
+message DropHave {
+  repeated string asset_ids = 1;
+}
+
+message DropMissing {
+  repeated string asset_ids = 1;
 }
 
 message PairRequest {

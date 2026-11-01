@@ -74,6 +74,8 @@ pub struct DropProgress {
     pub rate: u64,
     /// Items the iPhone could not send (iCloud, hash twice wrong).
     pub failed: u32,
+    /// Items left out because the PC already has them (E6).
+    pub already: u32,
     /// Why it stopped, when it did.
     pub message: String,
     /// Folder of the last file put in place (« Ouvrir le dossier »).
@@ -196,6 +198,8 @@ pub struct State {
     pub drop: DropProgress,
     /// Photos folder and « Rangement » (Réglages on the PC).
     drop_target: (PathBuf, String),
+    /// What Drop already received, saved in the store (E6).
+    drop_index: crate::drop::DropIndex,
 }
 
 /// Read by the snapshot.
@@ -252,6 +256,7 @@ impl Hub {
         notify: Box<dyn Fn(UiEvent) + Send + Sync>,
     ) -> Result<Arc<Self>, Error> {
         let tls = TlsAcceptor::from(crate::tls::server_config(&identity)?);
+        let drop_index = store.drop_index();
         Ok(Arc::new(Self {
             identity,
             store,
@@ -269,6 +274,7 @@ impl Hub {
                 resume_live_until: None,
                 drop: DropProgress::default(),
                 drop_target: (PathBuf::new(), String::new()),
+                drop_index,
             }),
             notify,
             tls,
@@ -313,6 +319,20 @@ impl Hub {
     /// Photos folder and « Rangement », from the PC settings.
     pub fn set_drop_target(&self, dir: PathBuf, sort: String) {
         self.lock().drop_target = (dir, sort);
+    }
+
+    /// « Commencer » on the PC (E2): the iPhone, if Hyphn is open on it,
+    /// shows its Drop choices. False when no iPhone is connected.
+    pub fn start_drop(&self) -> bool {
+        let st = self.lock();
+        st.session.as_ref().is_some_and(|s| s.tx.send(env(Msg::DropStart(proto::DropStart {}))).is_ok())
+    }
+
+    fn save_drop_index(&self) {
+        let ix = self.lock().drop_index.clone();
+        if let Err(e) = self.store.save_drop_index(&ix) {
+            eprintln!("hyphn: drop index: {e}");
+        }
     }
 
     /// « Annuler » on the PC.
@@ -734,13 +754,13 @@ impl Hub {
             })
         };
         let Some((base, sort)) = target else {
-            let ack = proto::DropAck { ok: false, reason: "Le PC reçoit déjà un envoi.".into() };
+            let ack = proto::DropAck { ok: false, reason: "Le PC reçoit déjà un envoi.".into(), duplicate: false };
             return write_msg(&mut io, &env(Msg::DropAck(ack))).await;
         };
         (self.notify)(UiEvent::DropStarted);
-        let ack = |ok: bool, reason: String| env(Msg::DropAck(proto::DropAck { ok, reason }));
+        let ack = |ok: bool, reason: String| env(Msg::DropAck(proto::DropAck { ok, reason, duplicate: false }));
         let mut cur: Option<crate::drop::Incoming> = None;
-        let end: Result<u32, String> = loop {
+        let end: Result<(u32, u32), String> = loop {
             let m = tokio::select! {
                 r = timeout(DROP_SILENCE, read_msg(&mut io)) => match r {
                     Ok(Ok(Some(m))) => m,
@@ -752,10 +772,14 @@ impl Hub {
                 }
             };
             match m.msg {
+                Some(Msg::DropHave(h)) => {
+                    let missing = self.lock().drop_index.missing(&h.asset_ids);
+                    write_msg(&mut io, &env(Msg::DropMissing(proto::DropMissing { asset_ids: missing }))).await?;
+                }
                 Some(Msg::DropPlan(p)) => {
                     {
                         let mut st = self.lock();
-                        (st.drop.items, st.drop.files, st.drop.bytes) = (p.items, p.files, p.bytes);
+                        (st.drop.items, st.drop.files, st.drop.bytes, st.drop.already) = (p.items, p.files, p.bytes, p.already);
                     }
                     if let Err(e) = crate::drop::check_space(&base, p.bytes) {
                         write_msg(&mut io, &ack(false, e.clone())).await?;
@@ -767,10 +791,24 @@ impl Hub {
                     if let Some(old) = cur.take() {
                         old.abort();
                     }
+                    // Same content already in the folder: not sent (E6).
+                    let dup = !f.sha256.is_empty() && {
+                        let mut st = self.lock();
+                        let dup = st.drop_index.duplicate(&f.sha256).is_some();
+                        if dup && f.last_of_item {
+                            st.drop_index.add_asset(&f.asset_id);
+                        }
+                        dup
+                    };
+                    if dup {
+                        write_msg(&mut io, &env(Msg::DropAck(proto::DropAck { ok: true, reason: String::new(), duplicate: true }))).await?;
+                        continue;
+                    }
                     match crate::drop::Incoming::start(&base, &sort, &f) {
                         Ok(i) => {
                             cur = Some(i);
                             self.lock().drop.current = f.name;
+                            write_msg(&mut io, &ack(true, String::new())).await?;
                         }
                         Err(e) => {
                             write_msg(&mut io, &ack(false, e.clone())).await?;
@@ -792,13 +830,23 @@ impl Hub {
                         continue;
                     };
                     let got = i.received();
+                    let asset = i.asset_id.clone();
                     match i.finish(&e.sha256) {
                         Ok(path) => {
-                            {
+                            let save = {
                                 let mut st = self.lock();
                                 st.drop.files_done += 1;
                                 st.drop.items_done += e.last_of_item as u32;
                                 st.drop.folder = path.parent().map(|d| d.display().to_string()).unwrap_or_default();
+                                st.drop_index.add_file(&e.sha256, &path);
+                                if e.last_of_item {
+                                    st.drop_index.add_asset(&asset);
+                                }
+                                st.drop.files_done % 20 == 0
+                            };
+                            // Saved now and then, and at the end.
+                            if save {
+                                self.save_drop_index();
                             }
                             write_msg(&mut io, &ack(true, String::new())).await?;
                         }
@@ -810,21 +858,23 @@ impl Hub {
                     }
                 }
                 Some(Msg::DropCancel(_)) => break Err("Envoi annulé sur l’iPhone.".into()),
-                Some(Msg::DropDone(d)) => break Ok(d.failed),
+                Some(Msg::DropDone(d)) => break Ok((d.failed, d.already)),
                 _ => {}
             }
         };
         if let Some(i) = cur {
             i.abort();
         }
+        self.save_drop_index();
         {
             let mut st = self.lock();
             st.drop.current.clear();
             st.drop.rate = 0;
             match end {
-                Ok(failed) => {
+                Ok((failed, already)) => {
                     st.drop.state = "done".into();
                     st.drop.failed = failed;
+                    st.drop.already = already;
                 }
                 Err(e) => {
                     st.drop.state = "failed".into();
@@ -1110,34 +1160,50 @@ mod tests {
         assert_eq!(&p[18..], &frame.data[..]);
     }
 
+    async fn drop_chunks(io: &mut Phone, data: &[u8]) {
+        for c in data.chunks(1 << 20) {
+            send(io, Msg::DropChunk(proto::DropChunk { data: c.to_vec() })).await;
+        }
+    }
+
     #[tokio::test]
-    async fn a_drop_send_lands_checked_in_its_month() {
+    async fn a_drop_send_lands_checked_in_its_month_and_never_twice() {
         use sha2::{Digest, Sha256};
         let r = rig().await;
         let photos = tempfile::tempdir().unwrap();
         r.hub.set_drop_target(photos.path().to_path_buf(), "year_month".into());
         let phone = Identity::generate("phone").unwrap();
         let _ctl = pair(&r, &phone).await;
+        let data: Vec<u8> = (0..3_000_000u32).map(|i| i as u8).collect();
+        let sha = Sha256::digest(&data).to_vec();
+        let file = proto::DropFile {
+            name: "IMG_7.HEIC".into(),
+            size: data.len() as u64,
+            year: 2025,
+            month: 3,
+            asset_id: "A1".into(),
+            last_of_item: true,
+            ..Default::default()
+        };
+
         let mut io = connect(r.addr, &phone, r.hub.identity.fingerprint).await.unwrap();
         send(&mut io, Msg::DropHello(proto::DropHello {})).await;
-        send(&mut io, Msg::DropPlan(proto::DropPlan { items: 1, files: 1, bytes: 3_000_000 })).await;
+        send(&mut io, Msg::DropHave(proto::DropHave { asset_ids: vec!["A1".into()] })).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::DropMissing(m)) if m.asset_ids == ["A1"]));
+        send(&mut io, Msg::DropPlan(proto::DropPlan { items: 1, files: 1, bytes: 3_000_000, already: 0 })).await;
         assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if a.ok));
-        let data: Vec<u8> = (0..3_000_000u32).map(|i| i as u8).collect();
-        let file = proto::DropFile { name: "IMG_7.HEIC".into(), size: data.len() as u64, taken_unix: 0, year: 2025, month: 3 };
         send(&mut io, Msg::DropFile(file.clone())).await;
-        for c in data.chunks(1 << 20) {
-            send(&mut io, Msg::DropChunk(proto::DropChunk { data: c.to_vec() })).await;
-        }
+        assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if a.ok && !a.duplicate));
+        drop_chunks(&mut io, &data).await;
         // A wrong hash first: refused, nothing kept; then the right one.
         send(&mut io, Msg::DropEnd(proto::DropEnd { sha256: vec![0; 32], last_of_item: true })).await;
         assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if !a.ok && a.reason.contains("empreinte")));
-        send(&mut io, Msg::DropFile(file)).await;
-        for c in data.chunks(1 << 20) {
-            send(&mut io, Msg::DropChunk(proto::DropChunk { data: c.to_vec() })).await;
-        }
-        send(&mut io, Msg::DropEnd(proto::DropEnd { sha256: Sha256::digest(&data).to_vec(), last_of_item: true })).await;
+        send(&mut io, Msg::DropFile(file.clone())).await;
         assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if a.ok));
-        send(&mut io, Msg::DropDone(proto::DropDone { failed: 0 })).await;
+        drop_chunks(&mut io, &data).await;
+        send(&mut io, Msg::DropEnd(proto::DropEnd { sha256: sha.clone(), last_of_item: true })).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if a.ok));
+        send(&mut io, Msg::DropDone(proto::DropDone { failed: 0, already: 0 })).await;
         wait_until(|| r.hub.view().drop.state == "done").await;
         let d = r.hub.view().drop;
         assert_eq!((d.items_done, d.files_done, d.bytes_done), (1, 1, 3_000_000));
@@ -1145,6 +1211,23 @@ mod tests {
         assert_eq!(std::fs::read(month.join("IMG_7.HEIC")).unwrap(), data);
         assert_eq!(std::fs::read_dir(&month).unwrap().count(), 1, "no .part left");
         assert!(r.events.lock().unwrap().contains(&UiEvent::DropStarted));
+
+        // Second send: the item is known, and the same content under another
+        // identifier is not stored again (E6). The index survives a restart.
+        assert!(r.hub.store.drop_index().assets.contains("A1"));
+        let mut io = connect(r.addr, &phone, r.hub.identity.fingerprint).await.unwrap();
+        send(&mut io, Msg::DropHello(proto::DropHello {})).await;
+        send(&mut io, Msg::DropHave(proto::DropHave { asset_ids: vec!["A1".into(), "B2".into()] })).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::DropMissing(m)) if m.asset_ids == ["B2"]));
+        send(&mut io, Msg::DropPlan(proto::DropPlan { items: 1, files: 1, bytes: 3_000_000, already: 1 })).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if a.ok));
+        send(&mut io, Msg::DropFile(proto::DropFile { asset_id: "B2".into(), sha256: sha, ..file })).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if a.ok && a.duplicate));
+        send(&mut io, Msg::DropDone(proto::DropDone { failed: 0, already: 2 })).await;
+        wait_until(|| r.hub.view().drop.state == "done").await;
+        assert_eq!(r.hub.view().drop.already, 2);
+        assert_eq!(std::fs::read_dir(&month).unwrap().count(), 1, "nothing stored twice");
+        assert!(r.hub.store.drop_index().assets.contains("B2"));
     }
 
     #[tokio::test]
@@ -1159,7 +1242,7 @@ mod tests {
         let _ctl = pair(&r, &phone).await;
         let mut io = connect(r.addr, &phone, r.hub.identity.fingerprint).await.unwrap();
         send(&mut io, Msg::DropHello(proto::DropHello {})).await;
-        send(&mut io, Msg::DropPlan(proto::DropPlan { items: 1, files: 1, bytes: u64::MAX / 4 })).await;
+        send(&mut io, Msg::DropPlan(proto::DropPlan { items: 1, files: 1, bytes: u64::MAX / 4, already: 0 })).await;
         assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if !a.ok && a.reason.starts_with("Il manque")));
         wait_until(|| r.hub.view().drop.state == "failed").await;
     }

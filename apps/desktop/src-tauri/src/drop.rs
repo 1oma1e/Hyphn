@@ -3,11 +3,12 @@
 //! and checked, and what the photos folder already holds. The connection
 //! itself is in `link`.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 pub const MONTHS: [&str; 12] = [
@@ -63,17 +64,30 @@ pub struct Incoming {
     size: u64,
     got: u64,
     taken_unix: i64,
+    /// Photos identifier of the item, empty for a file.
+    pub asset_id: String,
 }
 
 impl Incoming {
     pub fn start(base: &Path, sort: &str, f: &crate::proto::DropFile) -> Result<Self, String> {
         let month = f.month.clamp(1, 12);
-        let dir = target_dir(base, sort, f.year, month);
+        // Files from the Files app have no date taken: their own folder (E9).
+        let dir = if f.is_file { base.join("Fichiers") } else { target_dir(base, sort, f.year, month) };
         fs::create_dir_all(&dir).map_err(|e| format!("Dossier {} : {e}", dir.display()))?;
         let name = safe_name(&f.name);
         let part = free_path(&dir, &format!("{name}.part"));
         let file = fs::File::create(&part).map_err(|e| format!("Écriture de {name} : {e}"))?;
-        Ok(Self { part, dir, name, file, hasher: Sha256::new(), size: f.size, got: 0, taken_unix: f.taken_unix })
+        Ok(Self {
+            part,
+            dir,
+            name,
+            file,
+            hasher: Sha256::new(),
+            size: f.size,
+            got: 0,
+            taken_unix: f.taken_unix,
+            asset_id: f.asset_id.clone(),
+        })
     }
 
     pub fn chunk(&mut self, data: &[u8]) -> Result<(), String> {
@@ -129,6 +143,68 @@ impl Incoming {
     }
 }
 
+/// What this PC already received (spec `Drop - Photos vers le PC`, E6), kept
+/// in `drop_index.json`: an item is not sent twice, a content is not stored twice.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct DropIndex {
+    /// Photos identifiers of the items received whole.
+    pub assets: BTreeSet<String>,
+    /// SHA-256 (hex) of each file put in place, with its path.
+    pub files: BTreeMap<String, String>,
+}
+
+fn hex(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+impl DropIndex {
+    /// The ones not received yet, in the same order.
+    pub fn missing(&self, ids: &[String]) -> Vec<String> {
+        ids.iter().filter(|id| !self.assets.contains(*id)).cloned().collect()
+    }
+
+    /// This content is already in the folder (and the file is still there).
+    pub fn duplicate(&self, sha256: &[u8]) -> Option<PathBuf> {
+        self.files.get(&hex(sha256)).map(PathBuf::from).filter(|p| p.is_file())
+    }
+
+    pub fn add_file(&mut self, sha256: &[u8], path: &Path) {
+        self.files.insert(hex(sha256), path.display().to_string());
+    }
+
+    pub fn add_asset(&mut self, id: &str) {
+        if !id.is_empty() {
+            self.assets.insert(id.to_string());
+        }
+    }
+}
+
+/// « Laisser Hyphn choisir » (ADR-0029): the fixed drive with the most free
+/// space; `X:\Hyphn\Photos` when it is not the Windows drive, else
+/// `Images\Hyphn`. `drives`: root and free bytes of each fixed drive.
+pub fn pick_dir(drives: &[(PathBuf, u64)], system: &Path, pictures: &Path) -> PathBuf {
+    let best = drives.iter().max_by_key(|(_, free)| *free).map(|(root, _)| root);
+    match best {
+        Some(root) if !same_drive(root, system) => root.join("Hyphn").join("Photos"),
+        _ => pictures.join("Hyphn"),
+    }
+}
+
+fn same_drive(a: &Path, b: &Path) -> bool {
+    let first = |p: &Path| p.components().next().map(|c| c.as_os_str().to_string_lossy().to_uppercase());
+    first(a) == first(b)
+}
+
+/// The folder Hyphn picks on this PC, with its free space.
+pub fn suggest_dir(pictures: &Path) -> (PathBuf, Option<u64>) {
+    let system = std::env::var_os("SystemDrive").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("C:"));
+    let drives: Vec<(PathBuf, u64)> = sys::fixed_drives().into_iter().filter_map(|d| Some((d.clone(), sys::free_space(&d)?))).collect();
+    let dir = pick_dir(&drives, &system, pictures);
+    let free = free_space(&dir);
+    (dir, free)
+}
+
 /// Free bytes on the disk that holds `dir` (its first existing parent).
 pub fn free_space(dir: &Path) -> Option<u64> {
     let mut d = dir;
@@ -171,12 +247,32 @@ mod sys {
         let ok = unsafe { GetDiskFreeSpaceExW(w.as_ptr(), &mut free, std::ptr::null_mut(), std::ptr::null_mut()) };
         (ok != 0).then_some(free)
     }
+
+    /// `C:\`, `D:\`… for the fixed drives (no USB stick, no network drive).
+    pub fn fixed_drives() -> Vec<std::path::PathBuf> {
+        use windows_sys::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives};
+        const DRIVE_FIXED: u32 = 3;
+        let mask = unsafe { GetLogicalDrives() };
+        (0..26u8)
+            .filter(|i| mask & (1 << i) != 0)
+            .map(|i| format!("{}:\\", (b'A' + i) as char))
+            .filter(|root| {
+                let w: Vec<u16> = std::ffi::OsStr::new(root).encode_wide().chain(Some(0)).collect();
+                unsafe { GetDriveTypeW(w.as_ptr()) == DRIVE_FIXED }
+            })
+            .map(std::path::PathBuf::from)
+            .collect()
+    }
 }
 
 #[cfg(not(windows))]
 mod sys {
     pub fn free_space(_: &std::path::Path) -> Option<u64> {
         None
+    }
+
+    pub fn fixed_drives() -> Vec<std::path::PathBuf> {
+        Vec::new()
     }
 }
 
@@ -241,7 +337,51 @@ mod tests {
     }
 
     fn file(name: &str, data: &[u8]) -> crate::proto::DropFile {
-        crate::proto::DropFile { name: name.into(), size: data.len() as u64, taken_unix: 1_790_000_000, year: 2026, month: 10 }
+        crate::proto::DropFile {
+            name: name.into(),
+            size: data.len() as u64,
+            taken_unix: 1_790_000_000,
+            year: 2026,
+            month: 10,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn files_from_the_files_app_go_to_their_own_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = crate::proto::DropFile { is_file: true, ..file("devis.pdf", b"pdf") };
+        let mut f = Incoming::start(dir.path(), "year_month", &f).unwrap();
+        f.chunk(b"pdf").unwrap();
+        assert_eq!(f.finish(&Sha256::digest(b"pdf")).unwrap(), dir.path().join("Fichiers").join("devis.pdf"));
+    }
+
+    #[test]
+    fn the_index_knows_items_and_contents() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut ix = DropIndex::default();
+        ix.add_asset("A/L0/001");
+        let ids = vec!["A/L0/001".to_string(), "B/L0/001".to_string()];
+        assert_eq!(ix.missing(&ids), vec!["B/L0/001".to_string()]);
+        let p = dir.path().join("x.heic");
+        fs::write(&p, b"x").unwrap();
+        let sha = Sha256::digest(b"x");
+        assert!(ix.duplicate(&sha).is_none());
+        ix.add_file(&sha, &p);
+        assert_eq!(ix.duplicate(&sha), Some(p.clone()));
+        // Deleted by hand: it may come again.
+        fs::remove_file(&p).unwrap();
+        assert!(ix.duplicate(&sha).is_none());
+    }
+
+    #[test]
+    fn hyphn_picks_the_roomiest_drive() {
+        let pics = Path::new(r"C:\Users\Evan\Pictures");
+        let c = (PathBuf::from(r"C:\"), 20u64 << 30);
+        let f = (PathBuf::from(r"F:\"), 500u64 << 30);
+        assert_eq!(pick_dir(&[c.clone(), f], Path::new("C:"), pics), PathBuf::from(r"F:\").join("Hyphn").join("Photos"));
+        assert_eq!(pick_dir(&[c], Path::new("C:"), pics), pics.join("Hyphn"));
+        assert_eq!(pick_dir(&[], Path::new("C:"), pics), pics.join("Hyphn"));
     }
 
     #[test]

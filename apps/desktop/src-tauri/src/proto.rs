@@ -9,7 +9,7 @@ pub const MAX_MESSAGE: usize = 16 * 1024 * 1024;
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Envelope {
-    #[prost(oneof = "envelope::Msg", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25")]
+    #[prost(oneof = "envelope::Msg", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28")]
     pub msg: Option<envelope::Msg>,
 }
 
@@ -66,6 +66,12 @@ pub mod envelope {
         DropCancel(super::DropCancel),
         #[prost(message, tag = "25")]
         DropDone(super::DropDone),
+        #[prost(message, tag = "26")]
+        DropStart(super::DropStart),
+        #[prost(message, tag = "27")]
+        DropHave(super::DropHave),
+        #[prost(message, tag = "28")]
+        DropMissing(super::DropMissing),
     }
 }
 
@@ -308,6 +314,8 @@ pub struct DropPlan {
     pub files: u32,
     #[prost(uint64, tag = "3")]
     pub bytes: u64,
+    #[prost(uint32, tag = "4")]
+    pub already: u32,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -322,6 +330,14 @@ pub struct DropFile {
     pub year: u32,
     #[prost(uint32, tag = "5")]
     pub month: u32,
+    #[prost(string, tag = "6")]
+    pub asset_id: String,
+    #[prost(bytes = "vec", tag = "7")]
+    pub sha256: Vec<u8>,
+    #[prost(bool, tag = "8")]
+    pub is_file: bool,
+    #[prost(bool, tag = "9")]
+    pub last_of_item: bool,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -344,6 +360,8 @@ pub struct DropAck {
     pub ok: bool,
     #[prost(string, tag = "2")]
     pub reason: String,
+    #[prost(bool, tag = "3")]
+    pub duplicate: bool,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -353,6 +371,23 @@ pub struct DropCancel {}
 pub struct DropDone {
     #[prost(uint32, tag = "1")]
     pub failed: u32,
+    #[prost(uint32, tag = "2")]
+    pub already: u32,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct DropStart {}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct DropHave {
+    #[prost(string, repeated, tag = "1")]
+    pub asset_ids: Vec<String>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct DropMissing {
+    #[prost(string, repeated, tag = "1")]
+    pub asset_ids: Vec<String>,
 }
 
 /// Reads one length-prefixed message. `Ok(None)` on a clean end of stream.

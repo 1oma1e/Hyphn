@@ -11,6 +11,8 @@ use crate::Error;
 
 const SETTINGS_FILE: &str = "settings.json";
 const DEVICES_FILE: &str = "devices.json";
+/// What Drop already received (spec `Drop - Photos vers le PC`, E6).
+const DROP_INDEX_FILE: &str = "drop_index.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
@@ -30,6 +32,9 @@ pub struct Settings {
     /// « Non » to the admin prompt of the automatic webcam install: not asked
     /// again at start, the Réglages button stays.
     pub vcam_declined: bool,
+    /// Drop: folder and sorting chosen once in the guided start (ADR-0029);
+    /// changed later in Réglages.
+    pub drop_setup_done: bool,
 }
 
 impl Default for Settings {
@@ -44,6 +49,7 @@ impl Default for Settings {
             port: None,
             cam: serde_json::Value::Object(Default::default()),
             vcam_declined: false,
+            drop_setup_done: false,
         }
     }
 }
@@ -75,6 +81,14 @@ impl Store {
 
     pub fn save_settings(&self, s: &Settings) -> Result<(), Error> {
         self.write(SETTINGS_FILE, s)
+    }
+
+    pub fn drop_index(&self) -> crate::drop::DropIndex {
+        self.read(DROP_INDEX_FILE).unwrap_or_default()
+    }
+
+    pub fn save_drop_index(&self, ix: &crate::drop::DropIndex) -> Result<(), Error> {
+        self.write(DROP_INDEX_FILE, ix)
     }
 
     pub fn devices(&self) -> Vec<PairedDevice> {
