@@ -420,3 +420,17 @@ button { font-family: inherit; }
   .wmsg.cycle span { animation-duration: 0s; }
   .wmsg.cycle span:first-child { opacity: 1; }
 }
+
+/* Drop (spec `Drop - Photos vers le PC`) */
+.drop-idle { display: flex; align-items: center; gap: 18px; padding: 8px 0; }
+.drop-idle .ic { width: 60px; height: 60px; flex: none; border-radius: 19px; display: grid; place-items: center; background: color-mix(in srgb, var(--cy) 12%, transparent); color: var(--cy); }
+.drop-idle .ic svg { width: 28px; height: 28px; }
+.drop-big { display: flex; align-items: baseline; gap: 16px; margin: 14px 0 12px; }
+.drop-big .mono { font-size: 56px; font-weight: 600; letter-spacing: -.04em; line-height: 1; }
+.drop-big .sub { margin: 0; }
+.drop-track { height: 10px; }
+.drop-track span { background: var(--cy); box-shadow: 0 0 14px color-mix(in srgb, var(--cy) 60%, transparent); }
+.drop-stats { gap: 22px; margin-top: 14px; font-size: 14px; color: var(--tx2); }
+.drop-cur { margin-top: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.months { display: flex; flex-direction: column; margin-top: 18px; border-top: 1px solid var(--ln); }
+.month { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--ln); font-size: 15px; }

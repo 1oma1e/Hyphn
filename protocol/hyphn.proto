@@ -36,7 +36,53 @@ message Envelope {
     VideoFrame video_frame = 15;    // iPhone -> PC
     Forget forget = 16;             // either side: « Oublier »
     KeyRequest key_request = 17;    // PC -> iPhone: the decoder needs a keyframe now
+    DropHello drop_hello = 18;      // iPhone -> PC, first message of a Drop connection
+    DropPlan drop_plan = 19;        // iPhone -> PC: what is coming
+    DropFile drop_file = 20;        // iPhone -> PC: one file starts
+    DropChunk drop_chunk = 21;      // iPhone -> PC: 1 MB of it
+    DropEnd drop_end = 22;          // iPhone -> PC: the file is over, with its SHA-256
+    DropAck drop_ack = 23;          // PC -> iPhone: answer to DropPlan and DropEnd
+    DropCancel drop_cancel = 24;    // either side: « Annuler »
+    DropDone drop_done = 25;        // iPhone -> PC: the whole send is over
   }
+}
+
+// Drop v1 (spec `Drop - Photos vers le PC`): one connection per send, the
+// app stays open. Files one after the other, each acknowledged.
+message DropHello {}
+
+message DropPlan {
+  uint32 items = 1;       // photos and videos chosen
+  uint32 files = 2;       // files to send (a Live Photo is two)
+  uint64 bytes = 3;       // total size, used to check the PC's free space
+}
+
+message DropFile {
+  string name = 1;        // original name, e.g. IMG_1234.HEIC
+  uint64 size = 2;
+  int64 taken_unix = 3;   // when the photo was taken (file date on the PC)
+  uint32 year = 4;        // taken, in the iPhone's calendar: the folder
+  uint32 month = 5;       // 1..12
+}
+
+message DropChunk {
+  bytes data = 1;
+}
+
+message DropEnd {
+  bytes sha256 = 1;
+  bool last_of_item = 2;  // the item (photo + its Live video) is complete
+}
+
+message DropAck {
+  bool ok = 1;
+  string reason = 2;      // when not ok, shown on the iPhone
+}
+
+message DropCancel {}
+
+message DropDone {
+  uint32 failed = 1;      // items that could not be sent
 }
 
 message PairRequest {

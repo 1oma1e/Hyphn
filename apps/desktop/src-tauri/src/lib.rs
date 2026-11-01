@@ -2,7 +2,6 @@
 //! reads snapshots and sends commands. Drop is empty for now (ADR-0020).
 
 mod cam;
-#[allow(dead_code)] // Drop comes back in the next session (ADR-0020).
 mod drop;
 mod identity;
 mod install;
@@ -130,6 +129,10 @@ struct Snapshot {
     cam: CamView,
     vcam: VcamView,
     pair_seconds_left: u64,
+    /// The Drop send in progress or the last one (spec `Drop - Photos vers le PC`).
+    drop: link::DropProgress,
+    /// Last year/month folders of the photos folder (E9).
+    drop_months: Vec<drop::MonthSummary>,
 }
 
 fn snapshot(h: &Hyphn) -> Snapshot {
@@ -174,6 +177,8 @@ fn snapshot(h: &Hyphn) -> Snapshot {
         },
         vcam,
         pair_seconds_left: v.pair_seconds_left,
+        drop: v.drop,
+        drop_months: drop::summary(&PathBuf::from(h.lock().settings.photos_dir.clone()), 4),
     }
 }
 
@@ -279,8 +284,23 @@ fn save_settings(settings: Settings, app: AppHandle, h: State<'_, Hyphn>) -> Res
         r.map_err(|e| format!("Lancement avec Windows : {e}"))?;
     }
     h.hub.store.save_settings(&settings)?;
+    h.hub.set_drop_target(PathBuf::from(&settings.photos_dir), settings.sort.clone());
     inner.settings = settings;
     Ok(())
+}
+
+/// « Annuler » on the Drop page.
+#[tauri::command]
+fn drop_cancel(h: State<'_, Hyphn>) {
+    h.hub.cancel_drop();
+}
+
+/// « Ouvrir le dossier » after a send: where the last file went.
+#[tauri::command]
+fn open_drop_folder(app: AppHandle, h: State<'_, Hyphn>) -> Result<(), String> {
+    let folder = h.hub.view().drop.folder;
+    let dir = if folder.is_empty() { h.lock().settings.photos_dir.clone() } else { folder };
+    app.opener().open_path(dir, None::<&str>).map_err(|e| e.to_string())
 }
 
 /// Async so the blocking folder dialog does not run on the main thread.
@@ -545,6 +565,9 @@ fn on_event(app: &AppHandle, e: UiEvent) {
                 }
             }
         }
+        UiEvent::DropStarted => {
+            let _ = app.emit("drop_started", ());
+        }
         UiEvent::Changed => {}
     }
     // Every event can change the snapshot; the window and the webcam get it
@@ -626,6 +649,7 @@ pub fn run() {
                 saved_cam(&settings),
                 Box::new(move |e| on_event(&handle, e)),
             )?;
+            hub.set_drop_target(PathBuf::from(&settings.photos_dir), settings.sort.clone());
             let mdns = net::local_ip().and_then(|ip| net::advertise(ip.into(), port, &short_id));
             let video_url = tauri::async_runtime::block_on(video::start(hub.clone()))?;
             let native = vcam::native_dir(app.path().resource_dir().ok()).filter(|d| vcam::native_is_genuine(d));
@@ -690,6 +714,8 @@ pub fn run() {
             save_settings,
             pick_photos_dir,
             open_photos_dir,
+            drop_cancel,
+            open_drop_folder,
             reconnect,
             cam_set,
             cam_lens,

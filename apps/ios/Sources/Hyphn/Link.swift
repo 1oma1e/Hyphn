@@ -429,6 +429,14 @@ final class PCLink: ObservableObject {
         return c
     }
 
+    /// A Drop connection (spec `Drop - Photos vers le PC`, E3): same pinned
+    /// TLS as the session, opened for one send and closed after it. Not
+    /// started: the caller sets its callbacks first.
+    func openDrop() -> PinnedConnection? {
+        guard let pc, let identity, session != nil else { return nil }
+        return PinnedConnection(host: pc.host, port: pc.port, pinned: pc.fingerprint, identity: identity, serviceClass: .bestEffort)
+    }
+
     /// Where the session actually connected (the Bonjour address can differ from the QR one).
     private func rememberAddress(host: String, port: UInt16) {
         guard var p = pc, p.host != host || p.port != port else { return }

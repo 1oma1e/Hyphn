@@ -1,10 +1,14 @@
-//! Drop rules that do not depend on the network: where a photo goes (sorted
-//! by its real date) and what the photos folder already holds.
+//! Drop rules that do not depend on the network (spec `Drop - Photos vers le
+//! PC`): where a photo goes (sorted by its real date), how a file is received
+//! and checked, and what the photos folder already holds. The connection
+//! itself is in `link`.
 
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 pub const MONTHS: [&str; 12] = [
     "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
@@ -12,13 +16,167 @@ pub const MONTHS: [&str; 12] = [
 ];
 
 /// Folder for a photo taken in `year`/`month` (1-12), following the « Rangement » setting.
-/// Used by the real receive (phase 2).
-#[allow(dead_code)]
 pub fn target_dir(base: &Path, sort: &str, year: u32, month: u32) -> PathBuf {
     match sort {
         "flat" => base.to_path_buf(),
         "year" => base.join(year.to_string()),
         _ => base.join(year.to_string()).join(format!("{month:02}")),
+    }
+}
+
+/// The name sent by the iPhone, made safe for Windows: its last part only (no
+/// folder, no `..`), no reserved character, never empty.
+pub fn safe_name(name: &str) -> String {
+    let last = name.rsplit(['/', '\\']).next().unwrap_or("");
+    let clean: String = last
+        .chars()
+        .map(|c| if c.is_control() || "<>:\"|?*".contains(c) { '_' } else { c })
+        .collect();
+    let clean = clean.trim().trim_end_matches('.').trim_start_matches('.').to_string();
+    if clean.is_empty() { "fichier".into() } else { clean }
+}
+
+/// `IMG_1.HEIC`, else `IMG_1 (1).HEIC`, `IMG_1 (2).HEIC`… in `dir`.
+fn free_path(dir: &Path, name: &str) -> PathBuf {
+    let first = dir.join(name);
+    if !first.exists() {
+        return first;
+    }
+    let (stem, ext) = match name.rsplit_once('.') {
+        Some((s, e)) if !s.is_empty() => (s, format!(".{e}")),
+        _ => (name, String::new()),
+    };
+    (1..)
+        .map(|i| dir.join(format!("{stem} ({i}){ext}")))
+        .find(|p| !p.exists())
+        .unwrap()
+}
+
+/// One file being received: written to `<name>.part`, hashed as it comes,
+/// renamed into place only if the iPhone's SHA-256 is the same (E5).
+pub struct Incoming {
+    part: PathBuf,
+    dir: PathBuf,
+    name: String,
+    file: fs::File,
+    hasher: Sha256,
+    size: u64,
+    got: u64,
+    taken_unix: i64,
+}
+
+impl Incoming {
+    pub fn start(base: &Path, sort: &str, f: &crate::proto::DropFile) -> Result<Self, String> {
+        let month = f.month.clamp(1, 12);
+        let dir = target_dir(base, sort, f.year, month);
+        fs::create_dir_all(&dir).map_err(|e| format!("Dossier {} : {e}", dir.display()))?;
+        let name = safe_name(&f.name);
+        let part = free_path(&dir, &format!("{name}.part"));
+        let file = fs::File::create(&part).map_err(|e| format!("Écriture de {name} : {e}"))?;
+        Ok(Self { part, dir, name, file, hasher: Sha256::new(), size: f.size, got: 0, taken_unix: f.taken_unix })
+    }
+
+    pub fn chunk(&mut self, data: &[u8]) -> Result<(), String> {
+        self.got += data.len() as u64;
+        if self.got > self.size {
+            return Err(format!("{} : plus long qu’annoncé", self.name));
+        }
+        self.hasher.update(data);
+        self.file.write_all(data).map_err(|e| format!("Écriture de {} : {e}", self.name))
+    }
+
+    /// Bytes written so far.
+    pub fn received(&self) -> u64 {
+        self.got
+    }
+
+    /// Checks size and hash, then puts the file in its place. On any error
+    /// the `.part` is removed.
+    pub fn finish(mut self, sha256: &[u8]) -> Result<PathBuf, String> {
+        let check = (|| {
+            self.file.flush().map_err(|e| e.to_string())?;
+            if self.got != self.size {
+                return Err(format!("{} : {} octets reçus sur {}", self.name, self.got, self.size));
+            }
+            if self.hasher.clone().finalize().as_slice() != sha256 {
+                return Err(format!("{} : empreinte différente", self.name));
+            }
+            Ok(())
+        })();
+        let Incoming { part, dir, name, file, taken_unix, .. } = self;
+        if taken_unix > 0 {
+            // The file date is the date the photo was taken.
+            let _ = file.set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(taken_unix as u64));
+        }
+        drop(file);
+        if let Err(e) = check {
+            let _ = fs::remove_file(&part);
+            return Err(e);
+        }
+        let to = free_path(&dir, &name);
+        fs::rename(&part, &to).map_err(|e| {
+            let _ = fs::remove_file(&part);
+            format!("Rangement de {name} : {e}")
+        })?;
+        Ok(to)
+    }
+
+    /// « Annuler » or a lost link: nothing half-written stays.
+    pub fn abort(self) {
+        let Incoming { part, file, .. } = self;
+        drop(file);
+        let _ = fs::remove_file(part);
+    }
+}
+
+/// Free bytes on the disk that holds `dir` (its first existing parent).
+pub fn free_space(dir: &Path) -> Option<u64> {
+    let mut d = dir;
+    while !d.exists() {
+        d = d.parent()?;
+    }
+    sys::free_space(d)
+}
+
+/// The plan fits on the disk (E4), with 1 GB kept free for Windows.
+pub fn check_space(dir: &Path, bytes: u64) -> Result<(), String> {
+    const KEEP: u64 = 1_000_000_000;
+    let Some(free) = free_space(dir) else { return Ok(()) };
+    let need = bytes + KEEP;
+    if free >= need {
+        return Ok(());
+    }
+    let drive = dir.components().next().map(|c| c.as_os_str().to_string_lossy().into_owned()).unwrap_or_default();
+    Err(format!("Il manque {} sur {drive}", gb(need - free)))
+}
+
+/// « 2,1 Go », « 340 Mo » (decimal units, as in the window).
+pub fn gb(bytes: u64) -> String {
+    if bytes >= 1_000_000_000 {
+        format!("{:.1} Go", bytes as f64 / 1e9).replace('.', ",")
+    } else {
+        format!("{} Mo", (bytes / 1_000_000).max(1))
+    }
+}
+
+#[cfg(windows)]
+mod sys {
+    use std::os::windows::ffi::OsStrExt;
+    use std::path::Path;
+
+    pub fn free_space(dir: &Path) -> Option<u64> {
+        use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+        let w: Vec<u16> = dir.as_os_str().encode_wide().chain(Some(0)).collect();
+        let mut free = 0u64;
+        let ok = unsafe { GetDiskFreeSpaceExW(w.as_ptr(), &mut free, std::ptr::null_mut(), std::ptr::null_mut()) };
+        (ok != 0).then_some(free)
+    }
+}
+
+#[cfg(not(windows))]
+mod sys {
+    pub fn free_space(_: &std::path::Path) -> Option<u64> {
+        None
     }
 }
 
@@ -80,6 +238,62 @@ mod tests {
         assert_eq!(target_dir(base, "year_month", 2026, 10), base.join("2026").join("10"));
         assert_eq!(target_dir(base, "year", 2026, 10), base.join("2026"));
         assert_eq!(target_dir(base, "flat", 2026, 10), base.to_path_buf());
+    }
+
+    fn file(name: &str, data: &[u8]) -> crate::proto::DropFile {
+        crate::proto::DropFile { name: name.into(), size: data.len() as u64, taken_unix: 1_790_000_000, year: 2026, month: 10 }
+    }
+
+    #[test]
+    fn a_checked_file_lands_in_its_month() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = b"heic bytes";
+        let mut f = Incoming::start(dir.path(), "year_month", &file("IMG_1.HEIC", data)).unwrap();
+        f.chunk(&data[..4]).unwrap();
+        f.chunk(&data[4..]).unwrap();
+        let to = f.finish(&Sha256::digest(data)).unwrap();
+        assert_eq!(to, dir.path().join("2026").join("10").join("IMG_1.HEIC"));
+        assert_eq!(fs::read(&to).unwrap(), data);
+        // Sent again: kept beside it, never overwritten.
+        let mut g = Incoming::start(dir.path(), "year_month", &file("IMG_1.HEIC", data)).unwrap();
+        g.chunk(data).unwrap();
+        assert_eq!(g.finish(&Sha256::digest(data)).unwrap().file_name().unwrap(), "IMG_1 (1).HEIC");
+    }
+
+    #[test]
+    fn a_wrong_hash_or_size_leaves_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let month = dir.path().join("2026").join("10");
+        let mut f = Incoming::start(dir.path(), "year_month", &file("a.mov", b"12345")).unwrap();
+        f.chunk(b"12345").unwrap();
+        assert!(f.finish(&[0u8; 32]).unwrap_err().contains("empreinte"));
+        let mut g = Incoming::start(dir.path(), "year_month", &file("a.mov", b"12345")).unwrap();
+        g.chunk(b"123").unwrap();
+        assert!(g.finish(&Sha256::digest(b"123")).is_err());
+        let mut h = Incoming::start(dir.path(), "year_month", &file("a.mov", b"12")).unwrap();
+        assert!(h.chunk(b"123").is_err());
+        h.abort();
+        assert_eq!(fs::read_dir(&month).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn names_from_the_iphone_cannot_leave_the_folder() {
+        assert_eq!(safe_name("IMG_0001.HEIC"), "IMG_0001.HEIC");
+        assert_eq!(safe_name("../../Windows/evil.dll"), "evil.dll");
+        assert_eq!(safe_name("..\\x\\a:b?.jpg"), "a_b_.jpg");
+        assert_eq!(safe_name(".."), "fichier");
+        assert_eq!(safe_name(""), "fichier");
+    }
+
+    #[test]
+    fn a_plan_bigger_than_the_disk_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(check_space(dir.path(), 1).is_ok());
+        if free_space(dir.path()).is_some() {
+            assert!(check_space(dir.path(), u64::MAX / 2).unwrap_err().starts_with("Il manque"));
+        }
+        assert_eq!(gb(2_100_000_000), "2,1 Go");
+        assert_eq!(gb(5_000_000), "5 Mo");
     }
 
     #[test]

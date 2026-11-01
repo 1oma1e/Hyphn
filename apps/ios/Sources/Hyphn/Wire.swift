@@ -105,6 +105,15 @@ enum Msg {
     case videoFrame(VideoFrame)
     case forget
     case keyRequest
+    // Drop v1 (spec `Drop - Photos vers le PC`).
+    case dropHello
+    case dropPlan(items: UInt32, files: UInt32, bytes: UInt64)
+    case dropFile(name: String, size: UInt64, takenUnix: Int64, year: UInt32, month: UInt32)
+    case dropChunk(Data)
+    case dropEnd(sha256: Data, lastOfItem: Bool)
+    case dropAck(ok: Bool, reason: String)
+    case dropCancel
+    case dropDone(failed: UInt32)
     case other
 }
 
@@ -254,6 +263,25 @@ extension Msg {
             b.uint(4, UInt64(f.width)); b.uint(5, UInt64(f.height)); b.bytes(6, f.data)
         case .forget:
             field = 16
+        case .dropHello:
+            field = 18
+        case let .dropPlan(items, files, bytes):
+            field = 19
+            b.uint(1, UInt64(items)); b.uint(2, UInt64(files)); b.uint(3, bytes)
+        case let .dropFile(name, size, takenUnix, year, month):
+            field = 20
+            b.string(1, name); b.uint(2, size); b.int(3, takenUnix); b.uint(4, UInt64(year)); b.uint(5, UInt64(month))
+        case let .dropChunk(data):
+            field = 21
+            b.bytes(1, data)
+        case let .dropEnd(sha, last):
+            field = 22
+            b.bytes(1, sha); b.bool(2, last)
+        case .dropCancel:
+            field = 24
+        case let .dropDone(failed):
+            field = 25
+            b.uint(1, UInt64(failed))
         default:
             return Data()
         }
@@ -357,6 +385,16 @@ extension Msg {
                 result = .forget
             case 17:
                 result = .keyRequest
+            case 23:
+                var ok = false, reason = ""
+                while let (f, w) = try m.field() {
+                    if f == 1 && w == 0 { ok = try m.varint() != 0 }
+                    else if f == 2 && w == 2 { reason = try m.string() }
+                    else { try m.skip(w) }
+                }
+                result = .dropAck(ok: ok, reason: reason)
+            case 24:
+                result = .dropCancel
             default:
                 result = .other
             }

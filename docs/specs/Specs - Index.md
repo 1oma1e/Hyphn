@@ -20,6 +20,7 @@ Statuts : `brouillon` (attend Evan), `validee` (date), `faite` (preuve notée).
 | [[Infos iPhone - Batterie et chaleur]] | 1 | validee (2026-10-31) |
 | [[Cam - Flux v1]] | 4 (en avance) | validee (2026-10-31) |
 | [[Cam - Webcam Windows et OBS]] | 5 (en avance) | validee (2026-10-31) |
+| [[Drop - Photos vers le PC]] | 2 (en avance) | validee (2026-11-01) |
 | `Infos iPhone - Batterie par cable` | 1 | à écrire (après l'essai `idevicediagnostics`, [[ADR-0006 Sante batterie par cable]]) |
 
 Liens : [[00-Accueil]]

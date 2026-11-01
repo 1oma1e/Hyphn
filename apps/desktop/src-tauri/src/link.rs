@@ -6,6 +6,7 @@
 //! - `VideoHello`: the camera stream, passed to the window as it comes.
 
 use std::net::Ipv4Addr;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -47,6 +48,40 @@ pub enum UiEvent {
     CamQuality { height: u32, fps: u32 },
     /// Evan touched « Afficher » on the iPhone: the PC shows the Cam page.
     PhoneLive,
+    /// A Drop send starts: the PC shows the Drop page.
+    DropStarted,
+}
+
+/// A Drop connection may stay quiet while the iPhone downloads an original
+/// from iCloud (spec `Drop - Photos vers le PC`, E2).
+const DROP_SILENCE: Duration = Duration::from_secs(300);
+
+/// Where a Drop send stands (spec `Drop - Photos vers le PC`, E7), read by the
+/// window once a second.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct DropProgress {
+    /// "" (nothing yet), "sending", "done" or "failed".
+    pub state: String,
+    pub items: u32,
+    pub items_done: u32,
+    pub files: u32,
+    pub files_done: u32,
+    pub bytes: u64,
+    pub bytes_done: u64,
+    /// Name of the file coming in.
+    pub current: String,
+    /// Bytes a second, averaged over the last 5 s.
+    pub rate: u64,
+    /// Items the iPhone could not send (iCloud, hash twice wrong).
+    pub failed: u32,
+    /// Why it stopped, when it did.
+    pub message: String,
+    /// Folder of the last file put in place (« Ouvrir le dossier »).
+    pub folder: String,
+    #[serde(skip)]
+    last_bytes: u64,
+    #[serde(skip)]
+    per_second: std::collections::VecDeque<u64>,
 }
 
 /// What the PC wants from the camera; the thermal rule turns it into `CamControl`.
@@ -158,6 +193,9 @@ pub struct State {
     h264_readers: Vec<String>,
     /// The link was lost while live: back live if the iPhone returns before.
     resume_live_until: Option<Instant>,
+    pub drop: DropProgress,
+    /// Photos folder and « Rangement » (Réglages on the PC).
+    drop_target: (PathBuf, String),
 }
 
 /// Read by the snapshot.
@@ -170,6 +208,7 @@ pub struct LinkView {
     pub effective: Effective,
     pub stats: CamStats,
     pub pair_seconds_left: u64,
+    pub drop: DropProgress,
 }
 
 pub struct Hub {
@@ -179,6 +218,8 @@ pub struct Hub {
     state: Mutex<State>,
     notify: Box<dyn Fn(UiEvent) + Send + Sync>,
     tls: TlsAcceptor,
+    /// « Annuler » on the PC: stops the Drop connection at once.
+    drop_stop: tokio::sync::Notify,
 }
 
 fn now_ms() -> u64 {
@@ -226,9 +267,12 @@ impl Hub {
                 video_sinks: Vec::new(),
                 h264_readers: Vec::new(),
                 resume_live_until: None,
+                drop: DropProgress::default(),
+                drop_target: (PathBuf::new(), String::new()),
             }),
             notify,
             tls,
+            drop_stop: tokio::sync::Notify::new(),
         }))
     }
 
@@ -262,6 +306,19 @@ impl Hub {
             effective: cam::effective(st.cam.request, thermal, st.cam.adapt),
             stats: st.stats.clone(),
             pair_seconds_left: st.pairing.seconds_left(Instant::now()),
+            drop: st.drop.clone(),
+        }
+    }
+
+    /// Photos folder and « Rangement », from the PC settings.
+    pub fn set_drop_target(&self, dir: PathBuf, sort: String) {
+        self.lock().drop_target = (dir, sort);
+    }
+
+    /// « Annuler » on the PC.
+    pub fn cancel_drop(&self) {
+        if self.lock().drop.state == "sending" {
+            self.drop_stop.notify_waiters();
         }
     }
 
@@ -337,6 +394,15 @@ impl Hub {
         s.bitrate_mbps = s.bytes as f32 * 8.0 / 1e6;
         s.frames = 0;
         s.bytes = 0;
+        let d = &mut st.drop;
+        if d.state == "sending" {
+            d.per_second.push_back(d.bytes_done.saturating_sub(d.last_bytes));
+            if d.per_second.len() > 5 {
+                d.per_second.pop_front();
+            }
+            d.rate = d.per_second.iter().sum::<u64>() / d.per_second.len() as u64;
+        }
+        d.last_bytes = d.bytes_done;
     }
 
     /// « Oublier » on the PC: tells the iPhone, then forgets it (E10).
@@ -395,6 +461,7 @@ impl Hub {
             Some(Msg::PairRequest(r)) => self.pair(tls, fp, r).await,
             Some(Msg::Hello(h)) => self.hello(tls, fp, h).await,
             Some(Msg::VideoHello(_)) => self.media(tls, fp).await,
+            Some(Msg::DropHello(_)) => self.drop_in(tls, fp).await,
             _ => Ok(()),
         }
     }
@@ -650,6 +717,122 @@ impl Hub {
                 self.request_key();
             }
         }
+        Ok(())
+    }
+
+    /// One Drop send (spec `Drop - Photos vers le PC`): the plan, then each
+    /// file checked by its SHA-256 and put in its year/month folder.
+    async fn drop_in<S: AsyncRead + AsyncWrite + Unpin>(self: Arc<Self>, mut io: S, fp: Fingerprint) -> std::io::Result<()> {
+        if !self.is_paired(&fp) {
+            return Ok(());
+        }
+        let target = {
+            let mut st = self.lock();
+            (st.drop.state != "sending").then(|| {
+                st.drop = DropProgress { state: "sending".into(), ..Default::default() };
+                st.drop_target.clone()
+            })
+        };
+        let Some((base, sort)) = target else {
+            let ack = proto::DropAck { ok: false, reason: "Le PC reçoit déjà un envoi.".into() };
+            return write_msg(&mut io, &env(Msg::DropAck(ack))).await;
+        };
+        (self.notify)(UiEvent::DropStarted);
+        let ack = |ok: bool, reason: String| env(Msg::DropAck(proto::DropAck { ok, reason }));
+        let mut cur: Option<crate::drop::Incoming> = None;
+        let end: Result<u32, String> = loop {
+            let m = tokio::select! {
+                r = timeout(DROP_SILENCE, read_msg(&mut io)) => match r {
+                    Ok(Ok(Some(m))) => m,
+                    _ => break Err("Liaison perdue : relance l’envoi depuis l’iPhone.".into()),
+                },
+                _ = self.drop_stop.notified() => {
+                    let _ = write_msg(&mut io, &env(Msg::DropCancel(proto::DropCancel {}))).await;
+                    break Err("Envoi annulé.".into());
+                }
+            };
+            match m.msg {
+                Some(Msg::DropPlan(p)) => {
+                    {
+                        let mut st = self.lock();
+                        (st.drop.items, st.drop.files, st.drop.bytes) = (p.items, p.files, p.bytes);
+                    }
+                    if let Err(e) = crate::drop::check_space(&base, p.bytes) {
+                        write_msg(&mut io, &ack(false, e.clone())).await?;
+                        break Err(e);
+                    }
+                    write_msg(&mut io, &ack(true, String::new())).await?;
+                }
+                Some(Msg::DropFile(f)) => {
+                    if let Some(old) = cur.take() {
+                        old.abort();
+                    }
+                    match crate::drop::Incoming::start(&base, &sort, &f) {
+                        Ok(i) => {
+                            cur = Some(i);
+                            self.lock().drop.current = f.name;
+                        }
+                        Err(e) => {
+                            write_msg(&mut io, &ack(false, e.clone())).await?;
+                            break Err(e);
+                        }
+                    }
+                }
+                Some(Msg::DropChunk(c)) => {
+                    let Some(i) = cur.as_mut() else { continue };
+                    if let Err(e) = i.chunk(&c.data) {
+                        write_msg(&mut io, &ack(false, e.clone())).await?;
+                        break Err(e);
+                    }
+                    self.lock().drop.bytes_done += c.data.len() as u64;
+                }
+                Some(Msg::DropEnd(e)) => {
+                    let Some(i) = cur.take() else {
+                        write_msg(&mut io, &ack(false, "Fichier inconnu.".into())).await?;
+                        continue;
+                    };
+                    let got = i.received();
+                    match i.finish(&e.sha256) {
+                        Ok(path) => {
+                            {
+                                let mut st = self.lock();
+                                st.drop.files_done += 1;
+                                st.drop.items_done += e.last_of_item as u32;
+                                st.drop.folder = path.parent().map(|d| d.display().to_string()).unwrap_or_default();
+                            }
+                            write_msg(&mut io, &ack(true, String::new())).await?;
+                        }
+                        // Not fatal: the iPhone sends it once more (E5).
+                        Err(why) => {
+                            self.lock().drop.bytes_done -= got;
+                            write_msg(&mut io, &ack(false, why)).await?;
+                        }
+                    }
+                }
+                Some(Msg::DropCancel(_)) => break Err("Envoi annulé sur l’iPhone.".into()),
+                Some(Msg::DropDone(d)) => break Ok(d.failed),
+                _ => {}
+            }
+        };
+        if let Some(i) = cur {
+            i.abort();
+        }
+        {
+            let mut st = self.lock();
+            st.drop.current.clear();
+            st.drop.rate = 0;
+            match end {
+                Ok(failed) => {
+                    st.drop.state = "done".into();
+                    st.drop.failed = failed;
+                }
+                Err(e) => {
+                    st.drop.state = "failed".into();
+                    st.drop.message = e;
+                }
+            }
+        }
+        (self.notify)(UiEvent::Changed);
         Ok(())
     }
 }
@@ -925,6 +1108,60 @@ mod tests {
         assert_eq!((p[0], p[1]), (Codec::Hevc as u8, 1));
         assert_eq!(u32::from_le_bytes(p[10..14].try_into().unwrap()), 1920);
         assert_eq!(&p[18..], &frame.data[..]);
+    }
+
+    #[tokio::test]
+    async fn a_drop_send_lands_checked_in_its_month() {
+        use sha2::{Digest, Sha256};
+        let r = rig().await;
+        let photos = tempfile::tempdir().unwrap();
+        r.hub.set_drop_target(photos.path().to_path_buf(), "year_month".into());
+        let phone = Identity::generate("phone").unwrap();
+        let _ctl = pair(&r, &phone).await;
+        let mut io = connect(r.addr, &phone, r.hub.identity.fingerprint).await.unwrap();
+        send(&mut io, Msg::DropHello(proto::DropHello {})).await;
+        send(&mut io, Msg::DropPlan(proto::DropPlan { items: 1, files: 1, bytes: 3_000_000 })).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if a.ok));
+        let data: Vec<u8> = (0..3_000_000u32).map(|i| i as u8).collect();
+        let file = proto::DropFile { name: "IMG_7.HEIC".into(), size: data.len() as u64, taken_unix: 0, year: 2025, month: 3 };
+        send(&mut io, Msg::DropFile(file.clone())).await;
+        for c in data.chunks(1 << 20) {
+            send(&mut io, Msg::DropChunk(proto::DropChunk { data: c.to_vec() })).await;
+        }
+        // A wrong hash first: refused, nothing kept; then the right one.
+        send(&mut io, Msg::DropEnd(proto::DropEnd { sha256: vec![0; 32], last_of_item: true })).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if !a.ok && a.reason.contains("empreinte")));
+        send(&mut io, Msg::DropFile(file)).await;
+        for c in data.chunks(1 << 20) {
+            send(&mut io, Msg::DropChunk(proto::DropChunk { data: c.to_vec() })).await;
+        }
+        send(&mut io, Msg::DropEnd(proto::DropEnd { sha256: Sha256::digest(&data).to_vec(), last_of_item: true })).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if a.ok));
+        send(&mut io, Msg::DropDone(proto::DropDone { failed: 0 })).await;
+        wait_until(|| r.hub.view().drop.state == "done").await;
+        let d = r.hub.view().drop;
+        assert_eq!((d.items_done, d.files_done, d.bytes_done), (1, 1, 3_000_000));
+        let month = photos.path().join("2025").join("03");
+        assert_eq!(std::fs::read(month.join("IMG_7.HEIC")).unwrap(), data);
+        assert_eq!(std::fs::read_dir(&month).unwrap().count(), 1, "no .part left");
+        assert!(r.events.lock().unwrap().contains(&UiEvent::DropStarted));
+    }
+
+    #[tokio::test]
+    async fn a_drop_bigger_than_the_disk_is_refused() {
+        let r = rig().await;
+        let photos = tempfile::tempdir().unwrap();
+        r.hub.set_drop_target(photos.path().to_path_buf(), "year_month".into());
+        if crate::drop::free_space(photos.path()).is_none() {
+            return;
+        }
+        let phone = Identity::generate("phone").unwrap();
+        let _ctl = pair(&r, &phone).await;
+        let mut io = connect(r.addr, &phone, r.hub.identity.fingerprint).await.unwrap();
+        send(&mut io, Msg::DropHello(proto::DropHello {})).await;
+        send(&mut io, Msg::DropPlan(proto::DropPlan { items: 1, files: 1, bytes: u64::MAX / 4 })).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if !a.ok && a.reason.starts_with("Il manque")));
+        wait_until(|| r.hub.view().drop.state == "failed").await;
     }
 
     #[tokio::test]

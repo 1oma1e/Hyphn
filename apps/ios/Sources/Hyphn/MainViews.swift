@@ -2,6 +2,7 @@
 // Réglages. Everything fine-grained is set on the PC; the iPhone stays minimal.
 
 @preconcurrency import AVFoundation
+import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -534,17 +535,132 @@ struct QualitySheet: View {
     }
 }
 
-// MARK: - Drop (empty for now, ADR-0020)
+// MARK: - Drop (spec `Drop - Photos vers le PC`)
 
 struct DropView: View {
+    @EnvironmentObject var link: PCLink
+    @EnvironmentObject var dropper: Dropper
+    @State private var picked: [PhotosPickerItem] = []
+
+    private var online: Bool { link.phase == .online }
+
     var body: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "arrow.up.arrow.down").font(.system(size: 30)).foregroundStyle(Ink.cy)
-                .frame(width: 72, height: 72).background(Ink.cy.opacity(0.1), in: RoundedRectangle(cornerRadius: 22))
-            Text("Drop arrive bientôt").font(.geist(26, .semibold)).tracking(-1)
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Drop").font(.geist(34, .semibold)).tracking(-1.2)
+                Text("Vers \(link.pcName)").font(.geist(15)).foregroundStyle(Ink.tx2)
+            }
+            .padding(.top, 8)
+            content
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Ink.card, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(Ink.line))
+            Spacer()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.bottom, 90)
+        .padding(.horizontal, 18)
+        .padding(.bottom, 96)
+        .animation(.spring(duration: 0.45), value: dropper.phase)
+        .onChange(of: picked) { _, items in
+            guard !items.isEmpty else { return }
+            let ids = items.compactMap(\.itemIdentifier)
+            picked = []
+            dropper.send(ids)
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        switch dropper.phase {
+        case .idle:
+            VStack(alignment: .leading, spacing: 14) {
+                Image(systemName: "photo.on.rectangle.angled")
+                    .font(.system(size: 26)).foregroundStyle(Ink.cy)
+                    .frame(width: 60, height: 60)
+                    .background(Ink.cy.opacity(0.12), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
+                Text("Envoie tes photos au PC").font(.geist(22, .semibold)).tracking(-0.6)
+                Text("En qualité d’origine, vérifiées une par une, rangées par année et par mois.")
+                    .font(.geist(14)).foregroundStyle(Ink.tx2)
+                PhotosPicker(selection: $picked, matching: .any(of: [.images, .videos]),
+                             preferredItemEncoding: .current, photoLibrary: .shared()) {
+                    HStack { Image(systemName: "photo.stack"); Text("Choisir dans Photos") }
+                }
+                .buttonStyle(PrimaryButtonStyle(fill: Ink.cy, text: .black))
+                .disabled(!online)
+                .opacity(online ? 1 : 0.5)
+                .padding(.top, 4)
+                if !online {
+                    Text("PC hors ligne : ouvre Hyphn sur le PC.").font(.geist(13)).foregroundStyle(Ink.am)
+                }
+            }
+        case .preparing:
+            HStack(spacing: 12) {
+                ProgressView().tint(Ink.cy)
+                Text("Je prépare \(dropper.items) élément\(dropper.items > 1 ? "s" : "")…").font(.geist(17, .semibold))
+            }
+        case .sending:
+            sending
+        case let .done(items, bytes, failed):
+            VStack(alignment: .leading, spacing: 12) {
+                Image(systemName: "checkmark").font(.system(size: 22, weight: .bold)).foregroundStyle(Ink.onLi)
+                    .frame(width: 52, height: 52).background(Ink.li, in: Circle())
+                    .shadow(color: Ink.li.opacity(0.5), radius: 14)
+                Text("\(items) élément\(items > 1 ? "s" : "") sur le PC").font(.geist(22, .semibold)).tracking(-0.6)
+                Text("\(Self.size(bytes)) · vérifiés un par un").font(.geist(14)).foregroundStyle(Ink.tx2)
+                if failed > 0 {
+                    Text("\(failed) non envoyé\(failed > 1 ? "s" : "") (introuvable ou pas téléchargeable depuis iCloud).")
+                        .font(.geist(13)).foregroundStyle(Ink.am)
+                }
+                Button("Envoyer d’autres photos") { dropper.reset() }.buttonStyle(GhostButtonStyle()).padding(.top, 4)
+            }
+        case let .failed(message):
+            VStack(spacing: 14) {
+                Problem(title: "Envoi arrêté", text: message, settings: dropper.needsAccess)
+                Button("OK") { dropper.reset() }.buttonStyle(GhostButtonStyle())
+            }
+        }
+    }
+
+    private var sending: some View {
+        let d = dropper
+        let pct = d.bytes > 0 ? min(100, Int(d.bytesDone * 100 / d.bytes)) : 0
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("ENVOI EN COURS").font(.geist(12, .bold)).tracking(1.5).foregroundStyle(Ink.cy)
+            HStack(alignment: .firstTextBaseline) {
+                Text("\(pct) %").font(.mono(46, .semibold)).contentTransition(.numericText())
+                Spacer()
+                Text(Self.left(d)).font(.geist(13)).foregroundStyle(Ink.tx2)
+            }
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.08))
+                    Capsule().fill(Ink.cy).frame(width: g.size.width * CGFloat(pct) / 100)
+                        .shadow(color: Ink.cy.opacity(0.6), radius: 8)
+                        .animation(.linear(duration: 0.4), value: pct)
+                }
+            }
+            .frame(height: 8)
+            Text("\(Self.size(d.bytesDone)) / \(Self.size(d.bytes)) · \(d.itemsDone) / \(d.items) éléments")
+                .font(.mono(13)).foregroundStyle(Ink.tx2)
+            if d.rate > 0 {
+                Text("\(Self.size(Int64(d.rate)))/s").font(.mono(13)).foregroundStyle(Ink.tx2)
+            }
+            Text(d.current).font(.geist(14)).lineLimit(1).truncationMode(.middle)
+            if let c = d.cloud {
+                Text("Téléchargement iCloud… \(Int(c * 100)) %").font(.geist(13)).foregroundStyle(Ink.am)
+            }
+            Text("Garde Hyphn ouvert pendant l’envoi.").font(.geist(13)).foregroundStyle(Ink.tx3)
+            Button("Annuler") { d.cancel() }.buttonStyle(GhostButtonStyle()).padding(.top, 4)
+        }
+    }
+
+    static func size(_ b: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: b, countStyle: .file)
+    }
+
+    static func left(_ d: Dropper) -> String {
+        guard d.rate > 0 else { return "calcul…" }
+        let s = Double(max(0, d.bytes - d.bytesDone)) / d.rate
+        return s < 60 ? "reste moins d’une minute" : "reste ≈ \(Int((s / 60).rounded(.up))) min"
     }
 }
 

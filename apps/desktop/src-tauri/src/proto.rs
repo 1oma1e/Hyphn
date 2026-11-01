@@ -9,7 +9,7 @@ pub const MAX_MESSAGE: usize = 16 * 1024 * 1024;
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Envelope {
-    #[prost(oneof = "envelope::Msg", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17")]
+    #[prost(oneof = "envelope::Msg", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25")]
     pub msg: Option<envelope::Msg>,
 }
 
@@ -50,6 +50,22 @@ pub mod envelope {
         Forget(super::Forget),
         #[prost(message, tag = "17")]
         KeyRequest(super::KeyRequest),
+        #[prost(message, tag = "18")]
+        DropHello(super::DropHello),
+        #[prost(message, tag = "19")]
+        DropPlan(super::DropPlan),
+        #[prost(message, tag = "20")]
+        DropFile(super::DropFile),
+        #[prost(message, tag = "21")]
+        DropChunk(super::DropChunk),
+        #[prost(message, tag = "22")]
+        DropEnd(super::DropEnd),
+        #[prost(message, tag = "23")]
+        DropAck(super::DropAck),
+        #[prost(message, tag = "24")]
+        DropCancel(super::DropCancel),
+        #[prost(message, tag = "25")]
+        DropDone(super::DropDone),
     }
 }
 
@@ -280,6 +296,64 @@ pub struct Forget {}
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct KeyRequest {}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct DropHello {}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct DropPlan {
+    #[prost(uint32, tag = "1")]
+    pub items: u32,
+    #[prost(uint32, tag = "2")]
+    pub files: u32,
+    #[prost(uint64, tag = "3")]
+    pub bytes: u64,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct DropFile {
+    #[prost(string, tag = "1")]
+    pub name: String,
+    #[prost(uint64, tag = "2")]
+    pub size: u64,
+    #[prost(int64, tag = "3")]
+    pub taken_unix: i64,
+    #[prost(uint32, tag = "4")]
+    pub year: u32,
+    #[prost(uint32, tag = "5")]
+    pub month: u32,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct DropChunk {
+    #[prost(bytes = "vec", tag = "1")]
+    pub data: Vec<u8>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct DropEnd {
+    #[prost(bytes = "vec", tag = "1")]
+    pub sha256: Vec<u8>,
+    #[prost(bool, tag = "2")]
+    pub last_of_item: bool,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct DropAck {
+    #[prost(bool, tag = "1")]
+    pub ok: bool,
+    #[prost(string, tag = "2")]
+    pub reason: String,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct DropCancel {}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct DropDone {
+    #[prost(uint32, tag = "1")]
+    pub failed: u32,
+}
 
 /// Reads one length-prefixed message. `Ok(None)` on a clean end of stream.
 pub async fn read_msg<R: AsyncRead + Unpin>(r: &mut R) -> std::io::Result<Option<Envelope>> {

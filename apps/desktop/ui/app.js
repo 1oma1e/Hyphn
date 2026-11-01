@@ -1019,18 +1019,83 @@ const Cam = {
 // ===================================================================
 // Drop
 // ===================================================================
+// Spec `Drop - Photos vers le PC`: the send in progress (E7), the folder and
+// the last months received (E9). Rebuilt only when the state changes; the
+// numbers are filled in place every second.
 const Drop = {
   key: () => '',
   mount(root) {
-    root.innerHTML = `
-      <main class="wrap enter">
+    this.root = root;
+    this.shape = '';
+    if (!S) root.innerHTML = '';
+  },
+  update() {
+    const d = S.drop || {};
+    const shape = [d.state, S.connected, !!S.device].join('|');
+    if (shape !== this.shape) {
+      this.shape = shape;
+      this.root.innerHTML = `<main class="wrap enter">
+        <header><h1 class="h1">Drop</h1><p class="sub">Les photos et vidéos de l’iPhone, en qualité d’origine, rangées par année et par mois.</p></header>
+        <section class="card drop-now">${this.now(d)}</section>
         <section class="card">
-          <div class="problem"><span class="ic" style="color:var(--cy)">${I.swap}</span>
-            <h2 style="margin:0;font-size:28px;letter-spacing:-.03em">Drop arrive bientôt</h2>
-            <p class="sub" style="max-width:520px;line-height:1.55">Photos, vidéos et fichiers entre l’iPhone et ce PC, rangés par année et par mois. C’est la prochaine étape.</p>
+          <div class="row" style="justify-content:space-between">
+            <div><span class="lbl">Rangées dans</span><div class="mono" style="margin-top:8px;font-size:15px">${esc(settings.photos_dir)}</div></div>
+            <div class="row"><button class="btn sm" type="button" data-act="open">${I.folder}Ouvrir</button><a class="btn sm" href="#settings">Changer</a></div>
           </div>
+          <div class="months" id="d-months"></div>
         </section>
       </main>`;
+    }
+    this.fill(d);
+  },
+  now(d) {
+    if (d.state === 'sending') {
+      return `<span class="lbl">Envoi depuis ${esc(devName())}</span>
+        <div class="drop-big"><span class="mono" id="d-pct">0 %</span><span class="sub" id="d-left"></span></div>
+        <div class="track drop-track"><span id="d-bar" style="width:0%"></span></div>
+        <div class="row drop-stats"><span class="mono" id="d-bytes"></span><span class="mono" id="d-items"></span><span class="mono" id="d-rate"></span></div>
+        <div class="sub drop-cur" id="d-cur"></div>
+        <div class="row" style="margin-top:18px"><button class="btn bad" type="button" data-act="cancel">${I.close}Annuler</button></div>`;
+    }
+    if (d.state === 'done' || d.state === 'failed') {
+      const ok = d.state === 'done';
+      const kept = `${d.items_done} élément${d.items_done > 1 ? 's' : ''} · ${bytes(d.bytes_done)}`;
+      const head = ok
+        ? `<div class="ban ok">${I.check}<span><strong>${kept} · vérifiés</strong>${d.failed ? ` · ${d.failed} non envoyé${d.failed > 1 ? 's' : ''}` : ''}</span></div>`
+        : `<div class="ban bad">${I.alert}<span>${esc(d.message)}${d.items_done ? ` <strong>Déjà rangés : ${kept}.</strong>` : ''}</span></div>`;
+      return `${head}<div class="row" style="margin-top:16px">${d.files_done ? `<button class="btn cy" type="button" data-act="openLast">${I.folder}Ouvrir le dossier</button>` : ''}</div>`;
+    }
+    const hint = !S.device ? 'Relie d’abord ton iPhone.' : S.connected ? 'Sur l’iPhone : Drop, puis « Choisir dans Photos ».' : 'Ouvre Hyphn sur l’iPhone.';
+    return `<div class="drop-idle"><span class="ic">${I.swap}</span><div><div style="font-size:20px;font-weight:600;letter-spacing:-.02em">Envoie des photos depuis l’iPhone</div><div class="sub">${hint}</div></div></div>`;
+  },
+  fill(d) {
+    const set = (id, t) => { const el = $(id); if (el && el.textContent !== t) el.textContent = t; };
+    if (d.state === 'sending') {
+      const pct = d.bytes ? Math.min(100, Math.floor(d.bytes_done / d.bytes * 100)) : 0;
+      set('#d-pct', pct + ' %');
+      const bar = $('#d-bar');
+      if (bar) bar.style.width = pct + '%';
+      set('#d-bytes', `${bytes(d.bytes_done)} / ${bytes(d.bytes)}`);
+      set('#d-items', `${d.items_done} / ${d.items} éléments`);
+      set('#d-rate', d.rate ? `${bytes(d.rate)}/s` : '');
+      const left = d.rate ? Math.max(0, d.bytes - d.bytes_done) / d.rate : 0;
+      set('#d-left', !d.rate ? 'calcul…' : left < 60 ? 'reste moins d’une minute' : `reste ≈ ${Math.ceil(left / 60)} min`);
+      set('#d-cur', d.current ? `En cours : ${d.current}` : 'Préparation sur l’iPhone…');
+    }
+    const months = S.drop_months || [];
+    const key = JSON.stringify(months);
+    const box = $('#d-months');
+    if (box && box.dataset.k !== key) {
+      box.dataset.k = key;
+      box.innerHTML = months.length
+        ? months.map((m) => `<div class="month"><span>${esc(m.label)}</span><span class="mono sub" style="margin:0">${m.files} fichier${m.files > 1 ? 's' : ''} · ${bytes(m.bytes)}</span></div>`).join('')
+        : '<div class="sub">Rien encore.</div>';
+    }
+  },
+  acts: {
+    cancel: () => invoke('drop_cancel'),
+    open: () => invoke('open_photos_dir').catch((e) => toast(String(e), 'info')),
+    openLast: () => invoke('open_drop_folder').catch((e) => toast(String(e), 'info')),
   },
 };
 
@@ -1052,7 +1117,7 @@ const Settings = {
       await invoke('vcam_install', { uninstall });
       toast(uninstall ? 'Webcam retirée' : 'Webcam Windows prête');
     } catch (e) {
-      toast(String(e), 'bad');
+      toast(String(e), 'info');
     }
     this.installing = false;
     await refresh();
@@ -1198,6 +1263,8 @@ function onSnapshot(snap) {
   listen('vcam_installed', () => toast('Webcam Windows prête'));
   // « Afficher » touched on the iPhone: the PC shows the picture at once.
   listen('cam_phone_live', () => { if (route() !== 'cam') go('cam'); });
+  // A Drop send starts on the iPhone: its progress shows here.
+  listen('drop_started', () => { if (route() !== 'drop') go('drop'); });
   // Evan picked a quality on the iPhone: the PC keeps it (spec `Cam - Flux v1`, E4).
   listen('cam_quality', (e) => {
     const c = Object.assign({}, CAM_DEFAULTS, settings.cam || {});
