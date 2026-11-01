@@ -52,6 +52,9 @@ final class PCLink: ObservableObject {
     private var pairTimeout: Task<Void, Never>?
     private var prime: NWBrowser?
     private var foreground = false
+    /// Last message from the PC on the session (it sends a Ping every 5 s).
+    private var lastHeard = Date()
+    private var watchdog: Task<Void, Never>?
 
     init() {
         phase = pc == nil ? .unpaired : .searching
@@ -335,12 +338,31 @@ final class PCLink: ObservableObject {
         if !attempts.contains(where: { $0 === c }) { attempts.append(c) }
         c.onMessage = { [weak self] m in self?.handle(m) }
         c.onClose = { [weak self] _ in self?.sessionClosed(c) }
+        watch(c)
         stopSearch()
         phase = .online
         // E5: keep the address that answered (Bonjour may have found a new one).
         if let (host, port) = c.remote { rememberAddress(host: host, port: port) }
         send(.deviceStatus(info.current(withStorage: true)))
         if let camera { send(.camState(camera.state)) }
+    }
+
+    /// A PC that quits or loses the Wi-Fi without closing the socket leaves a
+    /// dead session that only a write would reveal: no Ping for 15 s → closed,
+    /// so the reconnection starts at once instead of a minute later.
+    private func watch(_ c: PinnedConnection) {
+        lastHeard = Date()
+        watchdog?.cancel()
+        watchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard let self, self.session === c else { return }
+                if Date().timeIntervalSince(self.lastHeard) > 15 {
+                    c.close()
+                    return
+                }
+            }
+        }
     }
 
     private func sessionClosed(_ c: PinnedConnection) {
@@ -355,6 +377,7 @@ final class PCLink: ObservableObject {
     }
 
     private func handle(_ m: Msg) {
+        lastHeard = Date()
         switch m {
         case let .ping(id):
             send(.pong(id: id))
