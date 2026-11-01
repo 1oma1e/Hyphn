@@ -148,7 +148,10 @@ pub fn elevated_main(args: &[String]) -> Option<i32> {
         uninstall(&roots, &sys::register)
     } else {
         install(Path::new(source), &roots, crate::vcam::VCAM_SHA256, crate::vcam::OBS_SHA256, &sys::register)
-            .inspect(|_| sys::protect_logs(&roots.logs()))
+            .inspect(|_| {
+                sys::protect_logs(&roots.logs());
+                sys::reload_camera_service();
+            })
     };
     Some(match r {
         Ok(()) => 0,
@@ -220,6 +223,38 @@ mod sys {
             .args(["/inheritance:r", "/grant:r", "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F", "*S-1-5-19:(OI)(CI)M", "*S-1-5-32-545:(OI)(CI)RX"])
             .output();
     }
+
+    /// The camera service (Frame Server) keeps the DLL it loaded until it
+    /// stops: an update would show only after a restart of Windows. Stopping
+    /// it is enough, Windows starts it again when an app opens a camera.
+    pub fn reload_camera_service() {
+        use windows_sys::Win32::System::Services::{
+            CloseServiceHandle, ControlService, OpenSCManagerW, OpenServiceW, QueryServiceStatus, SC_MANAGER_CONNECT, SERVICE_CONTROL_STOP,
+            SERVICE_QUERY_STATUS, SERVICE_STATUS, SERVICE_STOP, SERVICE_STOPPED,
+        };
+        let name = wide("FrameServer");
+        unsafe {
+            let scm = OpenSCManagerW(std::ptr::null(), std::ptr::null(), SC_MANAGER_CONNECT);
+            if scm.is_null() {
+                return;
+            }
+            let svc = OpenServiceW(scm, name.as_ptr(), SERVICE_STOP | SERVICE_QUERY_STATUS);
+            if !svc.is_null() {
+                let mut st: SERVICE_STATUS = std::mem::zeroed();
+                if ControlService(svc, SERVICE_CONTROL_STOP, &mut st) != 0 {
+                    // Up to 5 s, so the next camera opened gets the new DLL.
+                    for _ in 0..50 {
+                        if QueryServiceStatus(svc, &mut st) == 0 || st.dwCurrentState == SERVICE_STOPPED {
+                            break;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                }
+                CloseServiceHandle(svc);
+            }
+            CloseServiceHandle(scm);
+        }
+    }
 }
 
 #[cfg(not(windows))]
@@ -229,6 +264,7 @@ mod sys {
         Err("Windows seulement".into())
     }
     pub fn protect_logs(_: &Path) {}
+    pub fn reload_camera_service() {}
 }
 
 #[cfg(test)]

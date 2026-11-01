@@ -33,6 +33,7 @@ Mis à jour : 2026-11-01 (session « iPhone complet, webcam Windows, OBS »). R�
 - Build iOS : pousser d'abord, puis `git -C src pull` sur le serveur ; `.ipa` zippé en Python ([[Serveur]]). Essai sans pousser : `~/hyphn/xtool/try/ios`.
 - DLL natives : `powershell -NoProfile -File tools/build-native.ps1` (MSVC sur F:, `/Brepro` pour des empreintes stables) ; `npm run build` le fait avant l'installateur. L'app grave l'empreinte des DLL au build (`build.rs`) : DLL modifiée = installation refusée.
 - Journal de la webcam : `C:\ProgramData\Hyphn\vcam.log` (« HEVC decoder no » = H.264 forcé).
+- Le service caméra de Windows (Frame Server) garde en mémoire la DLL déjà chargée : après une mise à jour de la webcam, l'installation l'arrête (`reload_camera_service`) ; sinon redémarrer le service « Windows Camera Frame Server » ou le PC.
 - Python et heredocs bash cassent les `\` et les `'` : fichiers de modifs écrits avec l'outil d'écriture.
 - Port 9333 pris par un `ssh.exe` qui n'est pas à Claude : débogage WebView2 sur 9334 (config de dev hors du repo).
 - iPhone en USB : couper son partage de connexion (erreur 10060). Un seul VPN actif sur iOS.
