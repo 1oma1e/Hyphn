@@ -270,6 +270,12 @@ final class Camera: NSObject, ObservableObject {
         }
     }
 
+    /// The link moved to the cable (spec `Core - Liaison par cable`, E6):
+    /// closing the media connection makes it open again through the cable.
+    func reopenMedia() {
+        pump.connection?.close()
+    }
+
     private func closeMedia() {
         mediaCloser?.cancel()
         mediaCloser = nil

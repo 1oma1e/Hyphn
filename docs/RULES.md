@@ -27,7 +27,7 @@ Source unique des règles du projet. Les règles **sans exception** sont aussi i
 |---|---|
 | Aucun secret (Apple ID, mot de passe, données anisette, certificats) dans le repo, les logs, les docs ou les réponses | `deny Read` sur `.env`, `secrets/`, `*.p12`, `*.mobileprovision` |
 | Tout est local : aucun compte, aucun cloud, rien d'ouvert sur internet. Seule exception : l'anisette publique pour signer ([[ADR-0012 Anisette Mac publique]]) | — |
-| Appairage par QR avec jeton à usage unique ; certificat de l'autre appareil épinglé ; une empreinte qui change = refus + message clair | — |
+| Appairage par QR avec jeton à usage unique, ou par câble USB avec le même code et le même « Oui » sur l'iPhone ([[ADR-0031 Liaison par cable USB]]) ; certificat de l'autre appareil épinglé ; une empreinte qui change = refus + message clair | — |
 | Tout ce qui passe sur le réseau est chiffré (pas de mode « HTTP clair » comme LocalSend) | — |
 | Sur le serveur : ne jamais toucher aux autres conteneurs, au pare-feu ni à Nginx Proxy Manager | `ask` sur `ssh * docker rm`, `ssh * sudo` |
 

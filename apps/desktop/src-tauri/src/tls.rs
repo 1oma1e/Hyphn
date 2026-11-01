@@ -5,9 +5,9 @@
 
 use std::sync::Arc;
 
-use rustls::client::danger::HandshakeSignatureValid;
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::{verify_tls13_signature, CryptoProvider};
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, UnixTime};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName, UnixTime};
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::{DigitallySignedStruct, DistinguishedName, SignatureScheme};
 
@@ -34,6 +34,26 @@ pub fn server_config(identity: &Identity) -> Result<Arc<rustls::ServerConfig>, E
     Ok(Arc::new(config))
 }
 
+/// By cable the PC opens the connection, so it is the TLS client and the
+/// iPhone the server (ADR-0031). Same certificates; the caller pins the
+/// iPhone's one exactly as when the PC is the server.
+pub fn cable_client_config(identity: &Identity) -> Result<Arc<rustls::ClientConfig>, Error> {
+    let provider = provider();
+    let config = rustls::ClientConfig::builder_with_provider(provider.clone())
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .map_err(|e| Error::Identity(e.to_string()))?
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(AnyServerCert { provider }))
+        .with_client_auth_cert(vec![CertificateDer::from(identity.cert_der.clone())], key_of(identity)?)
+        .map_err(|e| Error::Identity(e.to_string()))?;
+    Ok(Arc::new(config))
+}
+
+/// Not checked by either side (self-signed certificates), only sent.
+pub fn cable_server_name() -> ServerName<'static> {
+    ServerName::try_from("hyphn.local").expect("valid name")
+}
+
 /// Fingerprint of the certificate the other side presented.
 pub fn peer_fingerprint(conn: &rustls::CommonState) -> Option<Fingerprint> {
     conn.peer_certificates().and_then(|c| c.first()).map(|c| fingerprint_of(c))
@@ -58,6 +78,48 @@ impl ClientCertVerifier for AnyClientCert {
         _now: UnixTime,
     ) -> Result<ClientCertVerified, rustls::Error> {
         Ok(ClientCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        Err(rustls::Error::General("TLS 1.2 is not allowed".into()))
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        verify_tls13_signature(message, cert, dss, &self.provider.signature_verification_algorithms)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.provider.signature_verification_algorithms.supported_schemes()
+    }
+}
+
+/// The iPhone side of a cable connection: any certificate whose signature
+/// checks out, pinned afterwards by the caller.
+#[derive(Debug)]
+struct AnyServerCert {
+    provider: Arc<CryptoProvider>,
+}
+
+impl ServerCertVerifier for AnyServerCert {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp: &[u8],
+        _now: UnixTime,
+    ) -> Result<ServerCertVerified, rustls::Error> {
+        Ok(ServerCertVerified::assertion())
     }
 
     fn verify_tls12_signature(

@@ -33,7 +33,7 @@ Photothèque, envoi vers le PC, progression et temps restant, tri Année/Mois. E
 Porte : **10 Go** transférés sans erreur, hash vérifiés.
 
 ## Phase 3 — Drop v2
-Câble (libimobiledevice), PC → iPhone, reprise après coupure, doublons, sauvegarde auto.
+Câble (libimobiledevice), PC → iPhone, reprise après coupure, doublons, sauvegarde auto. La liaison par câble elle-même est avancée en phase 1 ([[ADR-0031 Liaison par cable USB]]) ; restent ici DCIM par câble sans l'app.
 Porte : coupure Wi-Fi en plein transfert, **reprise sans rien renvoyer**.
 
 ## Phase 4 — Cam v1

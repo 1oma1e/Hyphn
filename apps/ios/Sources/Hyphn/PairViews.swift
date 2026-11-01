@@ -190,11 +190,13 @@ struct ScanView: View {
                     Text("Vise le QR de ton PC").font(.geist(20, .semibold))
                     Text("Tiens l’iPhone à une vingtaine de centimètres de l’écran.")
                         .font(.geist(14)).foregroundStyle(Ink.tx2)
+                    Text("Ou branche-le au PC avec un câble : pas besoin de QR.")
+                        .font(.geist(14)).foregroundStyle(Ink.tx3)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-            case let .connecting(_, secured):
+            case let .connecting(host, secured):
                 VStack(alignment: .leading, spacing: 12) {
-                    PairStepRow(text: "QR lu", state: .done)
+                    PairStepRow(text: host == PCLink.cableHost ? "Câble branché" : "QR lu", state: .done)
                     PairStepRow(text: "Je contacte ton PC", state: secured ? .done : .active)
                     PairStepRow(text: "Je vérifie que c’est bien lui", state: secured ? .active : .todo)
                     Button("Annuler") { link.cancelPairing() }

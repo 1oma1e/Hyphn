@@ -23,6 +23,7 @@ const I = {
   bolt: svg('<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>'),
   temp: svg('<path d="M14 14.8V5a2 2 0 0 0-4 0v9.8a4 4 0 1 0 4 0z"/>'),
   wifi: svg('<path d="M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1"/>'),
+  cable: svg('<path d="M9 2v5M15 2v5M7 7h10v4a5 5 0 0 1-10 0zM12 16v6"/>'),
   wifiOff: svg('<path d="M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M3 3l18 18"/>'),
   disk: svg('<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 14h18"/>'),
   arrow: svg('<path d="M5 12h14M13 6l6 6-6 6"/>'),
@@ -82,6 +83,10 @@ function linkQuality(ms) {
   return ms < 10 ? 'Excellente' : ms < 30 ? 'Bonne' : 'Faible';
 }
 
+// « Par câble » / « Wi-Fi » next to the green dot (spec `Core - Liaison par cable`, E9).
+const onCable = () => !!(S && S.connected && S.link === 'cable');
+const linkName = () => (onCable() ? 'par câble' : 'en Wi-Fi');
+
 // ---------- State ----------
 let S = null; // last snapshot from Rust
 let settings = null;
@@ -136,7 +141,7 @@ function paintHeader() {
     el.innerHTML = '<span class="led off"></span>Aucun appareil';
     return;
   }
-  const state = S.connected ? (S.latency_ms == null ? 'relié' : `${S.latency_ms} ms`) : 'en veille';
+  const state = S.connected ? `${linkName()}` + (S.latency_ms == null ? '' : ` · ${S.latency_ms} ms`) : 'en veille';
   el.innerHTML = `<span class="led${S.connected ? '' : ' off'}"></span>${esc(S.device.name)} · ${state}`;
 }
 
@@ -288,7 +293,7 @@ const Home = {
     $('#h-charge').textContent = p.charge ? 'batterie · ' + CHARGE[p.charge] : 'batterie';
     $('#f-bat').textContent = pct == null ? 'inconnu' : `${pct} %` + (p.charge ? ' · ' + CHARGE[p.charge] : '');
     $('#f-heat').textContent = p.thermal ? HEAT[p.thermal] : 'inconnu';
-    $('#f-link').textContent = S.connected ? linkQuality(S.latency_ms) : 'Hors ligne';
+    $('#f-link').textContent = S.connected ? `${linkQuality(S.latency_ms)} · ${linkName()}` : 'Hors ligne';
     $('#f-disk').textContent = p.storage_free_gb == null ? 'inconnu' : `${nf.format(Math.round(p.storage_free_gb))} Go libres`;
     const q = S.cam.effective.quality;
     $('#h-camtag').textContent = S.connected ? `Prête · ${resName(q.height)}${q.fps}` : 'Hors ligne';
@@ -820,7 +825,7 @@ const Cam = {
       $('#c-hudr').innerHTML = `
         <span class="chip" style="color:${bc}"><span class="batt" aria-hidden="true"><i style="width:${p.battery ?? 0}%"></i></span><span class="mono">${p.battery ?? '—'} %</span>${p.charge !== 'unplugged' ? svg('<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>', ' aria-label="en charge"') : ''}</span>
         <span class="chip"><span class="tdot" style="background:${HEAT_COLOR[p.thermal] || '#868F9D'}"></span>${p.thermal ? HEAT[p.thermal] : 'inconnu'}</span>
-        <span class="chip">${I.wifi}<span class="mono">${conn ? (S.latency_ms == null ? '—' : S.latency_ms + ' ms') : 'hors ligne'}</span></span>`;
+        <span class="chip">${onCable() ? I.cable : I.wifi}<span class="mono">${conn ? (S.latency_ms == null ? '—' : S.latency_ms + ' ms') : 'hors ligne'}</span></span>`;
     }
     const e = S.cam.effective;
     $('#c-notice').innerHTML = !conn ? '' : e.alert
@@ -863,7 +868,7 @@ const Cam = {
         ${cell('Image envoyée', ph && ph.height ? `${ph.width}×${ph.height} · ${ph.fps}` : `${resName(q.height)} · ${q.fps}`)}
         ${cell('Débit', `${n1(st.bitrate_mbps)} Mb/s`)}
         ${cell('Images par seconde', n1(st.fps))}
-        ${cell('Latence Wi-Fi', S.latency_ms == null ? 'inconnu' : S.latency_ms + ' ms')}
+        ${cell(onCable() ? 'Latence (câble)' : 'Latence Wi-Fi', S.latency_ms == null ? 'inconnu' : S.latency_ms + ' ms')}
         ${cell('Images sautées', String(st.dropped + Video.drops))}
         ${cell('iPhone', `${p.battery ?? '—'} % · ${p.thermal ? HEAT[p.thermal] : 'inconnu'}`)}
       </div>`;
@@ -1402,7 +1407,8 @@ const Settings = {
           <span><strong>Oublier ${esc(d.name)} ?</strong> Il faudra scanner un nouveau QR pour le relier.</span>
           <div class="row" style="gap:8px"><button class="btn badf sm" type="button" data-act="forget">Oublier</button><button class="btn sm" type="button" data-act="cancel">Annuler</button></div>
         </div>` : ''}
-        <div class="line"><span>Connexion<span class="h">${S && S.connected ? 'Reliée' : 'En attente de l’iPhone'}</span></span><button class="btn sm" type="button" data-act="reconnect">Reconnecter</button></div>
+        <div class="line"><span>Connexion<span class="h">${S && S.connected ? 'Reliée ' + linkName() : 'En attente de l’iPhone'}</span></span><button class="btn sm" type="button" data-act="reconnect">Reconnecter</button></div>
+        ${S && S.cable_service === false ? '<div class="line"><span>Câble USB<span class="h">Installe « Apple Devices » (Microsoft Store) ou iTunes pour relier l’iPhone par câble. Le Wi-Fi marche sans.</span></span></div>' : ''}
         <div class="line"><span>Relier un autre iPhone<span class="h">Il remplace celui-ci</span></span><a class="btn sm" href="#pair">Relier</a></div>`
       : `<div class="line"><span>Aucun iPhone relié</span><a class="btn pri sm" href="#pair">Relier un iPhone</a></div>`;
     this.root.innerHTML = `

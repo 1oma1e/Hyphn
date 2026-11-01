@@ -55,5 +55,6 @@ flowchart TB
 - [[Parcours - Scan QR]] — premier appairage puis reconnexion
 - [[Parcours - Stream]] — de « Démarrer » à Discord / OBS, avec la baisse thermique
 - [[Parcours - Transfert]] — Wi-Fi ou câble, coupure et reprise
+- [[Parcours - Liaison par cable]] — iPhone branché : liaison sans QR, retour au Wi-Fi débranché
 
 Liens : [[00-Accueil]], [[VISION]]

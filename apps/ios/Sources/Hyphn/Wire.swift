@@ -144,6 +144,8 @@ enum Msg {
     // ADR-0029: the anti-duplicate by identifier.
     case dropHave([String])
     case dropMissing([String])
+    // By cable (ADR-0031): the PC opens one more connection to this iPhone.
+    case cableOpen
     case other
 }
 
@@ -318,6 +320,8 @@ extension Msg {
         case let .dropHave(ids):
             field = 27
             for id in ids { b.tag(1, 2); b.varint(UInt64(id.utf8.count)); b.data.append(Data(id.utf8)) }
+        case .cableOpen:
+            field = 29
         default:
             return Data()
         }

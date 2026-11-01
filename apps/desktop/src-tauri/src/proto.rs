@@ -9,7 +9,7 @@ pub const MAX_MESSAGE: usize = 16 * 1024 * 1024;
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Envelope {
-    #[prost(oneof = "envelope::Msg", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28")]
+    #[prost(oneof = "envelope::Msg", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28, 29")]
     pub msg: Option<envelope::Msg>,
 }
 
@@ -70,6 +70,8 @@ pub mod envelope {
         DropHave(super::DropHave),
         #[prost(message, tag = "28")]
         DropMissing(super::DropMissing),
+        #[prost(message, tag = "29")]
+        CableOpen(super::CableOpen),
     }
 }
 
@@ -386,6 +388,9 @@ pub struct DropHave {
     #[prost(string, repeated, tag = "1")]
     pub asset_ids: Vec<String>,
 }
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct CableOpen {}
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct DropMissing {

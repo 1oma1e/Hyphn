@@ -139,7 +139,7 @@ struct HomeView: View {
                     Spacer()
                     HStack(spacing: 8) {
                         Led(on: online)
-                        Text(online ? "\(link.pcName) · Wi-Fi" : link.phase == .searching ? "\(link.pcName) · recherche…" : "\(link.pcName) · hors ligne")
+                        Text(online ? "\(link.pcName) · \(link.viaCable ? "câble" : "Wi-Fi")" : link.phase == .searching ? "\(link.pcName) · recherche…" : "\(link.pcName) · hors ligne")
                             .font(.geist(13))
                     }
                     .padding(.horizontal, 12).frame(height: 36)
@@ -1088,7 +1088,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(link.pcName).font(.geist(16, .medium))
                             if let pc = link.pc {
-                                Text("Wi-Fi · relié le \(pc.pairedAt.formatted(.dateTime.day().month(.twoDigits)))")
+                                Text("\(link.viaCable ? "Câble" : "Wi-Fi") · relié le \(pc.pairedAt.formatted(.dateTime.day().month(.twoDigits)))")
                                     .font(.geist(12)).foregroundStyle(Ink.tx3)
                             }
                         }

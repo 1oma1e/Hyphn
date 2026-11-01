@@ -47,6 +47,10 @@ pub enum PairError {
     UnknownToken,
     #[error("PC introuvable ou faux QR.")]
     WrongFingerprint,
+    #[error("Un appairage attend déjà une réponse sur un iPhone.")]
+    Busy,
+    #[error("Ce PC est déjà relié à un autre iPhone : relie celui-ci avec le QR.")]
+    OtherDevice,
 }
 
 /// What the QR code carries. Nothing in it is a long-term secret.
@@ -216,6 +220,33 @@ impl PairingSession {
         let pending = PendingPair {
             device_name: req.device_name.clone(),
             model: req.model.clone(),
+            fingerprint: device_fingerprint,
+            code: pairing_code(pc_fingerprint, &device_fingerprint),
+        };
+        self.pending = Some(pending.clone());
+        Ok(pending)
+    }
+
+    /// By cable (spec `Core - Liaison par cable`, E5): no token, the cable
+    /// proves both devices are in Evan's hands; the code and « Oui » on the
+    /// iPhone do the rest. The caller checks that the connection came by usbmux.
+    pub fn handle_cable_request(
+        &mut self,
+        protocol_version: u32,
+        device_name: &str,
+        model: &str,
+        device_fingerprint: Fingerprint,
+        pc_fingerprint: &Fingerprint,
+    ) -> Result<PendingPair, PairError> {
+        if protocol_version != PROTOCOL_VERSION {
+            return Err(PairError::WrongVersion);
+        }
+        if self.pending.is_some() {
+            return Err(PairError::Busy);
+        }
+        let pending = PendingPair {
+            device_name: device_name.to_string(),
+            model: model.to_string(),
             fingerprint: device_fingerprint,
             code: pairing_code(pc_fingerprint, &device_fingerprint),
         };

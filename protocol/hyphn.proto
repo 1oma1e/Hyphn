@@ -9,6 +9,11 @@
 // - control: `PairRequest` (first pairing) or `Hello` (paired device);
 // - media:   `VideoHello`, then only `VideoFrame` from the iPhone (spec `Cam - Flux v1`).
 //
+// By USB cable (spec `Core - Liaison par cable`, ADR-0031) the PC opens each
+// connection through usbmux to the iPhone's port 47801, so the TLS roles are
+// swapped (PC client, iPhone server); the iPhone still sends the first message.
+// A `PairRequest` with an empty token is only accepted on such a connection.
+//
 // The Rust side mirrors these messages by hand with prost derives
 // (apps/desktop/src-tauri/src/proto.rs), the Swift side with a small codec
 // (apps/ios/Sources/Hyphn/Wire.swift). Change all three together.
@@ -47,12 +52,17 @@ message Envelope {
     // 26: DropStart (PC -> iPhone), removed by ADR-0030; not reused.
     DropHave drop_have = 27;        // iPhone -> PC: the Photos items chosen
     DropMissing drop_missing = 28;  // PC -> iPhone: the ones it does not have yet
+    CableOpen cable_open = 29;      // iPhone -> PC, cable only: open one more connection to me
   }
 }
 
 // Drop v1 (spec `Drop - Photos vers le PC`): one connection per send, the
 // app stays open. Files one after the other, each acknowledged.
 message DropHello {}
+
+// The iPhone cannot call the PC through the cable: it asks for a connection
+// (Cam or Drop) and gives the next one it accepts to the request that waits.
+message CableOpen {}
 
 message DropPlan {
   uint32 items = 1;       // photos, videos and files to send
@@ -110,7 +120,7 @@ message DropMissing {
 
 message PairRequest {
   uint32 protocol_version = 1;
-  bytes token = 2;        // 8 bytes, from the QR
+  bytes token = 2;        // from the QR; empty by cable (ADR-0031)
   string device_name = 3;
   string model = 4;
   string app_version = 5;

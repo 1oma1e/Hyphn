@@ -19,7 +19,7 @@ flowchart LR
     VCam[Webcam virtuelle - DLL C++ MF]
     OBS[Plugin OBS]
     PDrop[Drop : serveur HTTPS, tri, doublons, historique]
-    LIMD[libimobiledevice : DCIM, infos, batterie]
+    LIMD[usbmux, crate idevice : liaison câble ADR-0031 ; plus tard DCIM, batterie]
   end
   ICore -- contrôle TCP + TLS épinglé --> PCore
   ICam -- média TCP+TLS v1, SRT/QUIC v2 --> PCam

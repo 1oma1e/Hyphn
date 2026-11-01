@@ -1,6 +1,7 @@
 //! Hyphn for Windows. The real iPhone talks to `link` over TLS; the window
 //! reads snapshots and sends commands. Drop is empty for now (ADR-0020).
 
+mod cable;
 mod cam;
 mod drop;
 mod identity;
@@ -124,6 +125,10 @@ struct Snapshot {
     version: &'static str,
     device: Option<DeviceView>,
     connected: bool,
+    /// « cable » or « wifi » while connected (spec `Core - Liaison par cable`, E9).
+    link: Option<&'static str>,
+    /// Apple's usbmux service answers; false: Réglages says how to get it (E10).
+    cable_service: Option<bool>,
     status: Option<StatusView>,
     latency_ms: Option<u32>,
     cam: CamView,
@@ -169,6 +174,8 @@ fn snapshot(h: &Hyphn) -> Snapshot {
             last_seen: if connected { Some(now_unix()) } else { d.last_seen },
         }),
         connected,
+        link: if connected { v.via.map(|v| v.name()) } else { None },
+        cable_service: v.cable_service,
         cam: CamView {
             live: v.live && connected,
             effective: v.effective,
@@ -718,6 +725,8 @@ pub fn run() {
             #[cfg(not(windows))]
             drop((vcam_rx, readers));
 
+            let cable_hub = hub.clone();
+            tauri::async_runtime::spawn(async move { cable::start(cable_hub, tokio::runtime::Handle::current()) });
             tauri::async_runtime::spawn(async move {
                 match tokio::net::TcpListener::bind((Ipv4Addr::UNSPECIFIED, port)).await {
                     Ok(listener) => hub.serve(listener).await,

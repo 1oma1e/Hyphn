@@ -34,5 +34,6 @@ Une décision par fichier, numérotée. Modèle : `_modele.md`. Statuts : `propo
 | [[ADR-0028 QR plus petit et lecture rapide]] | QR 25×25 (empreinte 96 bits, jeton 48 bits, 1 min), zoom selon la mise au point, caméra coupée après la lecture | accepte (2026-11-01) |
 | [[ADR-0029 Drop guide avec anti-doublon des la v1]] | Drop : parcours guidé (dossier la première fois, « Laisser Hyphn choisir »), PC qui ouvre Drop sur l’iPhone, albums, fichiers, tout le nouveau et anti-doublon dès la v1 | accepte (2026-11-01) |
 | [[ADR-0030 Drop commence sur l'iPhone et le PC confirme]] | Drop part de l'iPhone (choix puis confirmation), le PC confirme dans une fenêtre (dossier et rangement la première fois) ; plus de « Commencer » sur le PC | accepte (2026-11-01) |
+| [[ADR-0031 Liaison par cable USB]] | iPhone branché : liaison par usbmux (iTunes / Apple Devices, crate `idevice`), sans QR, prioritaire sur le Wi-Fi ; retour au Wi-Fi débranché | accepte (2026-11-01) |
 
 Liens : [[00-Accueil]]

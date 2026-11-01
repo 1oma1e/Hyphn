@@ -4,9 +4,16 @@
 //! - `PairRequest`: checks the QR token, shows the code, waits for « Oui » on the iPhone.
 //! - `Hello`: a paired iPhone comes back; it becomes the control session.
 //! - `VideoHello`: the camera stream, passed to the window as it comes.
+//!
+//! By USB cable (spec `Core - Liaison par cable`) the same connections come
+//! the other way: `cable.rs` opens them through usbmux, the PC is the TLS
+//! client, and a cable session has priority over the Wi-Fi one.
 
+use std::collections::{HashMap, HashSet};
+use std::future::Future;
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -15,7 +22,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use tokio::time::timeout;
-use tokio_rustls::TlsAcceptor;
+use tokio_rustls::{TlsAcceptor, TlsConnector};
 
 use crate::cam::{self, Effective, Quality, Thermal};
 use crate::identity::{self, Fingerprint, Identity};
@@ -172,9 +179,34 @@ pub fn keyed_sink(send: impl Fn(&proto::VideoFrame) -> bool + Send + Sync + 'sta
     })
 }
 
+/// Any byte stream: TCP for the Wi-Fi, a usbmux tunnel for the cable.
+pub trait Io: AsyncRead + AsyncWrite + Unpin + Send + Sync {}
+impl<T: AsyncRead + AsyncWrite + Unpin + Send + Sync> Io for T {}
+
+/// Opens one connection to the iPhone's port through usbmux, by its usbmux id.
+pub type CableDial = Arc<dyn Fn(u32) -> Pin<Box<dyn Future<Output = std::io::Result<Box<dyn Io>>> + Send>> + Send + Sync>;
+
+/// How a connection reached the PC.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Via {
+    Wifi,
+    /// usbmux id of the plugged iPhone.
+    Cable(u32),
+}
+
+impl Via {
+    pub fn name(self) -> &'static str {
+        match self {
+            Via::Wifi => "wifi",
+            Via::Cable(_) => "cable",
+        }
+    }
+}
+
 struct Session {
     id: u64,
     fingerprint: Fingerprint,
+    via: Via,
     tx: UnboundedSender<Envelope>,
     rtt_ms: Option<u32>,
     cam: Option<proto::CamState>,
@@ -210,11 +242,31 @@ pub struct State {
     drop_answer: Option<tokio::sync::oneshot::Sender<bool>>,
     /// Thumbnails sent with the plan (JPEG), shown in the confirmation.
     drop_previews: Vec<Vec<u8>>,
+    /// Set by `cable.rs` once usbmux answers.
+    cable_dial: Option<CableDial>,
+    /// Apple's usbmux service answers (None: not looked yet).
+    cable_service: Option<bool>,
+    /// Plugged iPhones that said « Non » to the cable pairing: not asked
+    /// again until unplugged (E5).
+    cable_declined: HashSet<u32>,
+    /// Per plugged iPhone: ends its Cam connections when unplugged (E8).
+    cable_signals: HashMap<u32, Arc<tokio::sync::Notify>>,
+    /// The Drop connection in progress came by this cable.
+    drop_cable: Option<u32>,
+}
+
+fn device_of(via: Via) -> u32 {
+    match via {
+        Via::Cable(d) => d,
+        Via::Wifi => u32::MAX,
+    }
 }
 
 /// Read by the snapshot.
 pub struct LinkView {
     pub connected: Option<Fingerprint>,
+    pub via: Option<Via>,
+    pub cable_service: Option<bool>,
     pub rtt_ms: Option<u32>,
     pub status: Option<StatusView>,
     pub phone_cam: Option<PhoneCam>,
@@ -232,6 +284,8 @@ pub struct Hub {
     state: Mutex<State>,
     notify: Box<dyn Fn(UiEvent) + Send + Sync>,
     tls: TlsAcceptor,
+    /// By cable the PC is the TLS client (ADR-0031).
+    tls_client: TlsConnector,
     /// « Annuler » on the PC: stops the Drop connection at once.
     drop_stop: tokio::sync::Notify,
 }
@@ -261,7 +315,7 @@ pub fn clock() -> String {
 
 /// One line of the link journal (terminal): when and why the link starts or
 /// ends, to find the cuts Evan sees when a device goes to sleep.
-fn journal(what: &str) {
+pub(crate) fn journal(what: &str) {
     eprintln!("{} hyphn: link: {what}", clock());
 }
 
@@ -274,6 +328,8 @@ fn reason_of(e: &PairError) -> Reason {
         PairError::Expired => Reason::Expired,
         PairError::AlreadyUsed => Reason::AlreadyUsed,
         PairError::WrongVersion => Reason::WrongVersion,
+        PairError::Busy => Reason::Busy,
+        PairError::OtherDevice => Reason::Unknown,
         _ => Reason::UnknownToken,
     }
 }
@@ -294,6 +350,7 @@ impl Hub {
         notify: Box<dyn Fn(UiEvent) + Send + Sync>,
     ) -> Result<Arc<Self>, Error> {
         let tls = TlsAcceptor::from(crate::tls::server_config(&identity)?);
+        let tls_client = TlsConnector::from(crate::tls::cable_client_config(&identity)?);
         let drop_index = store.drop_index();
         Ok(Arc::new(Self {
             identity,
@@ -315,9 +372,15 @@ impl Hub {
                 drop_index,
                 drop_answer: None,
                 drop_previews: Vec::new(),
+                cable_dial: None,
+                cable_service: None,
+                cable_declined: HashSet::new(),
+                cable_signals: HashMap::new(),
+                drop_cable: None,
             }),
             notify,
             tls,
+            tls_client,
             drop_stop: tokio::sync::Notify::new(),
         }))
     }
@@ -336,6 +399,8 @@ impl Hub {
         let thermal = st.thermal();
         LinkView {
             connected: s.map(|s| s.fingerprint),
+            via: s.map(|s| s.via),
+            cable_service: st.cable_service,
             rtt_ms: s.and_then(|s| s.rtt_ms),
             status: st.last_status.clone(),
             phone_cam: s.and_then(|s| s.cam.as_ref()).map(|c| PhoneCam {
@@ -528,16 +593,113 @@ impl Hub {
 
     async fn handle(self: Arc<Self>, tcp: TcpStream) -> std::io::Result<()> {
         tcp.set_nodelay(true)?;
-        let mut tls = timeout(HANDSHAKE_TIMEOUT, self.tls.accept(tcp)).await??;
+        let tls = timeout(HANDSHAKE_TIMEOUT, self.tls.accept(tcp)).await??;
         let Some(fp) = crate::tls::peer_fingerprint(tls.get_ref().1) else { return Ok(()) };
-        let Some(first) = timeout(HANDSHAKE_TIMEOUT, read_msg(&mut tls)).await?? else { return Ok(()) };
+        self.dispatch(tls, fp, Via::Wifi).await
+    }
+
+    /// A connection `cable.rs` opened to the iPhone through usbmux: same
+    /// messages, the PC is the TLS client.
+    pub async fn cable_in(self: Arc<Self>, io: Box<dyn Io>, device: u32) -> std::io::Result<()> {
+        let tls = timeout(HANDSHAKE_TIMEOUT, self.tls_client.connect(crate::tls::cable_server_name(), io)).await??;
+        let Some(fp) = crate::tls::peer_fingerprint(tls.get_ref().1) else { return Ok(()) };
+        self.dispatch(tls, fp, Via::Cable(device)).await
+    }
+
+    async fn dispatch<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
+        self: Arc<Self>,
+        mut io: S,
+        fp: Fingerprint,
+        via: Via,
+    ) -> std::io::Result<()> {
+        let Some(first) = timeout(HANDSHAKE_TIMEOUT, read_msg(&mut io)).await?? else { return Ok(()) };
         match first.msg {
-            Some(Msg::PairRequest(r)) => self.pair(tls, fp, r).await,
-            Some(Msg::Hello(h)) => self.hello(tls, fp, h).await,
-            Some(Msg::VideoHello(_)) => self.media(tls, fp).await,
-            Some(Msg::DropHello(_)) => self.drop_in(tls, fp).await,
+            Some(Msg::PairRequest(r)) => self.pair(io, fp, r, via).await,
+            Some(Msg::Hello(h)) => self.hello(io, fp, h, via).await,
+            Some(Msg::VideoHello(_)) => match via {
+                // E8: unplugged, the video connection ends at once.
+                Via::Cable(d) => {
+                    let gone = self.cable_signal(d);
+                    tokio::select! {
+                        r = self.media(io, fp) => r,
+                        _ = gone.notified() => Ok(()),
+                    }
+                }
+                Via::Wifi => self.media(io, fp).await,
+            },
+            Some(Msg::DropHello(_)) => {
+                if let Via::Cable(d) = via {
+                    self.lock().drop_cable = Some(d);
+                }
+                let r = self.clone().drop_in(io, fp).await;
+                let mut st = self.lock();
+                if st.drop_cable == Some(device_of(via)) {
+                    st.drop_cable = None;
+                }
+                r
+            }
             _ => Ok(()),
         }
+    }
+
+    /// Fired when this iPhone is unplugged, for its Cam connections.
+    fn cable_signal(&self, device: u32) -> Arc<tokio::sync::Notify> {
+        self.lock().cable_signals.entry(device).or_default().clone()
+    }
+
+    /// Set once by `cable.rs`.
+    pub fn set_cable_dial(&self, dial: CableDial) {
+        self.lock().cable_dial = Some(dial);
+    }
+
+    /// Apple's usbmux service answers or not (E10).
+    pub fn set_cable_service(&self, up: bool) {
+        let changed = self.lock().cable_service.replace(up) != Some(up);
+        if changed {
+            (self.notify)(UiEvent::Changed);
+        }
+    }
+
+    /// The control session runs over this plugged iPhone.
+    pub fn has_cable_session(&self, device: u32) -> bool {
+        self.lock().session.as_ref().is_some_and(|s| s.via == Via::Cable(device))
+    }
+
+    pub fn cable_declined(&self, device: u32) -> bool {
+        self.lock().cable_declined.contains(&device)
+    }
+
+    /// The iPhone was unplugged (E8): its cable session ends now, the iPhone
+    /// goes back to the Wi-Fi by itself.
+    pub fn cable_gone(&self, device: u32) {
+        let drop_here = {
+            let mut st = self.lock();
+            st.cable_declined.remove(&device);
+            if let Some(s) = st.session.as_ref().filter(|s| s.via == Via::Cable(device)) {
+                s.kick.notify_one();
+            }
+            if let Some(n) = st.cable_signals.remove(&device) {
+                n.notify_waiters();
+            }
+            st.drop_cable == Some(device) && st.drop.busy()
+        };
+        // A Drop by cable stops like « Annuler », not after 5 min of silence.
+        if drop_here {
+            self.drop_stop.notify_waiters();
+        }
+    }
+
+    /// The iPhone asks for one more connection through the cable (E7).
+    fn cable_open(self: Arc<Self>, device: u32) {
+        let Some(dial) = self.lock().cable_dial.clone() else { return };
+        tokio::spawn(async move {
+            match dial(device).await {
+                Ok(io) => {
+                    let _ = self.cable_in(io, device).await;
+                }
+                Err(e) => journal(&format!("cable: extra connection failed: {e}")),
+            }
+        });
     }
 
     async fn refuse<S: AsyncWrite + Unpin>(io: &mut S, reason: Reason, message: String) -> std::io::Result<()> {
@@ -550,21 +712,37 @@ impl Hub {
         mut io: S,
         fp: Fingerprint,
         r: proto::PairRequest,
+        via: Via,
     ) -> std::io::Result<()> {
-        let Ok(token) = <pairing::Token>::try_from(r.token.as_slice()) else {
-            return Self::refuse(&mut io, Reason::UnknownToken, PairError::UnknownToken.to_string()).await;
+        let res = if matches!(via, Via::Cable(_)) && r.token.is_empty() {
+            // E5: no QR by cable, for a PC that has no other iPhone.
+            let other = self.store.devices().iter().any(|d| identity::from_hex(&d.fingerprint) != Some(fp));
+            if other {
+                Err(PairError::OtherDevice)
+            } else {
+                let mut st = self.lock();
+                st.pairing.handle_cable_request(r.protocol_version, &r.device_name, &r.model, fp, &self.identity.fingerprint)
+            }
+        } else {
+            let Ok(token) = <pairing::Token>::try_from(r.token.as_slice()) else {
+                return Self::refuse(&mut io, Reason::UnknownToken, PairError::UnknownToken.to_string()).await;
+            };
+            let req = pairing::PairRequest {
+                protocol_version: r.protocol_version,
+                token,
+                device_name: r.device_name,
+                model: r.model,
+                app_version: r.app_version,
+            };
+            self.lock().pairing.handle_request(&req, fp, &self.identity.fingerprint, Instant::now())
         };
-        let req = pairing::PairRequest {
-            protocol_version: r.protocol_version,
-            token,
-            device_name: r.device_name,
-            model: r.model,
-            app_version: r.app_version,
-        };
-        let res = self.lock().pairing.handle_request(&req, fp, &self.identity.fingerprint, Instant::now());
         let pending = match res {
             Ok(p) => p,
             Err(e) => {
+                // By cable, a refusal stays until unplugged: not every 2 s.
+                if let Via::Cable(d) = via {
+                    self.lock().cable_declined.insert(d);
+                }
                 (self.notify)(UiEvent::PairEnded { message: Some(e.to_string()) });
                 return Self::refuse(&mut io, reason_of(&e), e.to_string()).await;
             }
@@ -578,7 +756,16 @@ impl Hub {
             answer,
             Ok(Ok(Some(Envelope { msg: Some(Msg::PairConfirm(proto::PairConfirm { accept: true })) })))
         );
+        // A real « Non » or 2 minutes of silence; a lost connection (the
+        // iPhone went to another app) may ask again (E5).
+        let said_no = matches!(
+            answer,
+            Err(_) | Ok(Ok(Some(Envelope { msg: Some(Msg::PairConfirm(proto::PairConfirm { accept: false })) })))
+        );
         let Some(p) = self.lock().pairing.answer(accept) else {
+            if let (Via::Cable(d), true) = (via, said_no) {
+                self.lock().cable_declined.insert(d);
+            }
             (self.notify)(UiEvent::PairEnded { message: None });
             if accept {
                 // A new QR was made meanwhile: this pairing is no longer valid.
@@ -602,7 +789,7 @@ impl Hub {
         self.lock().last_status = None;
         write_msg(&mut io, &env(Msg::PairDone(proto::PairDone {}))).await?;
         (self.notify)(UiEvent::Paired { device_name: p.device_name });
-        self.run_session(io, fp).await
+        self.run_session(io, fp, via).await
     }
 
     async fn hello<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
@@ -610,6 +797,7 @@ impl Hub {
         mut io: S,
         fp: Fingerprint,
         h: proto::Hello,
+        via: Via,
     ) -> std::io::Result<()> {
         if h.protocol_version != PROTOCOL_VERSION {
             return Self::refuse(&mut io, Reason::WrongVersion, PairError::WrongVersion.to_string()).await;
@@ -619,8 +807,13 @@ impl Hub {
             let msg = "Ce PC ne connaît pas cet iPhone. Relie-le à nouveau avec un QR.".to_string();
             return Self::refuse(&mut io, Reason::UnknownDevice, msg).await;
         }
+        // E6: the cable has priority; a Wi-Fi connection never replaces it.
+        let on_cable = self.lock().session.as_ref().is_some_and(|s| s.fingerprint == fp && matches!(s.via, Via::Cable(_)));
+        if via == Via::Wifi && on_cable {
+            return Self::refuse(&mut io, Reason::Busy, "Déjà relié par câble.".to_string()).await;
+        }
         write_msg(&mut io, &env(Msg::Welcome(proto::Welcome { pc_name: self.pc_name.clone() }))).await?;
-        self.run_session(io, fp).await
+        self.run_session(io, fp, via).await
     }
 
     /// The control connection, open while the iPhone app is in the foreground.
@@ -628,12 +821,18 @@ impl Hub {
         self: Arc<Self>,
         io: S,
         fp: Fingerprint,
+        via: Via,
     ) -> std::io::Result<()> {
         let (mut rd, mut wr) = tokio::io::split(io);
         let (tx, mut rx) = unbounded_channel::<Envelope>();
         let kick = Arc::new(tokio::sync::Notify::new());
         let id = {
             let mut st = self.lock();
+            // E6 again, under the same lock as the replacement: a Wi-Fi Hello
+            // that passed the check while a cable session started gives way.
+            if via == Via::Wifi && st.session.as_ref().is_some_and(|s| matches!(s.via, Via::Cable(_))) {
+                return Ok(());
+            }
             st.next_id += 1;
             let id = st.next_id;
             // A newer connection from the same iPhone replaces the old one,
@@ -644,6 +843,7 @@ impl Hub {
             st.session = Some(Session {
                 id,
                 fingerprint: fp,
+                via,
                 tx: tx.clone(),
                 rtt_ms: None,
                 cam: None,
@@ -677,7 +877,7 @@ impl Hub {
         });
         self.push_control();
         (self.notify)(UiEvent::Changed);
-        journal(&format!("session {id} started"));
+        journal(&format!("session {id} started ({})", via.name()));
 
         // Silence longer than SILENCE_LIMIT (no Pong, no status) ends the session.
         let why = loop {
@@ -745,6 +945,11 @@ impl Hub {
                     }
                     self.push_control();
                     (self.notify)(UiEvent::CamQuality { height: q.height, fps: q.fps });
+                }
+                Some(Msg::CableOpen(_)) => {
+                    if let Via::Cable(device) = via {
+                        self.clone().cable_open(device);
+                    }
                 }
                 Some(Msg::Forget(_)) => {
                     // « Oublier » on the iPhone (E10).
@@ -1116,12 +1321,12 @@ mod tests {
         TlsConnector::from(client_config(phone, pinned)).connect(server_name(), tcp).await
     }
 
-    async fn send(io: &mut Phone, m: Msg) {
+    async fn send<S: AsyncWrite + Unpin>(io: &mut S, m: Msg) {
         write_msg(io, &env(m)).await.unwrap();
     }
 
     /// Next message, Pings skipped (they come every 5 s, at any time).
-    async fn recv(io: &mut Phone) -> Option<Msg> {
+    async fn recv<S: AsyncRead + Unpin>(io: &mut S) -> Option<Msg> {
         loop {
             let m = timeout(Duration::from_secs(5), read_msg(io)).await.unwrap().unwrap().and_then(|e| e.msg);
             if !matches!(m, Some(Msg::Ping(_))) {
@@ -1577,5 +1782,197 @@ mod tests {
         // Rate limited: three drops in a row, one request.
         let more = timeout(Duration::from_millis(150), recv(&mut ctl)).await;
         assert!(more.is_err(), "only one KeyRequest expected");
+    }
+
+    // ---------- Cable (spec `Core - Liaison par cable`) ----------
+
+    /// The iPhone end of a cable connection: TLS server, as the app is.
+    type CablePhone = tokio_rustls::server::TlsStream<tokio::io::DuplexStream>;
+
+    /// What usbmux does: a pipe from the PC to the app's port on the iPhone.
+    /// The PC side goes to `cable_in`; the iPhone side is returned, after the
+    /// handshake, with the PC fingerprint it saw.
+    async fn plug(r: &Rig, phone: &Identity, device: u32) -> (CablePhone, Fingerprint) {
+        let (pc_end, phone_end) = tokio::io::duplex(1 << 20);
+        tokio::spawn(r.hub.clone().cable_in(Box::new(pc_end), device));
+        cable_accept(phone, phone_end).await
+    }
+
+    async fn cable_accept(phone: &Identity, io: tokio::io::DuplexStream) -> (CablePhone, Fingerprint) {
+        let acceptor = TlsAcceptor::from(crate::tls::server_config(phone).unwrap());
+        let tls = acceptor.accept(io).await.unwrap();
+        let fp = crate::tls::peer_fingerprint(tls.get_ref().1).unwrap();
+        (tls, fp)
+    }
+
+    fn cable_request() -> Msg {
+        Msg::PairRequest(proto::PairRequest {
+            protocol_version: PROTOCOL_VERSION,
+            token: Vec::new(),
+            device_name: "iPhone d’Evan".into(),
+            model: "iPhone17,2".into(),
+            app_version: "0.2.0".into(),
+        })
+    }
+
+    fn hello() -> Msg {
+        Msg::Hello(proto::Hello { protocol_version: PROTOCOL_VERSION, ..Default::default() })
+    }
+
+    #[tokio::test]
+    async fn plugging_an_unpaired_iphone_pairs_it_without_a_qr() {
+        let r = rig().await;
+        let phone = Identity::generate("phone").unwrap();
+        let (mut io, pc) = plug(&r, &phone, 7).await;
+        assert_eq!(pc, r.hub.identity.fingerprint);
+        send(&mut io, cable_request()).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::PairPending(_))));
+        let code = pairing::pairing_code(&r.hub.identity.fingerprint, &phone.fingerprint);
+        assert!(r.events.lock().unwrap().contains(&UiEvent::PairCode { code, device_name: "iPhone d’Evan".into() }));
+        send(&mut io, Msg::PairConfirm(proto::PairConfirm { accept: true })).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::PairDone(_))));
+        wait_until(|| r.hub.has_cable_session(7)).await;
+        assert_eq!(r.hub.view().via, Some(Via::Cable(7)));
+        assert_eq!(r.hub.store.devices().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn an_empty_token_over_the_wifi_is_refused() {
+        let r = rig().await;
+        let phone = Identity::generate("phone").unwrap();
+        let mut io = connect(r.addr, &phone, r.hub.identity.fingerprint).await.unwrap();
+        send(&mut io, cable_request()).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::Refused(f)) if f.reason == Reason::UnknownToken as i32));
+        assert!(r.hub.store.devices().is_empty());
+    }
+
+    #[tokio::test]
+    async fn no_on_the_iphone_is_not_asked_again_until_unplugged() {
+        let r = rig().await;
+        let phone = Identity::generate("phone").unwrap();
+        let (mut io, _) = plug(&r, &phone, 7).await;
+        send(&mut io, cable_request()).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::PairPending(_))));
+        send(&mut io, Msg::PairConfirm(proto::PairConfirm { accept: false })).await;
+        wait_until(|| r.hub.cable_declined(7)).await;
+        r.hub.cable_gone(7);
+        assert!(!r.hub.cable_declined(7));
+        assert!(r.hub.store.devices().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_lost_connection_is_not_a_no() {
+        let r = rig().await;
+        let phone = Identity::generate("phone").unwrap();
+        let (mut io, _) = plug(&r, &phone, 7).await;
+        send(&mut io, cable_request()).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::PairPending(_))));
+        drop(io);
+        wait_until(|| r.events.lock().unwrap().contains(&UiEvent::PairEnded { message: None })).await;
+        assert!(!r.hub.cable_declined(7));
+        // And the next connection may ask again.
+        let (mut io, _) = plug(&r, &phone, 7).await;
+        send(&mut io, cable_request()).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::PairPending(_))));
+    }
+
+    #[tokio::test]
+    async fn unplugging_ends_the_cable_video_at_once() {
+        let r = rig().await;
+        let phone = Identity::generate("phone").unwrap();
+        drop(pair(&r, &phone).await);
+        let (mut media, _) = plug(&r, &phone, 7).await;
+        send(&mut media, Msg::VideoHello(proto::VideoHello {})).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        r.hub.cable_gone(7);
+        let end = timeout(Duration::from_secs(2), read_msg(&mut media)).await.expect("closed at once");
+        assert!(!matches!(end, Ok(Some(_))));
+    }
+
+    #[tokio::test]
+    async fn a_pc_with_another_iphone_does_not_pair_by_cable() {
+        let r = rig().await;
+        let first = Identity::generate("phone").unwrap();
+        drop(pair(&r, &first).await);
+        let other = Identity::generate("other").unwrap();
+        let (mut io, _) = plug(&r, &other, 7).await;
+        send(&mut io, cable_request()).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::Refused(_))));
+        assert_eq!(r.hub.store.devices().len(), 1);
+        // Refused once, not every 2 s while plugged.
+        assert!(r.hub.cable_declined(7));
+    }
+
+    #[tokio::test]
+    async fn the_cable_replaces_the_wifi_and_keeps_priority() {
+        let r = rig().await;
+        let phone = Identity::generate("phone").unwrap();
+        let mut wifi = pair(&r, &phone).await;
+        wait_until(|| r.hub.view().via == Some(Via::Wifi)).await;
+
+        let (mut cable, _) = plug(&r, &phone, 7).await;
+        send(&mut cable, hello()).await;
+        assert!(matches!(recv(&mut cable).await, Some(Msg::Welcome(_))));
+        wait_until(|| r.hub.has_cable_session(7)).await;
+        // The Wi-Fi session was closed by the PC.
+        loop {
+            match timeout(Duration::from_secs(5), read_msg(&mut wifi)).await.unwrap() {
+                Ok(Some(_)) => continue,
+                _ => break,
+            }
+        }
+        // A Wi-Fi Hello while the cable lives is refused (E6).
+        let mut again = connect(r.addr, &phone, r.hub.identity.fingerprint).await.unwrap();
+        send(&mut again, hello()).await;
+        assert!(matches!(recv(&mut again).await, Some(Msg::Refused(f)) if f.reason == Reason::Busy as i32));
+        assert!(r.hub.has_cable_session(7));
+    }
+
+    #[tokio::test]
+    async fn unplugging_ends_the_session_and_the_wifi_comes_back() {
+        let r = rig().await;
+        let phone = Identity::generate("phone").unwrap();
+        drop(pair(&r, &phone).await);
+        let (mut cable, _) = plug(&r, &phone, 7).await;
+        send(&mut cable, hello()).await;
+        assert!(matches!(recv(&mut cable).await, Some(Msg::Welcome(_))));
+        wait_until(|| r.hub.has_cable_session(7)).await;
+        r.hub.cable_gone(7);
+        wait_until(|| r.hub.view().connected.is_none()).await;
+        let mut wifi = connect(r.addr, &phone, r.hub.identity.fingerprint).await.unwrap();
+        send(&mut wifi, hello()).await;
+        assert!(matches!(recv(&mut wifi).await, Some(Msg::Welcome(_))));
+        wait_until(|| r.hub.view().via == Some(Via::Wifi)).await;
+    }
+
+    #[tokio::test]
+    async fn cable_open_brings_a_second_connection_for_the_video() {
+        let r = rig().await;
+        let phone = Identity::generate("phone").unwrap();
+        drop(pair(&r, &phone).await);
+        let (tx, mut rx) = unbounded_channel::<tokio::io::DuplexStream>();
+        let dial: CableDial = Arc::new(move |_device| {
+            let (pc_end, phone_end) = tokio::io::duplex(1 << 20);
+            let _ = tx.send(phone_end);
+            Box::pin(async move { Ok(Box::new(pc_end) as Box<dyn Io>) })
+        });
+        r.hub.set_cable_dial(dial);
+        let (mut ctl, _) = plug(&r, &phone, 7).await;
+        send(&mut ctl, hello()).await;
+        assert!(matches!(recv(&mut ctl).await, Some(Msg::Welcome(_))));
+        r.hub.set_live(true);
+
+        send(&mut ctl, Msg::CableOpen(proto::CableOpen {})).await;
+        let end = timeout(Duration::from_secs(5), rx.recv()).await.unwrap().unwrap();
+        let (mut media, _) = cable_accept(&phone, end).await;
+        let got = Arc::new(Mutex::new(0usize));
+        let g = got.clone();
+        r.hub.set_video_sink(WINDOW_SINK, Some(Arc::new(move |_f: &proto::VideoFrame| {
+            *g.lock().unwrap() += 1;
+            true
+        })));
+        send(&mut media, Msg::VideoHello(proto::VideoHello {})).await;
+        send(&mut media, Msg::VideoFrame(proto::VideoFrame { keyframe: true, data: vec![0, 0, 0, 1].into(), ..Default::default() })).await;
+        wait_until(|| *got.lock().unwrap() == 1).await;
     }
 }

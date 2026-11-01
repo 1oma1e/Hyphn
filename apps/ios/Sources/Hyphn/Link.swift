@@ -3,6 +3,9 @@
 //   « Oui, relier » → PairDone → the same connection becomes the session.
 // - Reconnection, app in the foreground only: last IP/port and Bonjour at the
 //   same time, the first that answers wins; closed in the background (RULES, Énergie 2).
+// - Cable (spec `Core - Liaison par cable`): the PC opens connections to
+//   Cable.swift through usbmux; a cable session replaces the Wi-Fi one and
+//   stops the Wi-Fi search; unplugged, the Wi-Fi reconnection starts at once.
 
 import Foundation
 import Network
@@ -40,6 +43,8 @@ final class PCLink: ObservableObject {
     /// The last link events, newest first, shown in Réglages: to find the
     /// cuts Evan sees when a device goes to sleep.
     @Published private(set) var journal: [String] = []
+    /// The session runs through the USB cable (E9).
+    @Published private(set) var viaCable = false
 
     func log(_ what: String) {
         let f = DateFormatter()
@@ -54,7 +59,11 @@ final class PCLink: ObservableObject {
 
     private var session: PinnedConnection?
     private var attempts: [PinnedConnection] = []
-    private var pairing: (conn: PinnedConnection, offer: PairOffer)?
+    /// The QR offer, or nil when pairing by cable (no address known yet).
+    private var pairing: (conn: PinnedConnection, offer: PairOffer?)?
+    private let cable = CableListener()
+    /// Cam and Drop connections asked to the PC by cable, oldest first (E7).
+    private var cableWaiters: [PinnedConnection] = []
     private var browser: NWBrowser?
     private var giveUp: Task<Void, Never>?
     private var retry: Task<Void, Never>?
@@ -69,6 +78,8 @@ final class PCLink: ObservableObject {
     init() {
         phase = pc == nil ? .unpaired : .searching
         info.onChange = { [weak self] s in self?.send(.deviceStatus(s)) }
+        cable.pinned = pc?.fingerprint
+        cable.onConnection = { [weak self] c in self?.cableArrived(c) }
     }
 
     var pcName: String { pc?.name ?? "PC" }
@@ -79,6 +90,7 @@ final class PCLink: ObservableObject {
         foreground = true
         endBackgroundTask()
         info.start()
+        if let identity { cable.start(identity: identity) }
         log("Hyphn au premier plan")
         if session != nil {
             // The PC pings every 5 s: quiet for longer, the link died while
@@ -107,6 +119,7 @@ final class PCLink: ObservableObject {
         cancelPairing()
         camera?.stopStreaming()
         guard session != nil else {
+            cable.stop()
             if pc != nil { phase = .offline("") }
             return
         }
@@ -120,6 +133,8 @@ final class PCLink: ObservableObject {
             log("Arrière-plan trop long : liaison fermée")
             session?.close()
             session = nil
+            viaCable = false
+            cable.stop()
             if pc != nil { phase = .offline("") }
         }
         endBackgroundTask()
@@ -137,6 +152,7 @@ final class PCLink: ObservableObject {
         retry?.cancel()
         let old = session
         session = nil
+        viaCable = false
         old?.close()
         camera?.stopStreaming()
         stopSearch()
@@ -181,16 +197,7 @@ final class PCLink: ObservableObject {
             if case .connecting = self?.pairStep { self?.pairStep = .connecting(host: offer.host, secured: true) }
             c.send(.pairRequest(token: offer.token, deviceName: UIDevice.current.name, model: DeviceInfo.model, appVersion: DeviceInfo.appVersion))
         }
-        c.onMessage = { [weak self] m in self?.onPairMessage(m, c, offer) }
-        c.onClose = { [weak self] failure in
-            guard let self, self.pairing?.conn === c else { return }
-            self.pairing = nil
-            switch self.pairStep {
-            case .linked: break
-            default:
-                self.pairStep = .failed(Self.text(for: failure, pairing: true))
-            }
-        }
+        watchPairing(c, offer: offer)
         c.start()
         // Never « Connexion au PC… » for long: no code within 10 s → a clear message.
         pairTimeout?.cancel()
@@ -203,7 +210,25 @@ final class PCLink: ObservableObject {
         }
     }
 
-    private func onPairMessage(_ m: Msg, _ c: PinnedConnection, _ offer: PairOffer) {
+    private func watchPairing(_ c: PinnedConnection, offer: PairOffer?) {
+        c.onMessage = { [weak self] m in self?.onPairMessage(m, c, offer) }
+        c.onClose = { [weak self] failure in
+            guard let self, self.pairing?.conn === c else { return }
+            self.pairing = nil
+            switch self.pairStep {
+            case .linked: break
+            default:
+                // Unplugged before the code (cable): back to the scan, quietly.
+                if c.viaCable, case .connecting = self.pairStep {
+                    self.pairStep = .idle
+                } else {
+                    self.pairStep = .failed(Self.text(for: failure, pairing: true))
+                }
+            }
+        }
+    }
+
+    private func onPairMessage(_ m: Msg, _ c: PinnedConnection, _ offer: PairOffer?) {
         switch m {
         case let .pairPending(pcName):
             pairTimeout?.cancel()
@@ -212,9 +237,11 @@ final class PCLink: ObservableObject {
         case .pairDone:
             guard case let .code(_, name) = pairStepBeforeConfirm ?? pairStep, let pcFingerprint = c.peerFingerprint else { return }
             stopPriming()
-            let paired = PairedPC(name: name, fingerprint: pcFingerprint, host: offer.host, port: offer.port, pairedAt: Date())
+            // By cable the PC address is learnt from its first Wi-Fi session.
+            let paired = PairedPC(name: name, fingerprint: pcFingerprint, host: offer?.host ?? "", port: offer?.port ?? 47800, pairedAt: Date())
             paired.save()
             pc = paired
+            cable.pinned = pcFingerprint
             pairing = nil
             pairStep = .linked(pcName: name)
             adopt(c)
@@ -266,8 +293,10 @@ final class PCLink: ObservableObject {
         stopSearch()
         phase = .searching
         log("Recherche du PC…")
-        // E3: the last known address...
-        tryConnect(PinnedConnection(host: pc.host, port: pc.port, pinned: pc.fingerprint, identity: identity))
+        // E3: the last known address (none yet after a pairing by cable)...
+        if !pc.host.isEmpty {
+            tryConnect(PinnedConnection(host: pc.host, port: pc.port, pinned: pc.fingerprint, identity: identity))
+        }
         // ...and Bonjour at the same time (E2).
         let b = NWBrowser(for: .bonjour(type: "_hyphn._tcp", domain: nil), using: NWParameters())
         b.browseResultsChangedHandler = { [weak self] results, _ in
@@ -310,21 +339,21 @@ final class PCLink: ObservableObject {
         attempts.append(c)
         c.onReady = { [weak self] in
             guard let self else { return }
-            guard self.session == nil else { c.close(); return }
+            guard self.canTake(c) else { c.close(); return }
             c.send(.hello(deviceName: UIDevice.current.name, model: DeviceInfo.model, appVersion: DeviceInfo.appVersion))
         }
         c.onMessage = { [weak self] m in
             guard let self else { return }
             switch m {
             case .welcome:
-                guard self.session == nil else { c.close(); return }
+                guard self.canTake(c) else { c.close(); return }
                 self.adopt(c)
             case let .refused(reason, message):
                 c.close()
                 if reason == .unknownDevice {
                     // The PC forgot this iPhone (E10): forget it too.
                     self.forgetLocally(notice: message)
-                } else {
+                } else if self.session == nil {
                     self.phase = .offline(message)
                 }
             default:
@@ -343,6 +372,64 @@ final class PCLink: ObservableObject {
         c.start()
     }
 
+    /// A new connection may become the session: none yet, or a cable one
+    /// replacing the Wi-Fi (spec `Core - Liaison par cable`, E6).
+    private func canTake(_ c: PinnedConnection) -> Bool {
+        guard let s = session else { return true }
+        return c.viaCable && !s.viaCable
+    }
+
+    // MARK: Cable
+
+    /// The PC opened a connection through the cable.
+    private func cableArrived(_ nw: NWConnection) {
+        // A Cam or Drop request waits for it (E7).
+        if let i = cableWaiters.firstIndex(where: { $0.waiting }) {
+            cableWaiters.remove(at: i).attach(nw)
+            return
+        }
+        cableWaiters.removeAll { !$0.waiting }
+        if session?.viaCable == true || !foreground {
+            nw.cancel()
+            return
+        }
+        let c = PinnedConnection(cable: nw)
+        if pc != nil {
+            log("Câble : PC trouvé")
+            tryConnect(c)
+            return
+        }
+        // Not paired (E5): the cable replaces the QR, the code and « Oui »
+        // stay. Only on the scan screen, where the code can be shown.
+        guard prime != nil, pairing == nil, case .idle = pairStep else { nw.cancel(); return }
+        pairing = (c, nil)
+        pairStep = .connecting(host: Self.cableHost, secured: false)
+        c.onReady = { [weak self] in
+            if case .connecting = self?.pairStep { self?.pairStep = .connecting(host: Self.cableHost, secured: true) }
+            c.send(.pairRequest(token: Data(), deviceName: UIDevice.current.name, model: DeviceInfo.model, appVersion: DeviceInfo.appVersion))
+        }
+        watchPairing(c, offer: nil)
+        c.start()
+    }
+
+    /// Shown instead of an address while pairing by cable.
+    static let cableHost = "câble USB"
+
+    /// Cam or Drop by cable: asks the PC for a connection, given to this one
+    /// when it comes; none in 5 s → failed like a refused Wi-Fi connection.
+    private func cableRequest() -> PinnedConnection {
+        let c = PinnedConnection(cable: nil)
+        cableWaiters.append(c)
+        send(.cableOpen)
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard let self, c.waiting else { return }
+            self.cableWaiters.removeAll { $0 === c }
+            c.giveUpWaiting()
+        }
+        return c
+    }
+
     private func stopSearch() {
         browser?.cancel()
         browser = nil
@@ -354,16 +441,20 @@ final class PCLink: ObservableObject {
 
     /// This connection is now the control session.
     private func adopt(_ c: PinnedConnection) {
-        // « Relier un autre PC »: the new PC replaces the old one.
+        // « Relier un autre PC »: the new PC replaces the old one. A cable
+        // session replaces the Wi-Fi one: the video moves to the cable too.
+        let movesToCable = c.viaCable && session.map { !$0.viaCable } == true
         if let old = session, old !== c { old.close() }
         session = c
+        if movesToCable { camera?.reopenMedia() }
         if !attempts.contains(where: { $0 === c }) { attempts.append(c) }
         c.onMessage = { [weak self] m in self?.handle(m) }
         c.onClose = { [weak self] failure in self?.sessionClosed(c, failure) }
-        log("Relié à \(pcName)")
+        log(c.viaCable ? "Relié à \(pcName) par câble" : "Relié à \(pcName) en Wi-Fi")
         watch(c)
         stopSearch()
         phase = .online
+        viaCable = c.viaCable
         // E5: keep the address that answered (Bonjour may have found a new one).
         if let (host, port) = c.remote { rememberAddress(host: host, port: port) }
         send(.deviceStatus(info.current(withStorage: true)))
@@ -398,6 +489,8 @@ final class PCLink: ObservableObject {
         default: log("Liaison fermée")
         }
         session = nil
+        viaCable = false
+        if c.viaCable { log("Câble débranché : retour au Wi-Fi") }
         camera?.stopStreaming()
         if foreground, pc != nil {
             phase = .offline("Connexion perdue.")
@@ -440,9 +533,11 @@ final class PCLink: ObservableObject {
         retry?.cancel()
         stopSearch()
         session = nil
+        viaCable = false
         camera?.stopStreaming()
         PairedPC.forget()
         pc = nil
+        cable.pinned = nil
         phase = .unpaired
         self.notice = notice
     }
@@ -451,8 +546,10 @@ final class PCLink: ObservableObject {
 
     /// A second connection for the video (spec `Cam - Flux v1`, E3).
     func openMedia() -> PinnedConnection? {
-        guard let pc, let identity, session != nil else { return nil }
-        let c = PinnedConnection(host: pc.host, port: pc.port, pinned: pc.fingerprint, identity: identity, serviceClass: .interactiveVideo)
+        guard let pc, let identity, let s = session else { return nil }
+        let c = s.viaCable
+            ? cableRequest()
+            : PinnedConnection(host: pc.host, port: pc.port, pinned: pc.fingerprint, identity: identity, serviceClass: .interactiveVideo)
         c.onReady = { c.send(.videoHello) }
         c.start()
         return c
@@ -462,7 +559,8 @@ final class PCLink: ObservableObject {
     /// TLS as the session, opened for one send and closed after it. Not
     /// started: the caller sets its callbacks first.
     func openDrop() -> PinnedConnection? {
-        guard let pc, let identity, session != nil else { return nil }
+        guard let pc, let identity, let s = session else { return nil }
+        if s.viaCable { return cableRequest() }
         return PinnedConnection(host: pc.host, port: pc.port, pinned: pc.fingerprint, identity: identity, serviceClass: .bestEffort)
     }
 
