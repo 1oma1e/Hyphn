@@ -651,11 +651,14 @@ const LENS_L = ['0,5×', '1×', '2×', '5×'];
 // Windows webcam draws the same design itself (apps/desktop-vcam).
 function waitScreen(c, sub) {
   const cycle = c.multi && c.msg === CAM_DEFAULTS.msg;
+  // The languages follow the Windows clock (2.6 s each, 46.8 s a round, as in
+  // app.css), like the webcam (feed.cpp): Discord shows the same one.
+  const phase = (Date.now() % (LANGS.length * 2600)) / 1000;
   // Letter by letter, 30 ms apart; Arabic and Hindi stay whole (joined letters).
   const line = ([lang, t], i) => {
     const parts = lang === 'ar' || lang === 'hi' ? [t] : Array.from(t);
     return `<div class="wl" lang="${lang}"${lang === 'ar' ? ' dir="rtl"' : ''}>${parts.map((ch, j) =>
-      `<span style="animation-delay:${(i * 2.6 + j * 0.03).toFixed(2)}s">${ch === ' ' ? '&nbsp;' : esc(ch)}</span>`).join('')}</div>`;
+      `<span style="animation-delay:${(i * 2.6 + j * 0.03 - phase).toFixed(3)}s">${ch === ' ' ? '&nbsp;' : esc(ch)}</span>`).join('')}</div>`;
   };
   const text = cycle
     ? `<div class="wmsg" aria-label="${esc(c.msg)}">${LANGS.map(line).join('')}</div>`

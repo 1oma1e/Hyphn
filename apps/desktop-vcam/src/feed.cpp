@@ -989,8 +989,15 @@ HRESULT Feed::DrawWait(const WaitState& st, bool /*videoExpected*/) {
     } else {
         // Each letter comes up out of the blur 30 ms after the one before and
         // leaves the same way; the line before may still be leaving.
-        const int cur = static_cast<int>(t / kLangSeconds);
-        const double ph = t - cur * kLangSeconds;
+        // The languages follow the Windows clock (Unix time, like Date.now()
+        // in the app): Discord shows the same one as the Hyphn window.
+        FILETIME ft;
+        GetSystemTimePreciseAsFileTime(&ft);
+        const uint64_t unix100ns = ((static_cast<uint64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime) - 116444736000000000ull;
+        const uint64_t cycle100ns = static_cast<uint64_t>(kLangCount * kLangSeconds * 1e7 + 0.5);
+        const double tl = static_cast<double>(unix100ns % cycle100ns) / 1e7;
+        const int cur = static_cast<int>(tl / kLangSeconds);
+        const double ph = tl - cur * kLangSeconds;
         for (int back = 1; back >= 0; --back) {
             const Lang& lang = kLangs[((cur - back) % kLangCount + kLangCount) % kLangCount];
             const double local = ph + back * kLangSeconds;
