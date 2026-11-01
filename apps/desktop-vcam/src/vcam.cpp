@@ -5,6 +5,7 @@
 // service; pictures come from Feed (feed.cpp).
 
 #include <windows.h>
+#include <bcrypt.h>
 #include <initguid.h>
 #include <mfapi.h>
 #include <mfidl.h>
@@ -752,10 +753,47 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {
 
 STDAPI DllCanUnloadNow() { return g_objects == 0 && !g_camera ? S_OK : S_FALSE; }
 
+// The camera service keeps this DLL loaded until it stops (ADR-0026): tell the
+// app which one it holds. SHA-256 of our own file, read once at the first use
+// (the file is still the loaded one then; an update renames it away), written
+// to %ProgramData%\Hyphn\loaded-<pid>.txt where only the services may write.
+static void RecordLoaded() {
+    wchar_t path[MAX_PATH];
+    DWORD n = GetModuleFileNameW(g_module, path, MAX_PATH);
+    if (!n || n == MAX_PATH) return;
+    HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return;
+    LARGE_INTEGER size{};
+    std::vector<BYTE> data;
+    DWORD got = 0;
+    if (GetFileSizeEx(f, &size) && size.QuadPart > 0 && size.QuadPart < (64 << 20)) {
+        data.resize(static_cast<size_t>(size.QuadPart));
+        if (!ReadFile(f, data.data(), static_cast<DWORD>(data.size()), &got, nullptr)) got = 0;
+    }
+    CloseHandle(f);
+    BYTE digest[32];
+    if (got != data.size() || got == 0 ||
+        !BCRYPT_SUCCESS(BCryptHash(BCRYPT_SHA256_ALG_HANDLE, nullptr, 0, data.data(), got, digest, sizeof digest)))
+        return;
+    char hex[65];
+    for (int i = 0; i < 32; i++) sprintf_s(hex + i * 2, 3, "%02X", digest[i]);
+    hyphn::Log("dll: loaded %s", hex);
+    char dir[MAX_PATH];
+    if (!GetEnvironmentVariableA("ProgramData", dir, MAX_PATH)) strcpy_s(dir, "C:\\ProgramData");
+    std::string out = std::string(dir) + "\\Hyphn\\loaded-" + std::to_string(GetCurrentProcessId()) + ".txt";
+    HANDLE o = CreateFileA(out.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, 0, nullptr);
+    if (o == INVALID_HANDLE_VALUE) return;
+    DWORD w;
+    WriteFile(o, hex, 64, &w, nullptr);
+    CloseHandle(o);
+}
+
 STDAPI DllGetClassObject(REFCLSID clsid, REFIID riid, LPVOID* ppv) {
     if (!ppv) return E_POINTER;
     *ppv = nullptr;
     if (clsid != CLSID_HyphnCam) return CLASS_E_CLASSNOTAVAILABLE;
+    static std::once_flag recorded;
+    std::call_once(recorded, RecordLoaded);
     return g_factory.QueryInterface(riid, ppv);
 }
 

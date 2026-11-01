@@ -10,7 +10,32 @@ use std::path::{Path, PathBuf};
 use crate::vcam::{DLL, OBS_DLL};
 
 pub const ARG: &str = "--hyphn-install-vcam";
-const UNINSTALL: &str = "--uninstall";
+
+/// What the admin copy of Hyphn does.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Action {
+    Install,
+    Uninstall,
+    /// Only stops the camera services, which still hold an old DLL (ADR-0026).
+    Reload,
+}
+
+impl Action {
+    fn flag(self) -> &'static str {
+        match self {
+            Action::Install => "",
+            Action::Uninstall => " --uninstall",
+            Action::Reload => " --reload",
+        }
+    }
+    fn parse(flag: Option<&str>) -> Self {
+        match flag {
+            Some("--uninstall") => Action::Uninstall,
+            Some("--reload") => Action::Reload,
+            _ => Action::Install,
+        }
+    }
+}
 
 /// Where things go. `system()` for real; tests use a temporary folder.
 pub struct Roots {
@@ -131,8 +156,25 @@ pub fn uninstall(roots: &Roots, register: Register) -> Result<(), String> {
 }
 
 /// Arguments for the admin relaunch.
-pub fn elevated_args(source: &Path, report: &Path, uninstall: bool) -> String {
-    format!("{ARG} \"{}\" \"{}\"{}", source.display(), report.display(), if uninstall { " --uninstall" } else { "" })
+pub fn elevated_args(source: &Path, report: &Path, action: Action) -> String {
+    format!("{ARG} \"{}\" \"{}\"{}", source.display(), report.display(), action.flag())
+}
+
+/// Stops the camera services so the next camera opened loads the DLL now in
+/// place, and forgets which DLL they held.
+fn reload(roots: &Roots) {
+    sys::reload_camera_service();
+    forget_loaded(roots);
+}
+
+fn forget_loaded(roots: &Roots) {
+    if let Ok(list) = std::fs::read_dir(roots.logs()) {
+        for e in list.flatten() {
+            if e.file_name().to_string_lossy().starts_with("loaded-") {
+                let _ = std::fs::remove_file(e.path());
+            }
+        }
+    }
 }
 
 /// When Hyphn was relaunched as admin for the install: does it and returns
@@ -143,15 +185,17 @@ pub fn elevated_main(args: &[String]) -> Option<i32> {
     }
     let (Some(source), Some(report)) = (args.get(2), args.get(3)) else { return Some(2) };
     let roots = Roots::system();
-    let undo = args.get(4).map(String::as_str) == Some(UNINSTALL);
-    let r = if undo {
-        uninstall(&roots, &sys::register)
-    } else {
-        install(Path::new(source), &roots, crate::vcam::VCAM_SHA256, crate::vcam::OBS_SHA256, &sys::register)
+    let r = match Action::parse(args.get(4).map(String::as_str)) {
+        Action::Uninstall => uninstall(&roots, &sys::register),
+        Action::Reload => {
+            reload(&roots);
+            Ok(())
+        }
+        Action::Install => install(Path::new(source), &roots, crate::vcam::VCAM_SHA256, crate::vcam::OBS_SHA256, &sys::register)
             .inspect(|_| {
                 sys::protect_logs(&roots.logs());
-                sys::reload_camera_service();
-            })
+                reload(&roots);
+            }),
     };
     Some(match r {
         Ok(()) => 0,
@@ -224,22 +268,26 @@ mod sys {
             .output();
     }
 
-    /// The camera service (Frame Server) keeps the DLL it loaded until it
-    /// stops: an update would show only after a restart of Windows. Stopping
-    /// it is enough, Windows starts it again when an app opens a camera.
+    /// The camera services (Frame Server, and its monitor) keep the DLL they
+    /// loaded until they stop: an update would show only after a restart of
+    /// Windows. Stopping them is enough, Windows starts them again when an
+    /// app opens a camera.
     pub fn reload_camera_service() {
         use windows_sys::Win32::System::Services::{
             CloseServiceHandle, ControlService, OpenSCManagerW, OpenServiceW, QueryServiceStatus, SC_MANAGER_CONNECT, SERVICE_CONTROL_STOP,
             SERVICE_QUERY_STATUS, SERVICE_STATUS, SERVICE_STOP, SERVICE_STOPPED,
         };
-        let name = wide("FrameServer");
         unsafe {
             let scm = OpenSCManagerW(std::ptr::null(), std::ptr::null(), SC_MANAGER_CONNECT);
             if scm.is_null() {
                 return;
             }
-            let svc = OpenServiceW(scm, name.as_ptr(), SERVICE_STOP | SERVICE_QUERY_STATUS);
-            if !svc.is_null() {
+            for service in crate::vcam::CAMERA_SERVICES {
+                let name = wide(service);
+                let svc = OpenServiceW(scm, name.as_ptr(), SERVICE_STOP | SERVICE_QUERY_STATUS);
+                if svc.is_null() {
+                    continue;
+                }
                 let mut st: SERVICE_STATUS = std::mem::zeroed();
                 if ControlService(svc, SERVICE_CONTROL_STOP, &mut st) != 0 {
                     // Up to 5 s, so the next camera opened gets the new DLL.
@@ -342,6 +390,25 @@ mod tests {
     fn only_the_install_argument_starts_the_admin_part() {
         assert_eq!(elevated_main(&["hyphn".into()]), None);
         assert_eq!(elevated_main(&["hyphn".into(), ARG.into()]), Some(2));
-        assert!(elevated_args(Path::new(r"C:\a b"), Path::new(r"C:\r.log"), true).ends_with(r#""C:\a b" "C:\r.log" --uninstall"#));
+        assert!(elevated_args(Path::new(r"C:\a b"), Path::new(r"C:\r.log"), Action::Uninstall).ends_with(r#""C:\a b" "C:\r.log" --uninstall"#));
+    }
+
+    #[test]
+    fn each_action_survives_the_command_line() {
+        for a in [Action::Install, Action::Uninstall, Action::Reload] {
+            let args = elevated_args(Path::new(r"C:\n"), Path::new(r"C:\r"), a);
+            assert_eq!(Action::parse(args.split_whitespace().nth(3)), a);
+        }
+    }
+
+    #[test]
+    fn reload_forgets_which_dll_the_services_held() {
+        let (_t, _src, roots, _vcam, _obs) = setup();
+        std::fs::create_dir_all(roots.logs()).unwrap();
+        std::fs::write(roots.logs().join("loaded-42.txt"), "AA").unwrap();
+        std::fs::write(roots.logs().join("vcam.log"), "x").unwrap();
+        forget_loaded(&roots);
+        assert!(!roots.logs().join("loaded-42.txt").exists());
+        assert!(roots.logs().join("vcam.log").exists());
     }
 }

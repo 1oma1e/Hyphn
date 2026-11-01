@@ -193,6 +193,29 @@ pub fn native_is_genuine(dir: &Path) -> bool {
 }
 
 
+/// The camera services that load the DLL (ADR-0026).
+pub const CAMERA_SERVICES: [&str; 2] = ["FrameServer", "FrameServerMonitor"];
+
+/// `%ProgramData%\Hyphn`: the webcam log and the `loaded-<pid>.txt` files.
+pub fn logs_dir() -> PathBuf {
+    std::env::var_os("ProgramData").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(r"C:\ProgramData")).join("Hyphn")
+}
+
+/// A running camera service holds another DLL than `sha` (ADR-0026): each
+/// process that loads the DLL writes its SHA-256 to `loaded-<pid>.txt`.
+pub fn stale_in(logs: &Path, pids: &[u32], sha: &str) -> bool {
+    pids.iter().any(|pid| {
+        std::fs::read_to_string(logs.join(format!("loaded-{pid}.txt"))).is_ok_and(|held| held.trim() != sha)
+    })
+}
+
+/// The camera service still holds an old webcam DLL (after an update).
+#[cfg(windows)]
+pub fn camera_service_is_stale() -> bool {
+    let pids: Vec<u32> = CAMERA_SERVICES.iter().filter_map(|s| sys::service_pid(s)).collect();
+    !VCAM_SHA256.is_empty() && stale_in(&logs_dir(), &pids, VCAM_SHA256)
+}
+
 /// Where the built DLLs are: next to the app once installed, `src-tauri/native`
 /// while developing.
 pub fn native_dir(resource_dir: Option<PathBuf>) -> Option<PathBuf> {
@@ -319,6 +342,34 @@ mod sys {
         Some(PathBuf::from(String::from_utf16_lossy(&buf[..n])))
     }
 
+    /// PID of a running service, None if stopped. Needs no admin.
+    pub fn service_pid(name: &str) -> Option<u32> {
+        use windows_sys::Win32::System::Services::{
+            CloseServiceHandle, OpenSCManagerW, OpenServiceW, QueryServiceStatusEx, SC_MANAGER_CONNECT, SC_STATUS_PROCESS_INFO,
+            SERVICE_QUERY_STATUS, SERVICE_STATUS_PROCESS,
+        };
+        let name = wide(name);
+        unsafe {
+            let scm = OpenSCManagerW(null(), null(), SC_MANAGER_CONNECT);
+            if scm.is_null() {
+                return None;
+            }
+            let svc = OpenServiceW(scm, name.as_ptr(), SERVICE_QUERY_STATUS);
+            let mut pid = None;
+            if !svc.is_null() {
+                let mut st: SERVICE_STATUS_PROCESS = std::mem::zeroed();
+                let mut len = 0u32;
+                let size = std::mem::size_of::<SERVICE_STATUS_PROCESS>() as u32;
+                if QueryServiceStatusEx(svc, SC_STATUS_PROCESS_INFO, &mut st as *mut _ as *mut u8, size, &mut len) != 0 && st.dwProcessId != 0 {
+                    pid = Some(st.dwProcessId);
+                }
+                CloseServiceHandle(svc);
+            }
+            CloseServiceHandle(scm);
+            pid
+        }
+    }
+
     /// The loaded camera DLL (kept: the camera lives as long as Hyphn).
     static LIB: std::sync::Mutex<usize> = std::sync::Mutex::new(0);
 
@@ -400,6 +451,20 @@ mod tests {
         assert_eq!(u32::from_le_bytes(h[12..16].try_into().unwrap()), 1920);
         assert_eq!((h[20], h[21]), (1, 1));
         assert_eq!(i64::from_le_bytes(h[24..32].try_into().unwrap()), -2);
+    }
+
+    #[test]
+    fn a_service_holding_another_dll_is_stale() {
+        let t = tempfile::tempdir().unwrap();
+        std::fs::write(t.path().join("loaded-10.txt"), "AAAA").unwrap();
+        std::fs::write(t.path().join("loaded-20.txt"), "BBBB").unwrap();
+        // Right DLL, or no file (never loaded): nothing to do.
+        assert!(!stale_in(t.path(), &[10], "AAAA"));
+        assert!(!stale_in(t.path(), &[30], "AAAA"));
+        assert!(!stale_in(t.path(), &[], "AAAA"));
+        // An old file of a stopped service (pid 20 not running) does not count.
+        assert!(!stale_in(t.path(), &[10, 30], "AAAA"));
+        assert!(stale_in(t.path(), &[10, 20], "AAAA"));
     }
 
     #[test]

@@ -400,7 +400,8 @@ fn install_native(app: &AppHandle, uninstall: bool) -> Result<(), String> {
     // The admin copy of Hyphn writes why it failed here.
     let report = std::env::temp_dir().join("hyphn-install.log");
     let _ = std::fs::remove_file(&report);
-    let code = vcam::run_elevated(&install::elevated_args(&native, &report, uninstall))?;
+    let action = if uninstall { install::Action::Uninstall } else { install::Action::Install };
+    let code = vcam::run_elevated(&install::elevated_args(&native, &report, action))?;
     if code != 0 {
         let why = std::fs::read_to_string(&report).unwrap_or_default();
         let why = why.trim();
@@ -428,6 +429,12 @@ fn auto_install(app: &AppHandle) {
     };
     // Missing, or older than the one this app carries (an update): install.
     let up_to_date = registered_dll().is_some_and(|d| vcam::sha256_hex(&d).as_deref() == Some(vcam::VCAM_SHA256));
+    if up_to_date && vcam::camera_service_is_stale() {
+        // The right DLL is installed but the camera service still runs an old
+        // one (ADR-0026): stop it, one « Oui ». A « Non » asks again next time.
+        reload_camera_service();
+        return;
+    }
     if declined || !native || up_to_date {
         return;
     }
@@ -443,6 +450,16 @@ fn auto_install(app: &AppHandle) {
             h.lock().camera_error = Some(e);
             on_event(app, UiEvent::Changed);
         }
+    }
+}
+
+#[cfg(windows)]
+fn reload_camera_service() {
+    let report = std::env::temp_dir().join("hyphn-install.log");
+    // No DLL is copied: the source folder is not used.
+    let args = install::elevated_args(std::path::Path::new("-"), &report, install::Action::Reload);
+    if let Err(e) = vcam::run_elevated(&args) {
+        eprintln!("hyphn: camera service reload: {e}");
     }
 }
 

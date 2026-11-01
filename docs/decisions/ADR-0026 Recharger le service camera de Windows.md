@@ -1,7 +1,7 @@
 ---
 type: decision
 date: 2026-11-01
-statut: propose
+statut: accepte
 ---
 # ADR-0026 Recharger le service caméra de Windows
 
@@ -16,8 +16,12 @@ La DLL de la webcam tourne dans le service Windows « Frame Server » (Windows C
 | C — À l'installation, donner aux utilisateurs le droit d'arrêter ce seul service ; l'app l'arrête au lancement si la DLL chargée n'est pas la bonne | Automatique sans demande | Change la sécurité d'un service Windows : à peser |
 
 ## Décision
-**A** codé le 2026-11-01 (`install.rs`, `reload_camera_service`). Proposé pour la prochaine session : le lancement de Hyphn vérifie, avec la DLL elle-même (version envoyée par le tuyau), si le service garde une ancienne version ; si oui, il relance l'installation (« Oui » admin une seule fois), qui arrête le service. Evan tranche entre cette variante de A, B et C.
+**A** codé le 2026-11-01 (`install.rs`, `reload_camera_service`). Le 2026-11-01 (session 3), Evan choisit **A+** : en plus, au lancement de Hyphn, on vérifie que le service garde la bonne DLL.
+
+Comment on le sait : la DLL ne se connecte au tuyau que pendant qu'une app montre la caméra, donc elle ne peut pas répondre au lancement. À la place, quand un processus la charge, elle calcule l'empreinte SHA-256 de son propre fichier et l'écrit dans `C:\ProgramData\Hyphn\loaded-<pid>.txt` (dossier où seul le service écrit). Au lancement, Hyphn demande à Windows le numéro de processus (PID) des services « FrameServer » et « FrameServerMonitor » (permis sans admin). Si le fichier d'un service en marche porte une autre empreinte que celle de l'app, Hyphn se relance en admin (« Oui » une fois) avec `--reload` : les deux services sont arrêtés et les fichiers `loaded-*` effacés. Windows les relance tout seul à la prochaine ouverture d'une caméra, avec la nouvelle DLL.
 
 ## Conséquences
-- Non vérifié : l'arrêt automatique n'a pas encore servi (la DLL actuelle a été rechargée à la main).
+- Pas de « Oui » en plus tant que la DLL n'a pas changé.
+- Une DLL d'avant ce correctif n'écrit pas de fichier : elle n'est pas détectée (une fois, au passage à cette version ; l'installation arrête déjà le service).
+- Si Evan répond « Non », Hyphn redemande au lancement suivant (seulement tant que le service garde l'ancienne DLL).
 - Le piège est noté dans [[STATE]].

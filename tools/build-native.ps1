@@ -23,7 +23,7 @@ New-Item -ItemType Directory -Force $out, $obj | Out-Null
 # /Brepro: same bytes at every build, so the SHA-256 the app checks (build.rs)
 # does not change when nothing changed.
 $cl = '/nologo /std:c++20 /EHsc /O2 /MT /W3 /DUNICODE /D_UNICODE /DNOMINMAX /utf-8 /Brepro'
-$libs = 'mfplat.lib mf.lib mfuuid.lib mfsensorgroup.lib d3d11.lib dxgi.lib d2d1.lib dwrite.lib ole32.lib oleaut32.lib advapi32.lib propsys.lib user32.lib'
+$libs = 'mfplat.lib mf.lib mfuuid.lib mfsensorgroup.lib d3d11.lib dxgi.lib d2d1.lib dwrite.lib ole32.lib oleaut32.lib advapi32.lib propsys.lib user32.lib bcrypt.lib'
 
 $steps = @(
     "cd /d `"$src`"",
