@@ -225,17 +225,29 @@ fn get_snapshot(h: State<'_, Hyphn>) -> Snapshot {
 
 #[derive(Serialize)]
 struct OfferView {
-    /// None when E11 refuses to show a QR.
-    svg: Option<String>,
+    /// The QR modules, one string per row, '1' = dark. The window draws them
+    /// on a canvas in whole screen pixels: an SVG scaled to a fractional size
+    /// left thin gaps between the squares, and the iPhone missed the corner
+    /// patterns. None when E11 refuses to show a QR.
+    qr: Option<Vec<String>>,
     problem: Option<String>,
     seconds_left: u64,
+}
+
+/// Rows of the QR, '1' = dark.
+fn qr_rows(code: &qrcode::QrCode) -> Vec<String> {
+    let w = code.width();
+    code.to_colors()
+        .chunks(w)
+        .map(|row| row.iter().map(|c| if *c == qrcode::Color::Dark { '1' } else { '0' }).collect())
+        .collect()
 }
 
 #[tauri::command]
 fn pair_offer(h: State<'_, Hyphn>) -> OfferView {
     let Some(ip) = net::local_ip() else {
         return OfferView {
-            svg: None,
+            qr: None,
             problem: Some("Ce PC n’est relié à aucun réseau local. Branche-le au Wi-Fi ou au câble de ta box, puis réessaie.".into()),
             seconds_left: 0,
         };
@@ -244,14 +256,8 @@ fn pair_offer(h: State<'_, Hyphn>) -> OfferView {
     let uri = h.hub.issue_offer(ip, port).to_uri();
     // Low correction is enough on a screen (nothing scratches it) and keeps
     // the code at 25x25 (ADR-0028): big squares, read at once by the iPhone.
-    let svg = qrcode::QrCode::with_error_correction_level(uri.as_bytes(), qrcode::EcLevel::L).ok().map(|code| {
-        code.render::<qrcode::render::svg::Color>()
-            .quiet_zone(false)
-            .dark_color(qrcode::render::svg::Color("#0A0D08"))
-            .light_color(qrcode::render::svg::Color("#F4F7EE"))
-            .build()
-    });
-    OfferView { svg, problem: None, seconds_left: pairing::TOKEN_TTL.as_secs() }
+    let qr = qrcode::QrCode::with_error_correction_level(uri.as_bytes(), qrcode::EcLevel::L).ok().map(|c| qr_rows(&c));
+    OfferView { qr, problem: None, seconds_left: pairing::TOKEN_TTL.as_secs() }
 }
 
 #[tauri::command]

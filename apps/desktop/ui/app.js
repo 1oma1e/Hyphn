@@ -302,6 +302,30 @@ const Home = {
 // ===================================================================
 // Appairage
 // ===================================================================
+
+// The QR in whole screen pixels per square, with a 3-square light margin
+// (ADR-0028): solid corner patterns, no thin gaps between squares.
+function drawQr(cv, rows) {
+  if (!cv) return;
+  const n = rows.length + 6;
+  const box = cv.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const px = Math.max(1, Math.floor(Math.min(box.width, box.height) * dpr / n));
+  const side = px * n;
+  cv.width = cv.height = side;
+  cv.style.width = cv.style.height = side / dpr + 'px';
+  const g = cv.getContext('2d');
+  g.fillStyle = '#F4F7EE';
+  g.fillRect(0, 0, side, side);
+  g.fillStyle = '#0A0D08';
+  rows.forEach((r, y) => {
+    for (let x = 0; x < r.length; x++) if (r[x] === '1') g.fillRect((x + 3) * px, (y + 3) * px, px, px);
+  });
+}
+// A new window size or screen scale: redraw at the new pixel size.
+addEventListener('resize', () => {
+  if (page === Pair && Pair.step === 'qr' && Pair.offer && Pair.offer.qr) drawQr($('#p-qr'), Pair.offer.qr);
+});
 const Pair = {
   key: () => '',
   mount(root) {
@@ -348,7 +372,7 @@ const Pair = {
       body = `<div class="stage">
         <div class="qrbox">
           <span class="corner a"></span><span class="corner b"></span><span class="corner c"></span><span class="corner e"></span>
-          <div class="qr" role="img" aria-label="QR code d’appairage">${this.offer.svg}</div>
+          <div class="qr" role="img" aria-label="QR code d’appairage"><canvas id="p-qr"></canvas></div>
         </div>
         <div>
           <span class="lbl">Étape 1 sur 2</span>
@@ -405,6 +429,7 @@ const Pair = {
         </header>
         <section class="card" style="padding:0">${body}</section>
       </main>`;
+    if (this.step === 'qr' && this.offer.qr) drawQr($('#p-qr'), this.offer.qr);
   },
   leave() {
     clearTimeout(this.t1);
