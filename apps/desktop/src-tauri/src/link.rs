@@ -794,6 +794,7 @@ impl Hub {
             free
         };
         if !free {
+            eprintln!("hyphn: drop: refused, a send is already in progress");
             let ack = proto::DropAck { ok: false, reason: "Le PC reçoit déjà un envoi.".into(), duplicate: false };
             return write_msg(&mut io, &env(Msg::DropAck(ack))).await;
         }
@@ -807,7 +808,17 @@ impl Hub {
             let m = tokio::select! {
                 r = timeout(DROP_SILENCE, read_msg(&mut io)) => match r {
                     Ok(Ok(Some(m))) => m,
-                    _ => break Err("Liaison perdue : relance l’envoi depuis l’iPhone.".into()),
+                    other => {
+                        // Written in the terminal, to find why a send stopped.
+                        let why = match other {
+                            Ok(Ok(None)) => "closed by the iPhone".to_string(),
+                            Ok(Err(e)) => e.to_string(),
+                            Err(_) => "silent too long".to_string(),
+                            Ok(Ok(Some(_))) => unreachable!(),
+                        };
+                        eprintln!("hyphn: drop: link ended ({why})");
+                        break Err("Liaison perdue : relance l’envoi depuis l’iPhone.".into());
+                    }
                 },
                 _ = self.drop_stop.notified() => {
                     let _ = write_msg(&mut io, &env(Msg::DropCancel(proto::DropCancel {}))).await;
@@ -942,6 +953,10 @@ impl Hub {
         };
         if let Some(i) = cur {
             i.abort();
+        }
+        match &end {
+            Ok((failed, already)) => eprintln!("hyphn: drop: done ({failed} failed, {already} already there)"),
+            Err(e) => eprintln!("hyphn: drop: stopped ({})", if e.is_empty() { "refused on the PC" } else { e }),
         }
         self.save_drop_index();
         {

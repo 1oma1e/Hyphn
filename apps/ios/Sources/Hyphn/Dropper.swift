@@ -61,7 +61,7 @@ final class Dropper: ObservableObject {
 
     weak var link: PCLink?
 
-    private enum Event { case ready, msg(Msg), closed }
+    private enum Event { case ready, msg(Msg), closed(String?) }
     private enum Outcome { case sent, duplicate, skipped, stop(String) }
 
     /// One thing to send: a Photos item (photo + Live video) or a file.
@@ -164,12 +164,13 @@ final class Dropper: ObservableObject {
             guard let self, let c, self.conn === c else { return }
             self.post(.msg(m))
         }
-        c.onClose = { [weak self, weak c] _ in
+        c.onClose = { [weak self, weak c] failure in
             guard let self, let c, self.conn === c else { return }
-            self.post(.closed)
+            self.post(.closed(Self.why(failure)))
         }
         c.start()
-        guard case .ready = await next() else { return lost() }
+        let first = await next()
+        guard case .ready = first else { return lost("connexion", first) }
 
         // E6: the PC says which items it lacks; the others are not even exported.
         var missing = ids
@@ -179,7 +180,7 @@ final class Dropper: ObservableObject {
             case let .msg(.dropMissing(m)): missing = m
             // The PC refused at once (already receiving…): its own words.
             case let .msg(.dropAck(false, reason, _)): return finish(.failed(reason))
-            default: return lost()
+            case let other: return lost("liste", other)
             }
         }
         already = ids.count - missing.count
@@ -215,7 +216,8 @@ final class Dropper: ObservableObject {
         c.send(.dropPlan(DropPlan(items: UInt32(plan.count), files: UInt32(fileCount), bytes: UInt64(bytes), already: UInt32(already),
                                   previews: thumbs, photos: UInt32(photos), videos: UInt32(videos), docs: UInt32(docs))))
         phase = .waitingPC
-        guard case let .msg(.dropAck(ok, reason, _)) = await next() else { return lost() }
+        let answer = await next()
+        guard case let .msg(.dropAck(ok, reason, _)) = answer else { return lost("accord", answer) }
         guard ok else { return finish(.failed(reason)) }
 
         phase = .sending
@@ -346,8 +348,8 @@ final class Dropper: ObservableObject {
                 guard ok else { return .stop(reason) }
             case .msg(.dropCancel):
                 return .stop("Envoi annulé sur le PC.")
-            default:
-                return .stop(Self.lostText)
+            case let other:
+                return .stop(Self.detail("fichier", other))
             }
             guard await stream(url, to: c) else {
                 return .stop(peerCancelled ? "Envoi annulé sur le PC." : Self.lostText)
@@ -362,8 +364,8 @@ final class Dropper: ObservableObject {
                 if attempt == 1 { return .skipped }
             case .msg(.dropCancel):
                 return .stop("Envoi annulé sur le PC.")
-            default:
-                return .stop(Self.lostText)
+            case let other:
+                return .stop(Self.detail("vérification", other))
             }
         }
         return .skipped
@@ -459,8 +461,29 @@ final class Dropper: ObservableObject {
         return await withCheckedContinuation { waiter = $0 }
     }
 
-    private func lost() {
-        finish(.failed(peerCancelled ? "Envoi annulé sur le PC." : Self.lostText))
+    /// « Liaison perdue », with the step and what happened, to find the cause.
+    private func lost(_ step: String, _ e: Event) {
+        finish(.failed(peerCancelled ? "Envoi annulé sur le PC." : Self.detail(step, e)))
+    }
+
+    private static func detail(_ step: String, _ e: Event) -> String {
+        let what: String
+        switch e {
+        case let .closed(why): what = why ?? "fermée"
+        case .ready: what = "prête"
+        case let .msg(m): what = String("message \(m)".prefix(60))
+        }
+        return "Liaison perdue (\(step) · \(what)) : relance l’envoi."
+    }
+
+    private static func why(_ f: PinnedConnection.Failure?) -> String? {
+        switch f {
+        case .none: return nil
+        case .wrongFingerprint: return "PC inconnu"
+        case .localNetworkDenied: return "réseau local refusé"
+        case let .network(s): return s
+        case .closed: return "fermée par le PC"
+        }
     }
 
     private func finish(_ p: Phase) {
@@ -480,7 +503,7 @@ final class Dropper: ObservableObject {
         scoped = []
         if let w = waiter {
             waiter = nil
-            w.resume(returning: .closed)
+            w.resume(returning: .closed(nil))
         }
     }
 
