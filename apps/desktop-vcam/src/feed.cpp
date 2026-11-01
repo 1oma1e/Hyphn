@@ -801,7 +801,7 @@ HRESULT Feed::DrawWait(const WaitState& st, bool videoExpected) {
     const float W = static_cast<float>(outW_), H = static_cast<float>(outH_);
     dc_->SetTarget(waitBitmap_.Get());
     dc_->BeginDraw();
-    dc_->SetTransform(mirrorWait_ ? D2D1::Matrix3x2F::Scale(-1.f, 1.f, D2D1::Point2F(W / 2, H / 2)) : D2D1::Matrix3x2F::Identity());
+    dc_->SetTransform(D2D1::Matrix3x2F::Identity());
     dc_->Clear(Rgba(0x05070A));
 
     auto glow = [&](float cx, float cy, float r, uint32_t rgb, float a) {

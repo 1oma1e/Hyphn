@@ -20,7 +20,7 @@ Evan, 2026-11-01 : en changeant d'app sur l'iPhone, la liaison se coupait et il 
 - Lien perdu en direct : si l'iPhone revient dans les 5 minutes, « Afficher » reprend tout seul ; après, Cam redémarre en pause ([[ADR-0018 Cam image seule et demarrage en pause]]).
 - App ouverte et PC introuvable : nouvel essai toutes les 5 s (plus de « pas d'essai en boucle »).
 - « Reconnecter » sur l'iPhone (Accueil, Réglages) et sur le PC (Accueil, Réglages) : le PC coupe la liaison et refait son annonce Bonjour, l'iPhone revient aussitôt.
-- La webcam Windows envoie l'écran d'attente **en miroir** (choix d'Evan) : lisible dans son aperçu Discord ; la fenêtre Hyphn et OBS le montrent à l'endroit. La vidéo, elle, suit le bouton miroir.
+- ~~La webcam Windows envoie l'écran d'attente **en miroir**~~ : retiré par [[ADR-0024 Ecran d'attente a l'endroit dans la webcam]] (les autres ne pouvaient pas le lire). La vidéo, elle, suit le bouton miroir.
 
 ## Conséquences
 - Specs [[Core - Reconnexion]] (E6, E7) et [[Cam - Webcam Windows et OBS]] mises à jour.

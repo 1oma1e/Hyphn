@@ -10,7 +10,7 @@ Mis à jour : 2026-11-01 (session « iPhone complet, webcam Windows, OBS »). R�
 - App PC `apps/desktop/` : TLS 1.3 épinglé, appairage, reconnexion, infos de l'iPhone, Cam en direct (WebSocket local + WebCodecs). Plus de simulation.
 - QR court `HYPHN:1/…` (29×29), connexion avec étapes et « Annuler » ([[Core - Appairage QR]]).
 - « Afficher » synchronisé PC ↔ iPhone (`CamState.by_user`), image clé à la demande (`KeyRequest`), débit adaptatif sur l'iPhone, vrais réglages caméra (exposition, mise au point, balance, lampe, stabilisation, miroir).
-- Webcam Windows « Hyphn » (DLL Media Foundation, `apps/desktop-vcam/`) : vue dans Discord ; s'installe toute seule (installateur `perMachine` ou app relancée en admin, `install.rs`). Écran d'attente animé, envoyé en miroir.
+- Webcam Windows « Hyphn » (DLL Media Foundation, `apps/desktop-vcam/`) : vue dans Discord ; s'installe toute seule (installateur `perMachine` ou app relancée en admin, `install.rs`). Écran d'attente animé, envoyé à l'endroit ([[ADR-0024 Ecran d'attente a l'endroit dans la webcam]]).
 - Liaison gardée quand on change d'app sur l'iPhone, essais toutes les 5 s, « Reconnecter » des deux côtés ([[ADR-0023 Connexion gardee et reconnexion facile]]).
 - Tests : `cargo test` dans `apps/desktop/src-tauri/` → 54 passent.
 
