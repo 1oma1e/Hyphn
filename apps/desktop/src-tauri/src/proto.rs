@@ -217,6 +217,8 @@ pub struct CamControl {
     pub stabilization: u32,
     #[prost(bool, tag = "15")]
     pub mirror: bool,
+    #[prost(uint32, tag = "16")]
+    pub turn: u32,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]

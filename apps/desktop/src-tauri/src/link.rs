@@ -60,6 +60,8 @@ pub struct CamWanted {
     pub lens: u32,
     /// Picture flipped left-right (Cam dock button); the waiting screen never is.
     pub mirror: bool,
+    /// Quarter turns clockwise (Cam dock button), 0..3.
+    pub turn: u32,
     pub tune: Tune,
 }
 
@@ -668,6 +670,7 @@ impl State {
             torch: self.cam.tune.torch,
             stabilization: self.cam.tune.stab.min(2),
             mirror: self.cam.mirror,
+            turn: self.cam.turn % 4,
         }
     }
 }
@@ -715,6 +718,7 @@ mod tests {
                 front: false,
                 lens: 1,
                 mirror: false,
+                turn: 0,
                 tune: Tune::default(),
             },
             Box::new(move |e| ev.lock().unwrap().push(e)),

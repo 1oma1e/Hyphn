@@ -18,7 +18,7 @@ Mis à jour : 2026-11-01 (session « iPhone complet, webcam Windows, OBS »). R�
 - Drop (prochaine session, [[ADR-0020 Phase 1 sans attendre le rafraichissement]]).
 - Mesures de la porte de phase 1 (iPhone visible en moins de 3 s après le scan) et de la phase 4 (latence notée, 30 min sans décrochage).
 - Notification Windows de batterie faible ; vérifications réseau E11 (seul « pas de réseau local ») ; lecture batterie par câble ([[ADR-0006 Sante batterie par cable]]).
-- Notes texte de `docs/maquettes/` à remettre à jour (V2, Cam sans effets, bouton miroir, Reconnecter).
+- Notes texte de `docs/maquettes/` à remettre à jour (V2, Cam sans effets, boutons miroir et tourner, Reconnecter).
 - `CLAUDE.md` (Commandes) ne cite pas `tools/build-native.ps1` : à ajouter par Evan.
 - Décider d'arrêter ou non le conteneur `hyphn-anisette` (inutilisé). VISION « 2 s » contre porte « < 3 s » : à trancher.
 

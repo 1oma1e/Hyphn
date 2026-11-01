@@ -52,6 +52,8 @@ struct CamControl: Equatable {
     var stabilization: UInt32 = 0
     /// Picture flipped left-right (never the waiting screen, drawn by the PC).
     var mirror = false
+    /// Quarter turns clockwise on top of the level picture, 0..3 (Cam dock on the PC).
+    var turn: UInt32 = 0
 }
 
 struct CamState {
@@ -343,6 +345,7 @@ extension Msg {
                     case 13: c.torch = v != 0
                     case 14: c.stabilization = UInt32(truncatingIfNeeded: v)
                     case 15: c.mirror = v != 0
+                    case 16: c.turn = UInt32(truncatingIfNeeded: v) % 4
                     default: break
                     }
                 }

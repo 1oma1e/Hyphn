@@ -91,7 +91,7 @@ final class Camera: NSObject, ObservableObject {
         let reconfigure = c.front != control.front || c.height != control.height || c.fps != control.fps
         let relens = c.lens != control.lens
         let retune = !Self.sameTune(c, control)
-        let remirror = c.mirror != control.mirror
+        let remirror = c.mirror != control.mirror || c.turn != control.turn
         control = c
         if remirror, let r = rotation { applyRotation(r.videoRotationAngleForHorizonLevelCapture) }
         if isOpen, !denied {
@@ -290,7 +290,9 @@ final class Camera: NSObject, ObservableObject {
         }
     }
 
-    private func applyRotation(_ angle: CGFloat) {
+    private func applyRotation(_ level: CGFloat) {
+        // « Tourner » on the PC adds quarter turns on top of the level picture.
+        let angle = (level + CGFloat(control.turn % 4) * 90).truncatingRemainder(dividingBy: 360)
         if let conn = output.connection(with: .video), conn.isVideoRotationAngleSupported(angle) {
             conn.videoRotationAngle = angle
             // Mirror only when asked (Cam dock on the PC): text reads the right way for the people watching.
