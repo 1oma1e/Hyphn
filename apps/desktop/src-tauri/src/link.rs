@@ -5,7 +5,7 @@
 //! - `Hello`: a paired iPhone comes back; it becomes the control session.
 //! - `VideoHello`: the camera stream, passed to the window as it comes.
 
-use std::net::IpAddr;
+use std::net::Ipv4Addr;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -236,7 +236,7 @@ impl Hub {
         self.state.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    pub fn issue_offer(&self, host: IpAddr, port: u16) -> PairOffer {
+    pub fn issue_offer(&self, host: Ipv4Addr, port: u16) -> PairOffer {
         self.lock().pairing.issue(host, port, self.identity.fingerprint, Instant::now())
     }
 
@@ -774,7 +774,7 @@ mod tests {
     }
 
     async fn pair(r: &Rig, phone: &Identity) -> Phone {
-        let offer = r.hub.issue_offer(IpAddr::V4(Ipv4Addr::LOCALHOST), r.addr.port());
+        let offer = r.hub.issue_offer(Ipv4Addr::LOCALHOST, r.addr.port());
         let mut io = connect(r.addr, phone, offer.pc_fingerprint).await.unwrap();
         send(&mut io, request(&offer)).await;
         assert!(matches!(recv(&mut io).await, Some(Msg::PairPending(p)) if p.pc_name == "PC-TEST"));
@@ -816,7 +816,7 @@ mod tests {
     async fn saying_no_on_the_iphone_keeps_nothing() {
         let r = rig().await;
         let phone = Identity::generate("phone").unwrap();
-        let offer = r.hub.issue_offer(IpAddr::V4(Ipv4Addr::LOCALHOST), r.addr.port());
+        let offer = r.hub.issue_offer(Ipv4Addr::LOCALHOST, r.addr.port());
         let mut io = connect(r.addr, &phone, offer.pc_fingerprint).await.unwrap();
         send(&mut io, request(&offer)).await;
         assert!(matches!(recv(&mut io).await, Some(Msg::PairPending(_))));
@@ -828,7 +828,7 @@ mod tests {
     #[tokio::test]
     async fn reused_token_is_refused_over_the_network() {
         let r = rig().await;
-        let offer = r.hub.issue_offer(IpAddr::V4(Ipv4Addr::LOCALHOST), r.addr.port());
+        let offer = r.hub.issue_offer(Ipv4Addr::LOCALHOST, r.addr.port());
         let a = Identity::generate("a").unwrap();
         let mut io = connect(r.addr, &a, offer.pc_fingerprint).await.unwrap();
         send(&mut io, request(&offer)).await;
@@ -843,7 +843,7 @@ mod tests {
     #[tokio::test]
     async fn unknown_token_is_refused() {
         let r = rig().await;
-        let mut offer = r.hub.issue_offer(IpAddr::V4(Ipv4Addr::LOCALHOST), r.addr.port());
+        let mut offer = r.hub.issue_offer(Ipv4Addr::LOCALHOST, r.addr.port());
         offer.token = [0; pairing::TOKEN_LEN];
         let phone = Identity::generate("phone").unwrap();
         let mut io = connect(r.addr, &phone, offer.pc_fingerprint).await.unwrap();

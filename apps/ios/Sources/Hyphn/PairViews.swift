@@ -124,14 +124,23 @@ struct ScanView: View {
     @State private var torch = false
     @State private var cameraDenied = AVCaptureDevice.authorizationStatus(for: .video) == .denied
 
+    /// The camera runs only while looking for the QR: once read, it stops and
+    /// the analysis takes the screen (ADR-0028).
+    private var looking: Bool { link.pairStep == .idle }
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if !cameraDenied {
+            if looking && !cameraDenied {
                 QRScanner(torch: torch, denied: $cameraDenied) { text in link.scanned(text) }
                     .ignoresSafeArea()
+                    .transition(.opacity)
+                Viewfinder().offset(y: Viewfinder.lift)
+                    .transition(.scale(scale: 0.5).combined(with: .opacity))
+            } else if !cameraDenied {
+                ScanProgress(step: link.pairStep).offset(y: Viewfinder.lift)
+                    .transition(.scale(scale: 1.4).combined(with: .opacity))
             }
-            Viewfinder().offset(y: -80)
 
             VStack {
                 HStack {
@@ -144,13 +153,15 @@ struct ScanView: View {
                             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
                     }
                     Spacer()
-                    Button { torch.toggle() } label: {
-                        Image(systemName: torch ? "flashlight.on.fill" : "flashlight.off.fill")
-                            .frame(width: 44, height: 44)
-                            .background(torch ? AnyShapeStyle(Ink.tx) : AnyShapeStyle(.ultraThinMaterial), in: RoundedRectangle(cornerRadius: 14))
-                            .foregroundStyle(torch ? Color.black : Ink.tx)
+                    if looking {
+                        Button { torch.toggle() } label: {
+                            Image(systemName: torch ? "flashlight.on.fill" : "flashlight.off.fill")
+                                .frame(width: 44, height: 44)
+                                .background(torch ? AnyShapeStyle(Ink.tx) : AnyShapeStyle(.ultraThinMaterial), in: RoundedRectangle(cornerRadius: 14))
+                                .foregroundStyle(torch ? Color.black : Ink.tx)
+                        }
+                        .accessibilityLabel("Lampe")
                     }
-                    .accessibilityLabel("Lampe")
                 }
                 .foregroundStyle(Ink.tx)
                 .padding(.horizontal, 16)
@@ -164,6 +175,7 @@ struct ScanView: View {
                     .animation(.spring(duration: 0.45), value: link.pairStep)
             }
         }
+        .animation(.spring(duration: 0.55), value: looking)
         .onAppear { link.primeLocalNetwork() }
         .onDisappear { link.stopPriming() }
     }
@@ -175,16 +187,16 @@ struct ScanView: View {
             switch link.pairStep {
             case .idle:
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Vise le QR code du PC").font(.geist(20, .semibold))
-                    Text("Sur le PC : Relier un iPhone.")
+                    Text("Vise le QR de ton PC").font(.geist(20, .semibold))
+                    Text("Tiens l’iPhone à une vingtaine de centimètres de l’écran.")
                         .font(.geist(14)).foregroundStyle(Ink.tx2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-            case let .connecting(host, secured):
+            case let .connecting(_, secured):
                 VStack(alignment: .leading, spacing: 12) {
                     PairStepRow(text: "QR lu", state: .done)
-                    PairStepRow(text: "Connexion au PC (\(host))", state: secured ? .done : .active)
-                    PairStepRow(text: "Code de vérification", state: secured ? .active : .todo)
+                    PairStepRow(text: "Je contacte ton PC", state: secured ? .done : .active)
+                    PairStepRow(text: "Je vérifie que c’est bien lui", state: secured ? .active : .todo)
                     Button("Annuler") { link.cancelPairing() }
                         .buttonStyle(GhostButtonStyle())
                         .padding(.top, 4)
@@ -195,18 +207,74 @@ struct ScanView: View {
             case .confirming:
                 HStack(spacing: 12) {
                     ProgressView().tint(Ink.li)
-                    Text("Liaison…").font(.geist(17, .semibold))
+                    Text("Je relie ton iPhone…").font(.geist(17, .semibold))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             case let .failed(message):
                 VStack(spacing: 14) {
-                    Problem(title: "Pas relié", text: message, settings: message.contains("Settings"))
-                    Button("Réessayer") { link.pairStep = .idle }.buttonStyle(GhostButtonStyle())
+                    Problem(title: "Ça n’a pas marché", text: message, settings: message.contains("Settings"))
+                    Button("Scanner à nouveau") { link.pairStep = .idle }.buttonStyle(GhostButtonStyle())
                 }
             case .linked:
                 EmptyView()
             }
         }
+    }
+}
+
+/// After the read, camera off (ADR-0028): a glowing disc where the QR was,
+/// its icon following the steps, and rings going out while the PC answers.
+struct ScanProgress: View {
+    let step: PCLink.PairStep
+    @State private var pulse = false
+
+    private var icon: String {
+        switch step {
+        case .connecting(_, false): "wifi"
+        case .connecting(_, true): "checkmark.shield"
+        case .code, .confirming, .linked: "lock.fill"
+        case .failed: "exclamationmark"
+        case .idle: "qrcode"
+        }
+    }
+
+    private var color: Color {
+        if case .failed = step { return Ink.am }
+        return Ink.li
+    }
+
+    private var waiting: Bool {
+        switch step {
+        case .connecting, .confirming: true
+        default: false
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            if waiting {
+                ForEach(0..<3, id: \.self) { i in
+                    Circle().stroke(color.opacity(0.55), lineWidth: 1.5)
+                        .frame(width: 130, height: 130)
+                        .scaleEffect(pulse ? 2.3 : 1)
+                        .opacity(pulse ? 0 : 0.9)
+                        .animation(.easeOut(duration: 2.4).repeatForever(autoreverses: false).delay(Double(i) * 0.8), value: pulse)
+                }
+            }
+            Circle().fill(color.opacity(0.12))
+                .overlay(Circle().stroke(color.opacity(0.6), lineWidth: 1.5))
+                .frame(width: 130, height: 130)
+                .shadow(color: color.opacity(0.45), radius: 26)
+            Image(systemName: icon)
+                .font(.system(size: 46, weight: .light))
+                .foregroundStyle(color)
+                .contentTransition(.symbolEffect(.replace))
+                .animation(.spring(duration: 0.4), value: icon)
+        }
+        .frame(width: 230, height: 230)
+        .onAppear { pulse = true }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -299,6 +367,9 @@ struct Problem: View {
 }
 
 struct Viewfinder: View {
+    /// Above the middle of the screen, clear of the panel; the scanner reads
+    /// around this spot only.
+    static let lift: CGFloat = -80
     @State private var sweep = false
     @State private var breathe = false
 
@@ -351,6 +422,8 @@ struct QRScanner: UIViewRepresentable {
         let c = context.coordinator
         v.previewLayer.session = c.session
         v.previewLayer.videoGravity = .resizeAspectFill
+        c.preview = v.previewLayer
+        v.onLayout = { [weak c] in c?.readAroundViewfinder() }
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized: c.start()
         case .notDetermined:
@@ -374,37 +447,70 @@ struct QRScanner: UIViewRepresentable {
     final class Coordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {
         let session = AVCaptureSession()
         var onCode: (String) -> Void
+        weak var preview: AVCaptureVideoPreviewLayer?
+        private let out = AVCaptureMetadataOutput()
         private let queue = DispatchQueue(label: "hyphn.qr")
         private var last = ""
+        /// Smallest QR expected: the one on a small laptop screen, in mm.
+        private static let smallestQR: Float = 50
 
         init(onCode: @escaping (String) -> Void) {
             self.onCode = onCode
         }
 
         func start() {
-            // A multi-camera device switches to the ultra wide (macro) by itself
-            // when the iPhone is close to the screen; older iPhones use the wide one.
+            // A multi-camera device can still switch to the ultra wide (macro)
+            // by itself when the iPhone is very close; older iPhones use the wide one.
             let types: [AVCaptureDevice.DeviceType] = [.builtInTripleCamera, .builtInDualWideCamera, .builtInWideAngleCamera]
             guard let dev = types.lazy.compactMap({ AVCaptureDevice.default($0, for: .video, position: .back) }).first,
                   let input = try? AVCaptureDeviceInput(device: dev) else { return }
-            if (try? dev.lockForConfiguration()) != nil {
-                if dev.isFocusModeSupported(.continuousAutoFocus) { dev.focusMode = .continuousAutoFocus }
-                // The QR is a screen a few tens of centimetres away.
-                if dev.isAutoFocusRangeRestrictionSupported { dev.autoFocusRangeRestriction = .near }
-                dev.unlockForConfiguration()
-            }
             session.beginConfiguration()
             if session.canSetSessionPreset(.hd1920x1080) { session.sessionPreset = .hd1920x1080 }
             if session.canAddInput(input) { session.addInput(input) }
-            let out = AVCaptureMetadataOutput()
             if session.canAddOutput(out) {
                 session.addOutput(out)
                 out.setMetadataObjectsDelegate(self, queue: .main)
                 out.metadataObjectTypes = [.qr]
             }
             session.commitConfiguration()
+            if (try? dev.lockForConfiguration()) != nil {
+                if dev.isFocusModeSupported(.continuousAutoFocus) { dev.focusMode = .continuousAutoFocus }
+                // The QR is a screen a few tens of centimetres away.
+                if dev.isAutoFocusRangeRestrictionSupported { dev.autoFocusRangeRestriction = .near }
+                dev.videoZoomFactor = max(dev.minAvailableVideoZoomFactor, min(dev.maxAvailableVideoZoomFactor, Self.zoom(for: dev)))
+                dev.unlockForConfiguration()
+            }
             let s = session
-            queue.async { s.startRunning() }
+            queue.async { [weak self] in
+                s.startRunning()
+                DispatchQueue.main.async { self?.readAroundViewfinder() }
+            }
+        }
+
+        /// AVCamBarcode (WWDC21 « What's new in camera capture »): look through
+        /// the wide lens, not the ultra wide of a virtual device at 1×, and zoom
+        /// enough that a QR filling the viewfinder sits beyond the lens's
+        /// minimum focus distance: sharp at once, no wait for the macro switch.
+        static func zoom(for dev: AVCaptureDevice) -> CGFloat {
+            let wide = dev.constituentDevices.first { $0.deviceType == .builtInWideAngleCamera } ?? dev
+            let hasUltraWide = dev.constituentDevices.contains { $0.deviceType == .builtInUltraWideCamera }
+            let base = hasUltraWide ? (dev.virtualDeviceSwitchOverVideoZoomFactors.first.map { CGFloat(truncating: $0) } ?? 1) : 1
+            let minFocus = Float(wide.minimumFocusDistance) // mm, -1 when unknown
+            guard minFocus > 0 else { return base }
+            let dims = CMVideoFormatDescriptionGetDimensions(wide.activeFormat.formatDescription)
+            // The viewfinder covers about half of the picture's short side.
+            let fill = Float(dims.height) / Float(max(dims.width, 1)) * 0.5
+            let halfFov = wide.activeFormat.videoFieldOfView / 2 * .pi / 180
+            let distance = (smallestQR / fill) / tan(halfFov)
+            return base * CGFloat(min(3, max(1, minFocus / distance)))
+        }
+
+        /// Reads around the viewfinder only (with a margin): less to look at, faster.
+        func readAroundViewfinder() {
+            guard let layer = preview, session.isRunning, layer.bounds.width > 0 else { return }
+            let side: CGFloat = 320
+            let r = CGRect(x: layer.bounds.midX - side / 2, y: layer.bounds.midY + Viewfinder.lift - side / 2, width: side, height: side)
+            out.rectOfInterest = layer.metadataOutputRectConverted(fromLayerRect: r)
         }
 
         func stop() {
@@ -434,6 +540,12 @@ struct QRScanner: UIViewRepresentable {
 final class PreviewView: UIView {
     override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
     var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
+    var onLayout: (() -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onLayout?()
+    }
 }
 
 // MARK: - « Liés »

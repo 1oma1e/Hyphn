@@ -55,8 +55,8 @@ final class PinnedConnection {
         let queue = DispatchQueue(label: "hyphn.net")
         sec_protocol_options_set_verify_block(sec, { _, trust, complete in
             let leaf = PinnedConnection.leafFingerprint(trust)
-            // `pinned` is the QR half (16 bytes) or the full fingerprint kept after pairing.
-            let ok = pinned.count >= 16 && leaf.map { $0.prefix(pinned.count) == pinned } == true
+            // `pinned` is the QR start (12 bytes, ADR-0028) or the full fingerprint kept after pairing.
+            let ok = pinned.count >= 12 && leaf.map { $0.prefix(pinned.count) == pinned } == true
             if ok { pin.peer = leaf } else { pin.failed = true }
             complete(ok)
         }, queue)

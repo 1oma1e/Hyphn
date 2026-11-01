@@ -243,7 +243,7 @@ fn pair_offer(h: State<'_, Hyphn>) -> OfferView {
     let port = h.lock().port;
     let uri = h.hub.issue_offer(ip, port).to_uri();
     // Low correction is enough on a screen (nothing scratches it) and keeps
-    // the code at 29x29: big squares, read at once by the iPhone.
+    // the code at 25x25 (ADR-0028): big squares, read at once by the iPhone.
     let svg = qrcode::QrCode::with_error_correction_level(uri.as_bytes(), qrcode::EcLevel::L).ok().map(|code| {
         code.render::<qrcode::render::svg::Color>()
             .quiet_zone(false)
@@ -350,7 +350,7 @@ fn reconnect(h: State<'_, Hyphn>) {
     if let Some(old) = inner.mdns.take() {
         let _ = old.shutdown();
     }
-    inner.mdns = net::local_ip().and_then(|ip| net::advertise(ip, inner.port, &short_id));
+    inner.mdns = net::local_ip().and_then(|ip| net::advertise(ip.into(), inner.port, &short_id));
 }
 
 /// « Afficher la caméra » / « Pause » on the PC.
@@ -620,7 +620,7 @@ pub fn run() {
                 saved_cam(&settings),
                 Box::new(move |e| on_event(&handle, e)),
             )?;
-            let mdns = net::local_ip().and_then(|ip| net::advertise(ip, port, &short_id));
+            let mdns = net::local_ip().and_then(|ip| net::advertise(ip.into(), port, &short_id));
             let video_url = tauri::async_runtime::block_on(video::start(hub.clone()))?;
             let native = vcam::native_dir(app.path().resource_dir().ok()).filter(|d| vcam::native_is_genuine(d));
             let (vcam_tx, vcam_rx) = tokio::sync::watch::channel(vcam::VcamState::default());

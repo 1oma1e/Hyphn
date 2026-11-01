@@ -183,7 +183,7 @@ struct PairedPC: Codable, Equatable {
 struct PairOffer {
     let host: String
     let port: UInt16
-    /// First 16 bytes of the PC certificate SHA-256.
+    /// First 12 bytes of the PC certificate SHA-256 (ADR-0028).
     let fingerprintPrefix: Data
     let token: Data
 
@@ -199,17 +199,19 @@ struct PairOffer {
         }
     }
 
+    /// `HY1` + base32 of IPv4 (4), port (2), fingerprint start (12), token (6):
+    /// a 25x25 QR (same as `to_uri` on the PC, ADR-0028).
     static func parse(_ text: String) throws -> PairOffer {
         let text = text.uppercased()
-        let prefix = "HYPHN:"
-        guard text.hasPrefix(prefix) else { throw Problem.notHyphn }
-        let parts = text.dropFirst(prefix.count).split(separator: "/", omittingEmptySubsequences: false).map(String.init)
-        guard let v = parts.first, UInt32(v) != nil else { throw Problem.malformed }
-        guard v == String(protocolVersion) else { throw Problem.wrongVersion }
-        guard parts.count == 5, let p = UInt16(parts[2]),
-              let fp = base32(parts[3]), fp.count == 16,
-              let t = base32(parts[4]), t.count == 8 else { throw Problem.malformed }
-        return PairOffer(host: parts[1].lowercased(), port: p, fingerprintPrefix: fp, token: t)
+        // The QR of before ADR-0028.
+        if text.hasPrefix("HYPHN:") { throw Problem.wrongVersion }
+        guard text.hasPrefix("HY"), let v = text.dropFirst(2).first, v.isNumber else { throw Problem.notHyphn }
+        guard String(v) == String(protocolVersion) else { throw Problem.wrongVersion }
+        guard let b = base32(String(text.dropFirst(3))), b.count == 24 else { throw Problem.malformed }
+        let bytes = [UInt8](b)
+        let host = bytes[0..<4].map(String.init).joined(separator: ".")
+        let port = UInt16(bytes[4]) << 8 | UInt16(bytes[5])
+        return PairOffer(host: host, port: port, fingerprintPrefix: Data(bytes[6..<18]), token: Data(bytes[18..<24]))
     }
 
     /// RFC 4648 base32 without padding (same as `base32` on the PC).

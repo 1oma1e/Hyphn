@@ -2,7 +2,7 @@
 //! (E3), checks on `PairRequest` (E5) and the 4-digit code (E6). The TLS tunnel
 //! (E4) and the messages are in `link`.
 
-use std::net::IpAddr;
+use std::net::Ipv4Addr;
 use std::time::{Duration, Instant};
 
 use rand::RngCore;
@@ -13,14 +13,21 @@ use crate::identity::fingerprint_of;
 use crate::identity::Fingerprint;
 
 pub const PROTOCOL_VERSION: u32 = 1;
-/// Uppercase only, so the whole QR fits the compact alphanumeric mode.
-pub const URI_PREFIX: &str = "HYPHN:";
+/// Uppercase only, so the whole QR fits the compact alphanumeric mode. The
+/// digit after it is the protocol version.
+pub const URI_PREFIX: &str = "HY";
+/// The QR of before ADR-0028: refused with « mets à jour ».
+#[cfg(test)]
+const OLD_PREFIX: &str = "HYPHN:";
 pub const TOKEN_TTL: Duration = Duration::from_secs(120);
-/// The QR carries the first half of the PC fingerprint (128 bits, still
-/// impossible to forge); the iPhone keeps the full one after the handshake.
-pub const QR_FINGERPRINT_LEN: usize = 16;
-pub const TOKEN_LEN: usize = 8;
+/// The QR carries the start of the PC fingerprint (96 bits, still impossible
+/// to forge, ADR-0028); the iPhone keeps the full one after the handshake.
+pub const QR_FINGERPRINT_LEN: usize = 12;
+/// 48 bits, single use, 2 minutes, each guess a TLS connection to the PC.
+pub const TOKEN_LEN: usize = 6;
 pub type Token = [u8; TOKEN_LEN];
+/// IPv4 (4) + port (2) + fingerprint start + token, in one base32 block.
+const QR_BYTES: usize = 6 + QR_FINGERPRINT_LEN + TOKEN_LEN;
 
 /// The QR-reading variants are produced by the iPhone; the PC keeps them for its tests.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -46,7 +53,7 @@ pub enum PairError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PairOffer {
     pub version: u32,
-    pub host: IpAddr,
+    pub host: Ipv4Addr,
     pub port: u16,
     pub pc_fingerprint: Fingerprint,
     pub token: Token,
@@ -56,24 +63,22 @@ pub struct PairOffer {
 #[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScannedQr {
-    pub host: IpAddr,
+    pub host: Ipv4Addr,
     pub port: u16,
     pub fingerprint_prefix: [u8; QR_FINGERPRINT_LEN],
     pub token: Token,
 }
 
 impl PairOffer {
-    /// `HYPHN:1/192.168.1.20/47800/<fingerprint half>/<token>`, base32 (E2).
+    /// `HY1` + base32 of IPv4, port, fingerprint start and token (E2,
+    /// ADR-0028): 42 characters, a 25x25 QR.
     pub fn to_uri(&self) -> String {
-        format!(
-            "{URI_PREFIX}{}/{}/{}/{}/{}",
-            self.version,
-            self.host,
-            self.port,
-            base32(&self.pc_fingerprint[..QR_FINGERPRINT_LEN]),
-            base32(&self.token)
-        )
-        .to_uppercase()
+        let mut b = Vec::with_capacity(QR_BYTES);
+        b.extend_from_slice(&self.host.octets());
+        b.extend_from_slice(&self.port.to_be_bytes());
+        b.extend_from_slice(&self.pc_fingerprint[..QR_FINGERPRINT_LEN]);
+        b.extend_from_slice(&self.token);
+        format!("{URI_PREFIX}{}{}", self.version, base32(&b))
     }
 
     /// Parsing done by the iPhone after the scan, kept here to test the format
@@ -81,18 +86,21 @@ impl PairOffer {
     #[cfg(test)]
     pub fn parse(uri: &str) -> Result<ScannedQr, PairError> {
         let uri = uri.to_uppercase();
+        if uri.starts_with(OLD_PREFIX) {
+            return Err(PairError::WrongVersion);
+        }
         let rest = uri.strip_prefix(URI_PREFIX).ok_or(PairError::NotHyphn)?;
-        let parts: Vec<&str> = rest.split('/').collect();
-        let version = parts.first().and_then(|v| v.parse::<u32>().ok()).ok_or(PairError::Malformed)?;
+        let version = rest.get(..1).and_then(|v| v.parse::<u32>().ok()).ok_or(PairError::NotHyphn)?;
         if version != PROTOCOL_VERSION {
             return Err(PairError::WrongVersion);
         }
-        let [_, h, p, fp, t] = parts.as_slice() else { return Err(PairError::Malformed) };
+        let b = unbase32(&rest[1..]).filter(|b| b.len() == QR_BYTES).ok_or(PairError::Malformed)?;
+        let fp_end = 6 + QR_FINGERPRINT_LEN;
         Ok(ScannedQr {
-            host: h.parse().map_err(|_| PairError::Malformed)?,
-            port: p.parse().map_err(|_| PairError::Malformed)?,
-            fingerprint_prefix: unbase32(fp).and_then(|b| b.try_into().ok()).ok_or(PairError::Malformed)?,
-            token: unbase32(t).and_then(|b| b.try_into().ok()).ok_or(PairError::Malformed)?,
+            host: Ipv4Addr::new(b[0], b[1], b[2], b[3]),
+            port: u16::from_be_bytes([b[4], b[5]]),
+            fingerprint_prefix: b[6..fp_end].try_into().unwrap(),
+            token: b[fp_end..].try_into().unwrap(),
         })
     }
 }
@@ -168,7 +176,7 @@ pub struct PairingSession {
 
 impl PairingSession {
     /// Creates a new QR offer and cancels the previous token (E3, « Nouveau QR »).
-    pub fn issue(&mut self, host: IpAddr, port: u16, pc_fingerprint: Fingerprint, now: Instant) -> PairOffer {
+    pub fn issue(&mut self, host: Ipv4Addr, port: u16, pc_fingerprint: Fingerprint, now: Instant) -> PairOffer {
         let mut token = [0u8; TOKEN_LEN];
         rand::rngs::OsRng.fill_bytes(&mut token);
         self.token = Some(ActiveToken { value: token, issued: now, used: false });
@@ -261,7 +269,7 @@ mod tests {
         let phone = Identity::generate("phone").unwrap();
         let now = Instant::now();
         let mut s = PairingSession::default();
-        let offer = s.issue(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 20)), 47800, pc.fingerprint, now);
+        let offer = s.issue(Ipv4Addr::new(192, 168, 1, 20), 47800, pc.fingerprint, now);
         (s, offer, pc, phone, now)
     }
 
@@ -279,10 +287,10 @@ mod tests {
     fn uri_round_trip() {
         let (_, offer, ..) = setup();
         let uri = offer.to_uri();
-        assert!(uri.starts_with("HYPHN:1/192.168.1.20/47800/"));
-        // Small enough for a 29x29 QR (version 3, low correction, alphanumeric).
-        assert!(uri.len() <= 77, "{} chars: {uri}", uri.len());
-        assert!(uri.bytes().all(|c| b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:".contains(&c)));
+        assert!(uri.starts_with("HY1"));
+        // Small enough for a 25x25 QR (version 2, low correction, alphanumeric).
+        assert_eq!(uri.len(), 42, "{uri}");
+        assert!(uri.bytes().all(|c| b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ".contains(&c)));
         let q = PairOffer::parse(&uri).unwrap();
         assert_eq!((q.host, q.port, q.token), (offer.host, offer.port, offer.token));
         assert_eq!(q.fingerprint_prefix[..], offer.pc_fingerprint[..QR_FINGERPRINT_LEN]);
@@ -290,25 +298,28 @@ mod tests {
     }
 
     #[test]
-    fn qr_is_29_by_29_even_with_the_longest_ipv4() {
+    fn qr_is_25_by_25_for_any_address() {
         let pc = Identity::generate("pc").unwrap();
         let mut s = PairingSession::default();
-        let offer = s.issue(IpAddr::V4(Ipv4Addr::new(192, 168, 255, 255)), 65535, pc.fingerprint, Instant::now());
+        let offer = s.issue(Ipv4Addr::new(192, 168, 255, 255), 65535, pc.fingerprint, Instant::now());
         let code = qrcode::QrCode::with_error_correction_level(offer.to_uri().as_bytes(), qrcode::EcLevel::L).unwrap();
-        assert_eq!(code.width(), 29);
+        assert_eq!(code.width(), 25);
     }
 
     #[test]
     fn foreign_qr_is_refused() {
         assert_eq!(PairOffer::parse("https://example.com"), Err(PairError::NotHyphn));
-        assert_eq!(PairOffer::parse("HYPHN:1/nope"), Err(PairError::Malformed));
+        assert_eq!(PairOffer::parse("HYDRA"), Err(PairError::NotHyphn));
+        assert_eq!(PairOffer::parse("HY1NOPE"), Err(PairError::Malformed));
     }
 
     #[test]
     fn wrong_version_is_refused() {
         let (mut s, offer, pc, phone, now) = setup();
-        let uri = offer.to_uri().replace("HYPHN:1/", "HYPHN:2/");
+        let uri = offer.to_uri().replacen("HY1", "HY2", 1);
         assert_eq!(PairOffer::parse(&uri), Err(PairError::WrongVersion));
+        // A QR from before ADR-0028.
+        assert_eq!(PairOffer::parse("HYPHN:1/192.168.1.20/47800/A/B"), Err(PairError::WrongVersion));
         let mut req = request(offer.token);
         req.protocol_version = 2;
         assert_eq!(

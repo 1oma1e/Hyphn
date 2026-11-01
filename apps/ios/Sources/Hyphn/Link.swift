@@ -442,11 +442,11 @@ final class PCLink: ObservableObject {
 
     static func text(for failure: PinnedConnection.Failure?, pairing: Bool) -> String {
         switch failure {
-        case .wrongFingerprint: return "PC introuvable ou faux QR."
+        case .wrongFingerprint: return "Ce QR ne vient pas de ce PC. Scanne celui affiché par Hyphn sur ton PC."
         case .localNetworkDenied: return "Autorise le réseau local dans Settings › Hyphn › Local Network, sinon le PC reste invisible."
         case .network, .none, .closed:
             return pairing
-                ? "PC trouvé mais injoignable. Vérifie que les deux sont sur le même Wi-Fi."
+                ? "Je n’arrive pas à joindre ton PC. Vérifie que l’iPhone et le PC sont sur le même Wi-Fi."
                 : "Connexion perdue."
         }
     }

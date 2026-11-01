@@ -7,10 +7,11 @@ use std::net::{IpAddr, Ipv4Addr, TcpListener};
 /// Fixed port first (spec `Core - Reconnexion`, E8).
 pub const DEFAULT_PORT: u16 = 47800;
 
-/// IPv4 address of the adapter that carries the default route.
-pub fn local_ip() -> Option<IpAddr> {
+/// IPv4 address of the adapter that carries the default route (the QR holds
+/// IPv4 only).
+pub fn local_ip() -> Option<Ipv4Addr> {
     match local_ip_address::local_ip() {
-        Ok(ip @ IpAddr::V4(v4)) if is_lan(v4) => Some(ip),
+        Ok(IpAddr::V4(v4)) if is_lan(v4) => Some(v4),
         _ => None,
     }
 }
