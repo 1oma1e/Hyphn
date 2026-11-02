@@ -38,5 +38,6 @@ Une décision par fichier, numérotée. Modèle : `_modele.md`. Statuts : `propo
 | [[ADR-0032 Profils de puissance au lieu de la protection batterie]] | Profils Max (par défaut), Équilibré, Économie, Personnalisé ; les protections batterie deviennent des réglages, sauf « critique » | propose |
 | [[ADR-0033 Traduction locale du message d'attente]] | Message d'attente traduit sur le PC sans cloud (Bergamot), phrases prêtes traduites à la main | propose |
 | [[ADR-0034 Ou appliquer les filtres de la Cam]] | Filtres v1 sur l'iPhone avant l'encodage (Core Image, Vision), revu pour les effets visage | propose |
+| [[ADR-0035 Webcam sans forcer le H.264]] | H.264 plafonné à 1080p pendant un appel (D), puis l'app décode pour la webcam : HEVC partout (A) | accepte |
 
 Liens : [[00-Accueil]]

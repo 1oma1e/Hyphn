@@ -7,6 +7,129 @@ const { listen } = window.__TAURI__.event;
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// Info bubbles (RULES, PC): every setting, icon button and number explains
+// itself. A new setting comes with its text here.
+const TIPS = {
+  // Cam › Réglages
+  profile: 'Règle d’un coup la résolution et les images par seconde. Appel : 1080p30, net et léger pour Discord ou Teams. Stream : 4K60 pour OBS. Cours : 720p30, le plus sobre.',
+  res: 'Taille de l’image envoyée par l’iPhone. Plus grand = plus net, mais plus de débit, de chaleur et de retard (mesuré : ~80 ms en 720p30, ~130 ms en 4K60, par câble). Discord et Teams n’affichent pas plus que du 1080p.',
+  fps: 'Images par seconde. 60 rend les gestes fluides ; 30 suffit pour un appel et chauffe moins. 24 et 25 donnent un rendu cinéma. 120 seulement en 1080p ou moins.',
+  codec: 'Façon de compresser l’image. HEVC : deux fois plus léger que le H.264 à qualité égale, et le plus rapide (conseillé). H.264 : pour un PC sans décodeur HEVC. Quand une app ouvre la webcam Hyphn, tout passe en H.264 limité à 1080p, en attendant mieux.',
+  rate: 'Données envoyées par seconde. Auto choisit selon la résolution, et donne 1,5× plus par câble. Plus haut = image plus fine, mais trop haut pour le Wi-Fi donne des saccades (80 Mb/s en Wi-Fi en donnait).',
+  autoq: 'Si l’iPhone chauffe, Hyphn passe à 30 images/s et baisse le débit de 30 %, puis à 1080p30 s’il devient très chaud. Coupé : la qualité reste, mais iOS peut couper la caméra en surchauffe.',
+  ev: 'Rend l’image plus claire (+) ou plus sombre (−). +1 EV double la lumière. Utile à contre-jour, devant une fenêtre.',
+  afA: 'L’iPhone fait la netteté tout seul sur ce qui est devant lui. Coupe-le pour bloquer la netteté à une distance, par exemple pour montrer un objet sans que l’image « pompe ».',
+  focus: 'Distance de netteté quand la mise au point auto est coupée : 0 % = tout près, 100 % = au loin.',
+  wbA: 'L’iPhone règle les couleurs selon la lumière de la pièce. Coupe-le pour garder les mêmes couleurs tout le temps.',
+  wb: 'Couleur de la lumière à corriger, en kelvins. 2500 K pour une lampe jaune (l’image est refroidie), 5600 K pour la lumière du jour, 8000 K pour une lumière très bleue.',
+  stab: 'Réduit les tremblements si l’iPhone est tenu en main. Off : aucun retard ajouté, le mieux sur un pied. Standard : léger. Cinéma : très stable, mais recadre l’image et ajoute du retard.',
+  torch: 'Allume la lampe de l’iPhone (caméra arrière seulement). Elle chauffe et use la batterie.',
+  msg: 'Texte que Discord et OBS voient quand la caméra est en pause. 60 caractères au plus.',
+  multi: 'Le message défile dans 18 langues. Seulement avec le message de départ.',
+  wst: 'Fond de l’écran d’attente. Animé : néon qui bouge. Minimal : fond calme.',
+  // Cam › barre du bas
+  pause: 'Envoie l’image ou la met en pause. En pause, Discord voit l’écran d’attente et l’iPhone n’encode rien : il chauffe moins.',
+  lens: 'Objectif arrière : 0,5× ultra grand-angle, 1× principal (le plus net quand il fait sombre), 2× et 5× zoom.',
+  mirror: 'Retourne l’image comme dans un miroir, dans la fenêtre et pour Discord. L’écran d’attente reste lisible.',
+  turn: 'Tourne l’image de 90° à chaque clic, si l’iPhone est posé de travers.',
+  flipcam: 'Passe de la caméra arrière (la meilleure) à la caméra avant, et inversement.',
+  peek: 'Montre ou cache l’aperçu sur le PC pendant la pause. Discord ne le voit jamais.',
+  info: 'Infos du flux : débit, images par seconde et temps de chaque étape.',
+  set: 'Réglages de la caméra : qualité, image, écran d’attente.',
+  // Cam › en-tête de l’image
+  hudq: 'Qualité envoyée en ce moment par l’iPhone.',
+  hudused: 'Une app (Discord, OBS…) affiche la webcam Hyphn. Elle impose le H.264, limité à 1080p.',
+  battery: 'Batterie de l’iPhone. L’éclair : il est en charge.',
+  heat: 'Chaleur de l’iPhone selon iOS : Normale, Tiède, Chaude, Critique. Chaude ou plus : Hyphn baisse la qualité si « Baisser la qualité » est actif.',
+  ping: 'Aller-retour d’un message vers l’iPhone, par câble ou Wi-Fi. Ce n’est pas le retard de l’image (voir Infos du flux, Total).',
+  // Cam › Infos du flux
+  i_sent: 'Taille et images par seconde que l’iPhone envoie vraiment. Peut être plus bas que demandé si l’iPhone chauffe ou si la webcam impose le H.264.',
+  i_rate: 'Données reçues pendant la dernière seconde, en mégabits par seconde.',
+  i_fps: 'Images reçues pendant la dernière seconde. Moins que demandé : l’iPhone ou le lien ne suit pas.',
+  i_ping: 'Aller-retour d’un message vers l’iPhone. Mesure le lien seulement, pas le retard de l’image.',
+  i_drop: 'Images jetées parce qu’un lecteur (fenêtre, webcam) était en retard. Après un saut, il attend une image complète.',
+  i_phone: 'Batterie et chaleur de l’iPhone.',
+  i_keys: 'Images complètes reçues en une minute. Elles sont grosses : beaucoup = plus de débit et parfois une saccade. Normal : environ 15, plus celles demandées après un saut.',
+  i_queue: 'Données encore en attente dans l’iPhone, en ms au débit actuel. Plus de 0 : le lien ne suit pas, baisse le débit.',
+  i_enc: 'Sur l’iPhone : de la prise de vue à l’image compressée. Plus haut en 4K et en H.264.',
+  i_link: 'De la sortie de l’encodeur à l’arrivée sur le PC : attente dans l’iPhone, puis câble ou Wi-Fi.',
+  i_dec: 'Sur le PC : de l’arrivée à l’image décompressée par la carte graphique.',
+  i_draw: 'Sur le PC : attente du prochain rafraîchissement de l’écran avant de dessiner l’image.',
+  i_total: 'Somme des étapes : à peu près le retard entre la vraie scène et l’image sur le PC. Il manque quelques ms (capteur, écran).',
+  // Réglages du PC
+  launch_at_startup: 'Hyphn démarre avec Windows, discret près de l’horloge, et l’iPhone se reconnecte tout seul.',
+  close_to_tray: 'Fermer la fenêtre garde Hyphn près de l’horloge : la webcam et la liaison continuent. Coupé : fermer quitte Hyphn.',
+  theme: 'Couleurs de l’app. « Comme Windows » suit le mode clair ou sombre de Windows.',
+  low_battery_alert: 'Affiche une alerte dans Hyphn quand l’iPhone passe sous 15 % sans être en charge.',
+  photos_dir: 'Dossier où Drop range les photos et fichiers reçus.',
+  sort: 'Comment Drop range : Année / Mois = un dossier 2026\\11, Année = 2026, Tout ensemble = un seul dossier.',
+  reconnect: 'Coupe et refait la liaison avec l’iPhone, si quelque chose bloque.',
+  forget: 'Supprime la liaison avec cet iPhone : il faudra rescanner un QR code.',
+  vcam: 'La caméra « Hyphn » que voient Discord, Teams, OBS… Installée une fois, avec l’accord administrateur.',
+  obs: 'Source « Hyphn » dans OBS : l’image arrive sans passer par la webcam Windows.',
+};
+
+/// A small « i » that shows its bubble on hover, focus or click.
+const tip = (k) => (TIPS[k] ? `<span class="tip" tabindex="0" role="img" aria-label="${esc(TIPS[k])}" data-tip="${k}">i</span>` : '');
+/// The bubble on the element itself (icon buttons, chips).
+const tipAttr = (k) => (TIPS[k] ? ` data-tip="${k}"` : '');
+
+// One bubble for the whole app, placed above (or below) its element and
+// kept inside the window.
+const Bubble = {
+  el: null,
+  at: null,
+  show(target) {
+    const text = TIPS[target.dataset.tip];
+    if (!text) return;
+    if (!this.el) {
+      this.el = document.createElement('div');
+      this.el.className = 'bubble';
+      this.el.setAttribute('role', 'tooltip');
+      document.body.appendChild(this.el);
+    }
+    this.at = target;
+    this.el.textContent = text;
+    this.el.classList.remove('on', 'below');
+    const r = target.getBoundingClientRect();
+    const b = this.el.getBoundingClientRect();
+    const pad = 10;
+    let top = r.top - b.height - 10;
+    const below = top < pad;
+    if (below) top = r.bottom + 10;
+    const left = Math.min(Math.max(pad, r.left + r.width / 2 - b.width / 2), window.innerWidth - b.width - pad);
+    this.el.style.left = left + 'px';
+    this.el.style.top = top + 'px';
+    this.el.style.setProperty('--ax', Math.min(Math.max(14, r.left + r.width / 2 - left), b.width - 14) + 'px');
+    this.el.classList.toggle('below', below);
+    requestAnimationFrame(() => this.el && this.el.classList.add('on'));
+  },
+  hide() {
+    this.at = null;
+    if (this.el) this.el.classList.remove('on');
+  },
+};
+document.addEventListener('pointerover', (e) => {
+  const t = e.target.closest('[data-tip]');
+  if (t && t !== Bubble.at) Bubble.show(t);
+  else if (!t && Bubble.at) Bubble.hide();
+});
+document.addEventListener('focusin', (e) => {
+  const t = e.target.closest('[data-tip]');
+  if (t) Bubble.show(t);
+});
+document.addEventListener('focusout', () => Bubble.hide());
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') Bubble.hide(); });
+document.addEventListener('scroll', () => Bubble.hide(), true);
+// Clicking an « i » only shows its bubble: it never toggles the setting it sits in.
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('.tip');
+  if (!t) return;
+  e.preventDefault();
+  e.stopPropagation();
+  Bubble.show(t);
+}, true);
 const view = $('#view');
 const layer = $('#layer');
 
@@ -823,15 +946,15 @@ const Cam = {
     const conn = this.connected();
     const live = this.isLive() && conn;
     $('#c-dock').innerHTML = `
-      <button class="pz ${live ? 'live' : 'paused'}" type="button" data-act="pause" ${conn ? '' : 'disabled'}>${live ? I.pause + 'Pause' : I.play + 'Afficher la caméra'}</button>
-      <div class="lens" role="group" aria-label="Objectif">${LENS_L.map((n, i) => `<button type="button" class="${i === c.lens && !c.front ? 'on' : ''}" data-act="set" data-k="lens" data-v="${i}" ${c.front ? 'disabled' : ''}>${n}</button>`).join('')}</div>
-      <button class="db${c.mirror ? ' on' : ''}" type="button" aria-label="Miroir" aria-pressed="${!!c.mirror}" title="Miroir (l’écran d’attente reste à l’endroit)" data-act="mirror">${I.mirror}</button>
-      <button class="db${c.turn ? ' on' : ''}" type="button" aria-label="Tourner de 90°" title="Tourner de 90° (${(c.turn | 0) * 90}°)" data-act="turn">${I.turn}</button>
-      <button class="db" type="button" aria-label="Retourner la caméra" data-act="flipcam">${I.flip}</button>
-      ${live ? '' : `<button class="db${this.peekOn() ? ' on' : ''}" type="button" aria-label="${this.peekOn() ? 'Cacher' : 'Montrer'} l’aperçu" aria-pressed="${this.peekOn()}" title="${this.peekOn() ? 'Cacher l’aperçu (rien n’est envoyé en pause)' : 'Montrer l’aperçu, pour toi seul'}" data-act="peek">${this.peekOn() ? I.eye : I.eyeOff}</button>`}
+      <button class="pz ${live ? 'live' : 'paused'}" type="button" data-act="pause"${tipAttr('pause')} ${conn ? '' : 'disabled'}>${live ? I.pause + 'Pause' : I.play + 'Afficher la caméra'}</button>
+      <div class="lens" role="group" aria-label="Objectif"${tipAttr('lens')}>${LENS_L.map((n, i) => `<button type="button" class="${i === c.lens && !c.front ? 'on' : ''}" data-act="set" data-k="lens" data-v="${i}" ${c.front ? 'disabled' : ''}>${n}</button>`).join('')}</div>
+      <button class="db${c.mirror ? ' on' : ''}" type="button" aria-label="Miroir" aria-pressed="${!!c.mirror}"${tipAttr('mirror')} data-act="mirror">${I.mirror}</button>
+      <button class="db${c.turn ? ' on' : ''}" type="button" aria-label="Tourner de 90°"${tipAttr('turn')} data-act="turn">${I.turn}</button>
+      <button class="db" type="button" aria-label="Retourner la caméra"${tipAttr('flipcam')} data-act="flipcam">${I.flip}</button>
+      ${live ? '' : `<button class="db${this.peekOn() ? ' on' : ''}" type="button" aria-label="${this.peekOn() ? 'Cacher' : 'Montrer'} l’aperçu" aria-pressed="${this.peekOn()}"${tipAttr('peek')} data-act="peek">${this.peekOn() ? I.eye : I.eyeOff}</button>`}
       <span class="sep"></span>
-      <button class="db${this.panel === 'info' ? ' on' : ''}" type="button" aria-label="Infos du flux" data-act="panel" data-v="info">${I.info}</button>
-      <button class="db${this.panel === 'set' ? ' on' : ''}" type="button" aria-label="Réglages de la caméra" data-act="panel" data-v="set">${I.sliders}</button>`;
+      <button class="db${this.panel === 'info' ? ' on' : ''}" type="button" aria-label="Infos du flux"${tipAttr('info')} data-act="panel" data-v="info">${I.info}</button>
+      <button class="db${this.panel === 'set' ? ' on' : ''}" type="button" aria-label="Réglages de la caméra"${tipAttr('set')} data-act="panel" data-v="set">${I.sliders}</button>`;
   },
   paintHud() {
     const conn = this.connected();
@@ -839,10 +962,10 @@ const Cam = {
     const q = S.cam.effective.quality;
     const ph = S.cam.phone;
     const qual = ph && ph.height && live ? `${resName(Math.min(ph.width, ph.height))} · ${ph.fps}` : `${resName(q.height)} · ${q.fps}`;
-    const used = S.vcam && S.vcam.in_use ? `<span class="chip">${I.cam}${S.vcam.in_use > 1 ? S.vcam.in_use + ' apps' : 'Webcam utilisée'}</span>` : '';
+    const used = S.vcam && S.vcam.in_use ? `<span class="chip"${tipAttr('hudused')}>${I.cam}${S.vcam.in_use > 1 ? S.vcam.in_use + ' apps' : 'Webcam utilisée'}</span>` : '';
     $('#c-hudl').innerHTML = (live
       ? '<span class="chip" style="color:#FFB3A6"><span class="rec"></span>EN DIRECT</span>'
-      : `<span class="chip">${I.pause}En pause</span>`) + `<span class="chip mono">${qual}</span>` + used;
+      : `<span class="chip">${I.pause}En pause</span>`) + `<span class="chip mono"${tipAttr('hudq')}>${qual}</span>` + used;
     const p = S.status;
     if (!S.device || !p) {
       $('#c-hudr').innerHTML = '';
@@ -850,9 +973,9 @@ const Cam = {
       const low = p.battery != null && p.battery < 15 && p.charge === 'unplugged';
       const bc = low ? '#FF7A66' : '#B9F25A';
       $('#c-hudr').innerHTML = `
-        <span class="chip" style="color:${bc}"><span class="batt" aria-hidden="true"><i style="width:${p.battery ?? 0}%"></i></span><span class="mono">${p.battery ?? '—'} %</span>${p.charge !== 'unplugged' ? svg('<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>', ' aria-label="en charge"') : ''}</span>
-        <span class="chip"><span class="tdot" style="background:${HEAT_COLOR[p.thermal] || '#868F9D'}"></span>${p.thermal ? HEAT[p.thermal] : 'inconnu'}</span>
-        <span class="chip">${onCable() ? I.cable : I.wifi}<span class="mono">${conn ? (S.latency_ms == null ? '—' : S.latency_ms + ' ms') : 'hors ligne'}</span></span>`;
+        <span class="chip" style="color:${bc}"${tipAttr('battery')}><span class="batt" aria-hidden="true"><i style="width:${p.battery ?? 0}%"></i></span><span class="mono">${p.battery ?? '—'} %</span>${p.charge !== 'unplugged' ? svg('<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>', ' aria-label="en charge"') : ''}</span>
+        <span class="chip"${tipAttr('heat')}><span class="tdot" style="background:${HEAT_COLOR[p.thermal] || '#868F9D'}"></span>${p.thermal ? HEAT[p.thermal] : 'inconnu'}</span>
+        <span class="chip"${tipAttr('ping')}>${onCable() ? I.cable : I.wifi}<span class="mono">${conn ? (S.latency_ms == null ? '—' : S.latency_ms + ' ms') : 'hors ligne'}</span></span>`;
     }
     const e = S.cam.effective;
     $('#c-notice').innerHTML = !conn ? '' : e.alert
@@ -889,28 +1012,28 @@ const Cam = {
     const max = Math.max(1, ...this.spark);
     const bars = Array.from({ length: 40 }, (_, i) => this.spark[i - (40 - this.spark.length)] ?? 0)
       .map((v) => `<i style="height:${Math.max(4, Math.round(v / max * 90))}%"></i>`).join('');
-    const cell = (k, v) => `<div class="icell"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+    const cell = (k, v, t) => `<div class="icell"><div class="k">${k}${tip(t)}</div><div class="v">${v}</div></div>`;
     // Time per step (spec E2): iPhone, link, then this window.
     const sp = st.steps || {};
     const ms = (v) => (v == null ? 'inconnu' : Math.round(v) + ' ms');
-    const steps = [['Encodage', sp.encode_ms], ['Envoi et lien', sp.link_ms], ['Décodage', Video.steps.decode], ['Affichage', Video.steps.draw]];
+    const steps = [['Encodage', sp.encode_ms, 'i_enc'], ['Envoi et lien', sp.link_ms, 'i_link'], ['Décodage', Video.steps.decode, 'i_dec'], ['Affichage', Video.steps.draw, 'i_draw']];
     const known = steps.every(([, v]) => v != null);
     const total = steps.reduce((a, [, v]) => a + (v || 0), 0);
     const body = `
       <div class="spark" aria-hidden="true">${bars}</div>
       <div class="ig">
-        ${cell('Image envoyée', ph && ph.height ? `${ph.width}×${ph.height} · ${ph.fps}` : `${resName(q.height)} · ${q.fps}`)}
-        ${cell('Débit', `${n1(st.bitrate_mbps)} Mb/s`)}
-        ${cell('Images par seconde', n1(st.fps))}
-        ${cell(onCable() ? 'Aller-retour (câble)' : 'Aller-retour Wi-Fi', S.latency_ms == null ? 'inconnu' : S.latency_ms + ' ms')}
-        ${cell('Images sautées', String(st.dropped + Video.drops))}
-        ${cell('iPhone', `${p.battery ?? '—'} % · ${p.thermal ? HEAT[p.thermal] : 'inconnu'}`)}
-        ${cell('Images clés / min', String(sp.keys_per_min ?? 0))}
-        ${cell('File iPhone', ms(sp.queue_ms))}
+        ${cell('Image envoyée', ph && ph.height ? `${ph.width}×${ph.height} · ${ph.fps}` : `${resName(q.height)} · ${q.fps}`, 'i_sent')}
+        ${cell('Débit', `${n1(st.bitrate_mbps)} Mb/s`, 'i_rate')}
+        ${cell('Images par seconde', n1(st.fps), 'i_fps')}
+        ${cell(onCable() ? 'Aller-retour (câble)' : 'Aller-retour Wi-Fi', S.latency_ms == null ? 'inconnu' : S.latency_ms + ' ms', 'i_ping')}
+        ${cell('Images sautées', String(st.dropped + Video.drops), 'i_drop')}
+        ${cell('iPhone', `${p.battery ?? '—'} % · ${p.thermal ? HEAT[p.thermal] : 'inconnu'}`, 'i_phone')}
+        ${cell('Images clés / min', String(sp.keys_per_min ?? 0), 'i_keys')}
+        ${cell('File iPhone', ms(sp.queue_ms), 'i_queue')}
       </div>
       <div class="ig steps">
-        ${steps.map(([k, v]) => cell(k, ms(v))).join('')}
-        ${cell('Total ≈', known ? ms(total) : 'inconnu')}
+        ${steps.map(([k, v, t]) => cell(k, ms(v), t)).join('')}
+        ${cell('Total ≈', known ? ms(total) : 'inconnu', 'i_total')}
       </div>`;
     const el = $('#c-info');
     if (el) el.innerHTML = body;
@@ -947,10 +1070,10 @@ const Cam = {
   paintDrawer() {
     const c = this.cs;
     const chips = (list, k) => `<div class="chips">${list.map((n, i) => `<button type="button" class="cp${c[k] === i ? ' on' : ''}" data-act="set" data-k="${k}" data-v="${i}">${esc(n)}</button>`).join('')}</div>`;
-    const tog = (k, label) => `<button class="tg" type="button" data-act="toggle" data-k="${k}" aria-pressed="${c[k]}">${esc(label)}<span class="sw${c[k] ? ' on' : ''}"></span></button>`;
+    const tog = (k, label) => `<button class="tg" type="button" data-act="toggle" data-k="${k}" aria-pressed="${c[k]}"><span>${esc(label)}${tip(k)}</span><span class="sw${c[k] ? ' on' : ''}"></span></button>`;
     const slider = (k, label, min, max, step, fmt, off) => {
       const p = ((c[k] - min) / (max - min) * 100).toFixed(1);
-      return `<label class="sl${off ? ' off' : ''}"><span class="r"><span>${esc(label)}</span><span class="val" id="v-${k}">${fmt(c[k])}</span></span>
+      return `<label class="sl${off ? ' off' : ''}"><span class="r"><span>${esc(label)}${tip(k)}</span><span class="val" id="v-${k}">${fmt(c[k])}</span></span>
         <input type="range" min="${min}" max="${max}" step="${step}" value="${c[k]}" data-input="slide" data-change="slid" data-k="${k}" ${off ? 'disabled' : ''} style="background:linear-gradient(90deg,var(--co) ${p}%,color-mix(in srgb,var(--tx) 12%,transparent) ${p}%)"></label>`;
     };
     this.fmt = {
@@ -962,28 +1085,28 @@ const Cam = {
     let body = '';
     if (this.tab === 0) {
       body = `
-        <div class="grp"><span class="gl">Résolution</span>${chips(RES_L, 'res')}</div>
-        <div class="grp"><span class="gl">Images par seconde</span>${chips(FPS.map(String), 'fps')}</div>
-        <div class="grp"><span class="gl">Codec</span>${chips(['HEVC', 'H.264'], 'codec')}</div>
-        <div class="grp"><span class="gl">Débit (Mb/s)</span>${chips(['Auto', '8', '20', '40', '80'], 'rate')}</div>
+        <div class="grp"><span class="gl">Résolution${tip('res')}</span>${chips(RES_L, 'res')}</div>
+        <div class="grp"><span class="gl">Images par seconde${tip('fps')}</span>${chips(FPS.map(String), 'fps')}</div>
+        <div class="grp"><span class="gl">Codec${tip('codec')}</span>${chips(['HEVC', 'H.264'], 'codec')}</div>
+        <div class="grp"><span class="gl">Débit (Mb/s)${tip('rate')}</span>${chips(['Auto', '8', '20', '40', '80'], 'rate')}</div>
         <div class="grp">${tog('autoq', 'Baisser la qualité si l’iPhone chauffe')}</div>`;
     } else if (this.tab === 1) {
       body = slider('ev', 'Exposition', -2, 2, 0.1, F.ev)
         + `<div class="grp">${tog('afA', 'Mise au point auto')}</div>` + slider('focus', 'Mise au point', 0, 100, 1, F.focus, c.afA)
         + `<div class="grp">${tog('wbA', 'Balance des blancs auto')}</div>` + slider('wb', 'Balance des blancs', 2500, 8000, 100, F.wb, c.wbA)
-        + `<div class="grp"><span class="gl">Stabilisation</span>${chips(['Off', 'Standard', 'Cinéma'], 'stab')}</div>
+        + `<div class="grp"><span class="gl">Stabilisation${tip('stab')}</span>${chips(['Off', 'Standard', 'Cinéma'], 'stab')}</div>
         <div class="grp">${tog('torch', 'Lampe de l’iPhone')}</div>`;
     } else {
-      body = `<label class="grp"><span class="gl">Message</span><input class="txt" type="text" maxlength="60" value="${esc(c.msg)}" data-change="msg"></label>
+      body = `<label class="grp"><span class="gl">Message${tip('msg')}</span><input class="txt" type="text" maxlength="60" value="${esc(c.msg)}" data-change="msg"></label>
         <div class="grp">${tog('multi', 'Dans toutes les langues')}</div>
-        <div class="grp"><span class="gl">Style</span>${chips(['Animé', 'Minimal'], 'wst')}</div>
+        <div class="grp"><span class="gl">Style${tip('wst')}</span>${chips(['Animé', 'Minimal'], 'wst')}</div>
         <div class="wprev">${waitScreen(c, '')}</div>`;
     }
     const el = $('#c-drawer');
     if (!el) return;
     el.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0';
     el.innerHTML = `
-      <div style="padding:0 22px 14px"><div class="chips">${PROFILES.map(([n], i) => `<button type="button" class="cp${c.prof === i ? ' on' : ''}" data-act="profile" data-v="${i}">${n}</button>`).join('')}</div></div>
+      <div style="padding:0 22px 14px"><div class="chips">${PROFILES.map(([n], i) => `<button type="button" class="cp${c.prof === i ? ' on' : ''}" data-act="profile" data-v="${i}">${n}</button>`).join('')}${tip('profile')}</div></div>
       <div class="tabs" role="tablist">${['Qualité', 'Caméra', 'Écran d’attente'].map((n, i) => `<button type="button" role="tab" aria-selected="${i === this.tab}" class="${i === this.tab ? 'on' : ''}" data-act="tab" data-v="${i}">${n}</button>`).join('')}</div>
       <div class="dbody">${body}</div>`;
   },
@@ -1440,14 +1563,14 @@ const Settings = {
   paint() {
     const s = settings;
     const d = S && S.device;
-    const tog = (k, label, hint) => `<button class="tg" type="button" data-act="toggle" data-k="${k}" aria-pressed="${s[k]}"><span>${esc(label)}${hint ? `<span class="h" style="display:block;font-size:12px;color:var(--tx3);margin-top:2px">${esc(hint)}</span>` : ''}</span><span class="sw${s[k] ? ' on' : ''}"></span></button>`;
+    const tog = (k, label, hint) => `<button class="tg" type="button" data-act="toggle" data-k="${k}" aria-pressed="${s[k]}"><span>${esc(label)}${tip(k)}${hint ? `<span class="h" style="display:block;font-size:12px;color:var(--tx3);margin-top:2px">${esc(hint)}</span>` : ''}</span><span class="sw${s[k] ? ' on' : ''}"></span></button>`;
     const device = d
-      ? `<div class="line"><span>${esc(d.name)}<span class="h">Relié le ${dateFr(d.paired_at)} · pour toujours, jusqu’à « Oublier » · empreinte <span class="mono">${esc(d.fingerprint)}</span></span></span><button class="btn bad sm" type="button" data-act="ask">Oublier</button></div>
+      ? `<div class="line"><span>${esc(d.name)}${tip('forget')}<span class="h">Relié le ${dateFr(d.paired_at)} · pour toujours, jusqu’à « Oublier » · empreinte <span class="mono">${esc(d.fingerprint)}</span></span></span><button class="btn bad sm" type="button" data-act="ask">Oublier</button></div>
         ${this.asking ? `<div class="confirm" role="alertdialog" aria-label="Confirmer l’oubli">
           <span><strong>Oublier ${esc(d.name)} ?</strong> Il faudra scanner un nouveau QR pour le relier.</span>
           <div class="row" style="gap:8px"><button class="btn badf sm" type="button" data-act="forget">Oublier</button><button class="btn sm" type="button" data-act="cancel">Annuler</button></div>
         </div>` : ''}
-        <div class="line"><span>Connexion<span class="h">${S && S.connected ? 'Reliée ' + linkName() : 'En attente de l’iPhone'}</span></span><button class="btn sm" type="button" data-act="reconnect">Reconnecter</button></div>
+        <div class="line"><span>Connexion${tip('reconnect')}<span class="h">${S && S.connected ? 'Reliée ' + linkName() : 'En attente de l’iPhone'}</span></span><button class="btn sm" type="button" data-act="reconnect">Reconnecter</button></div>
         ${S && S.cable_service === false ? '<div class="line"><span>Câble USB<span class="h">Installe « Apple Devices » (Microsoft Store) ou iTunes pour relier l’iPhone par câble. Le Wi-Fi marche sans.</span></span></div>' : ''}
         <div class="line"><span>Relier un autre iPhone<span class="h">Il remplace celui-ci</span></span><a class="btn sm" href="#pair">Relier</a></div>`
       : `<div class="line"><span>Aucun iPhone relié</span><a class="btn pri sm" href="#pair">Relier un iPhone</a></div>`;
@@ -1465,7 +1588,7 @@ const Settings = {
             <div class="ct">${I.pc}Général</div>
             ${tog('launch_at_startup', 'Lancer Hyphn avec Windows')}
             ${tog('close_to_tray', 'Rester près de l’horloge quand on ferme')}
-            <div class="line"><span>Thème</span><div class="seg" role="group" aria-label="Thème">${[['system', 'Comme Windows'], ['dark', 'Sombre'], ['light', 'Clair']].map(([k, n]) => `<button type="button" class="${s.theme === k ? 'on' : ''}" data-act="theme" data-v="${k}">${n}</button>`).join('')}</div></div>
+            <div class="line"><span>Thème${tip('theme')}</span><div class="seg" role="group" aria-label="Thème">${[['system', 'Comme Windows'], ['dark', 'Sombre'], ['light', 'Clair']].map(([k, n]) => `<button type="button" class="${s.theme === k ? 'on' : ''}" data-act="theme" data-v="${k}">${n}</button>`).join('')}</div></div>
           </section>
           <section class="scard" style="--c:var(--co)">
             <div class="ct">${I.cam}Cam</div>
@@ -1474,8 +1597,8 @@ const Settings = {
           </section>
           <section class="scard" style="--c:var(--cy)">
             <div class="ct">${I.swap}Drop</div>
-            <div class="line"><span>Dossier des photos</span><button class="btn mono sm" type="button" data-act="pick">${esc(s.photos_dir)}</button></div>
-            <div class="line"><label for="rg">Rangement</label><select id="rg" class="sel" data-change="sort">${[['year_month', 'Année / Mois'], ['year', 'Année'], ['flat', 'Tout ensemble']].map(([k, n]) => `<option value="${k}"${s.sort === k ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
+            <div class="line"><span>Dossier des photos${tip('photos_dir')}</span><button class="btn mono sm" type="button" data-act="pick">${esc(s.photos_dir)}</button></div>
+            <div class="line"><span><label for="rg">Rangement</label>${tip('sort')}</span><select id="rg" class="sel" data-change="sort">${[['year_month', 'Année / Mois'], ['year', 'Année'], ['flat', 'Tout ensemble']].map(([k, n]) => `<option value="${k}"${s.sort === k ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
           </section>
           <section class="scard" style="--c:var(--am)">
             <div class="ct">${I.bolt}Alertes</div>
@@ -1491,12 +1614,12 @@ const Settings = {
     const v = (S && S.vcam) || {};
     const busy = this.installing;
     const cam = v.camera
-      ? `<div class="line"><span>Webcam Windows<span class="h">${v.in_use ? (v.in_use > 1 ? v.in_use + ' apps l’utilisent' : 'Une app l’utilise') : '« Hyphn » dans Discord, Teams, OBS…'}</span></span><span class="okc">${I.check}Prête</span></div>`
+      ? `<div class="line"><span>Webcam Windows${tip('vcam')}<span class="h">${v.in_use ? (v.in_use > 1 ? v.in_use + ' apps l’utilisent' : 'Une app l’utilise') : '« Hyphn » dans Discord, Teams, OBS…'}</span></span><span class="okc">${I.check}Prête</span></div>`
       : v.installed
-        ? `<div class="line"><span>Webcam Windows<span class="h">${esc(v.error || 'Démarrage…')}</span></span><button class="btn sm" type="button" data-act="vinstall" ${busy ? 'disabled' : ''}>Réparer</button></div>`
-        : `<div class="line"><span>Webcam Windows<span class="h">${v.can_install ? 'Windows demande l’accord administrateur, une seule fois' : 'Fichiers de la webcam absents de cette version'}</span></span><button class="btn pri sm" type="button" data-act="vinstall" ${busy || !v.can_install ? 'disabled' : ''}>${busy ? 'Installation…' : 'Installer'}</button></div>`;
+        ? `<div class="line"><span>Webcam Windows${tip('vcam')}<span class="h">${esc(v.error || 'Démarrage…')}</span></span><button class="btn sm" type="button" data-act="vinstall" ${busy ? 'disabled' : ''}>Réparer</button></div>`
+        : `<div class="line"><span>Webcam Windows${tip('vcam')}<span class="h">${v.can_install ? 'Windows demande l’accord administrateur, une seule fois' : 'Fichiers de la webcam absents de cette version'}</span></span><button class="btn pri sm" type="button" data-act="vinstall" ${busy || !v.can_install ? 'disabled' : ''}>${busy ? 'Installation…' : 'Installer'}</button></div>`;
     const obs = !v.obs_present ? ''
-      : `<div class="line"><span>OBS<span class="h">${v.obs ? 'Source « Hyphn » dans OBS' : 'S’installe avec la webcam'}</span></span>${v.obs ? `<span class="okc">${I.check}Prêt</span>` : ''}</div>`;
+      : `<div class="line"><span>OBS${tip('obs')}<span class="h">${v.obs ? 'Source « Hyphn » dans OBS' : 'S’installe avec la webcam'}</span></span>${v.obs ? `<span class="okc">${I.check}Prêt</span>` : ''}</div>`;
     const remove = v.installed ? `<div class="line"><span class="h" style="margin:0">Retirer la webcam et le plugin OBS</span><button class="btn bad sm" type="button" data-act="vremove" ${busy ? 'disabled' : ''}>Retirer</button></div>` : '';
     return cam + obs + remove;
   },

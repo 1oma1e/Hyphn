@@ -409,7 +409,6 @@ impl Hub {
     pub fn view(&self) -> LinkView {
         let st = self.lock();
         let s = st.session.as_ref();
-        let thermal = st.thermal();
         LinkView {
             connected: s.map(|s| s.fingerprint),
             via: s.map(|s| s.via),
@@ -427,7 +426,7 @@ impl Hub {
                 lens_count: c.lens_count,
             }),
             live: st.cam.live && s.is_some(),
-            effective: cam::effective(st.cam.request, thermal, st.cam.adapt, st.on_cable()),
+            effective: st.effective(),
             stats: st.stats.clone(),
             pair_seconds_left: st.pairing.seconds_left(Instant::now()),
             drop: st.drop.clone(),
@@ -1265,8 +1264,18 @@ impl State {
         }
     }
 
+    /// While the webcam or OBS forces H.264, at most 1080p (ADR-0035, D):
+    /// the webcam offers no more, and H.264 in 4K60 is too slow to encode.
+    fn effective(&self) -> cam::Effective {
+        let mut request = self.cam.request;
+        if !self.h264_readers.is_empty() {
+            request.height = request.height.min(1080);
+        }
+        cam::effective(request, self.thermal(), self.cam.adapt, self.on_cable())
+    }
+
     fn control(&self) -> proto::CamControl {
-        let eff = cam::effective(self.cam.request, self.thermal(), self.cam.adapt, self.on_cable());
+        let eff = self.effective();
         proto::CamControl {
             live: self.cam.live,
             height: eff.quality.height,
@@ -1487,6 +1496,25 @@ mod tests {
         .await;
         assert!(matches!(recv(&mut io).await, Some(Msg::CamControl(c)) if c.height == 1080 && c.fps == 30));
         assert_eq!(r.hub.view().status.unwrap().battery, Some(14));
+    }
+
+    #[tokio::test]
+    async fn webcam_without_hevc_gets_h264_at_most_1080p() {
+        let r = rig().await;
+        let phone = Identity::generate("phone").unwrap();
+        let mut io = pair(&r, &phone).await;
+        assert!(matches!(recv(&mut io).await, Some(Msg::CamControl(_))));
+        let cam = r.hub.lock().cam;
+        r.hub.set_cam(CamWanted { live: true, request: Quality { height: 2160, fps: 60, bitrate_mbps: 0 }, ..cam });
+        assert!(matches!(recv(&mut io).await, Some(Msg::CamControl(c)) if c.height == 2160));
+        // Discord opens the webcam, which cannot decode HEVC (ADR-0035, D).
+        r.hub.set_reader_needs_h264("vcam-0", true);
+        assert!(matches!(recv(&mut io).await,
+            Some(Msg::CamControl(c)) if c.height == 1080 && c.fps == 60 && c.codec == Codec::H264 as i32));
+        assert_eq!(r.hub.view().effective.quality.height, 1080);
+        // Closed: back to 4K.
+        r.hub.set_reader_needs_h264("vcam-0", false);
+        assert!(matches!(recv(&mut io).await, Some(Msg::CamControl(c)) if c.height == 2160));
     }
 
     #[tokio::test]
