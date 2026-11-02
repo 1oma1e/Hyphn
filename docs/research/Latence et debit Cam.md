@@ -48,6 +48,33 @@ Chiffres réels, avec la date et la version. Le chiffre « Latence » d'« Infos
 | 2026-11-02 | câble, verre à verre | 4K60, Discord caméra coupée juste avant | **~388 ms** (387, 388) | codec réel inconnu (H.264 encore ?) |
 | — | Wi-Fi, verre à verre | — | à faire | — |
 
+### Temps par étape (E2, app 0.8.1 (14), câble, 2026-11-02)
+| Réglage | Encodage | Envoi et lien | Décodage | Affichage | Total ≈ |
+|---|---|---|---|---|---|
+| 4K60, Discord caméra allumée (47 i/s) | 235 | 7 | 109 | 3 | 355 |
+| 720p60 à 80 Mb/s, Discord allumée | 38 | 6 | 271 | 4 | 318 |
+| 720p60 à 80 Mb/s, Discord coupée | 40 | 6 | 269 | 3 | 318 |
+| 4K60, Discord coupée (48 i/s) | 232 | 9 | 106 | 3 | 350 |
+
+Lecture :
+- **Le câble n'y est pour rien** (6 à 9 ms), et la file de l'iPhone est vide. Discord ne change rien.
+- **Décodage PC** : environ 16 images d'attente en 720p et environ 6 en 4K. C'est exactement la taille de la mémoire d'images (DPB) du H.264 niveau 5.1 à ces tailles. Hypothèse : le flux est en H.264 et ne dit pas qu'il n'y a pas de réordonnancement (pas de `max_num_reorder_frames = 0` dans le SPS), alors le décodeur garde sa mémoire pleine avant de rendre une image. Le HEVC écrit toujours ce nombre dans son SPS, ce qui expliquerait les ~150 ms en HEVC. Codec confirmé par Evan : **H.264** choisi à la main pendant ces 4 captures.
+
+Comparaison avec le HEVC choisi (câble, 80 Mb/s, même jour) :
+| Réglage | Codec réel | Encodage | Envoi et lien | Décodage | Affichage | Total ≈ |
+|---|---|---|---|---|---|---|
+| 4K60, Discord coupée (60 i/s) | HEVC | 115 | 6 | **2** | 4 | **127** |
+| 720p30, Discord coupée | HEVC | 66 | 12 | **2** | 3 | **83** |
+| 720p30, Discord allumée | H.264 (forcé par la webcam) | 67 | 12 | **419** | 2 | **500** |
+| 4K60, Discord allumée (46 i/s) | H.264 (forcé par la webcam) | 250 | 8 | **110** | 4 | **372** |
+
+Conclusions :
+1. **Le décodage H.264 de la fenêtre** coûte de 110 à 420 ms, contre 2 ms en HEVC. L'hypothèse du DPB plein est confirmée par l'écart.
+2. **La webcam impose le H.264** dès que Discord l'ouvre : c'est elle qui fait passer de ~130 à ~370-500 ms.
+   Correctif (2026-11-02, choisi par Evan) : le PC réécrit le SPS de chaque image clé H.264 (`apps/desktop/src-tauri/src/h264.rs`) pour ajouter `max_num_reorder_frames = 0`, comme Moonlight et Sunshine. Vérifié : `cargo test` passe, et deux flux libx264 réels réécrits se relisent avec ffmpeg (`trace_headers`) et décodent à l'identique (même `framemd5`). Evan confirme que « ça a l'air bon » avec Discord allumé (sans chiffres notés).
+3. **L'encodage iPhone**, même en HEVC, reste le plus gros poste : ~2 images en 720p30 et ~7 images en 4K60. Piste : le mode faible latence de VideoToolbox (E4).
+- **Encodage iPhone en 4K60** : ~230 ms et 48 images/s au lieu de 60. L'encodeur ne suit pas et les images s'accumulent dans VideoToolbox. Probablement le H.264 en 4K60, plus lourd que le HEVC. **Non vérifié.**
+
 Méthode verre à verre : `tools/latency-chrono.html` à côté de la fenêtre Hyphn, l'iPhone filme les deux, capture d'écran (écran à 240 Hz). L'image se répète en tunnel : l'écart entre deux étages voisins est aussi une latence, ce qui donne plusieurs chiffres par capture. Lecture à ±10 ms (chiffres flous ou en miroir). C'est la latence **de la fenêtre** Hyphn, pas celle vue dans Discord.
 
 À comprendre : avec la webcam utilisée par une autre app, la fenêtre passe de ~150 à ~350 ms en 4K60. Hypothèse : deux décodages 4K60 en même temps sur le PC (fenêtre + DLL), ou l'envoi vers le tube de la webcam qui retarde l'envoi vers la fenêtre. **Non vérifié.**

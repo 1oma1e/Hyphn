@@ -4,6 +4,7 @@
 mod cable;
 mod cam;
 mod drop;
+mod h264;
 mod identity;
 mod install;
 mod link;

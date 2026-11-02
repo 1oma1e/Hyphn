@@ -25,6 +25,7 @@ E1 et E2 validées par Evan le 2026-11-02 ; les autres restent à valider.
   - **Décodage** et **Affichage** (fenêtre du PC) : de l'arrivée dans la fenêtre à l'image décodée, puis à l'image dessinée ;
   - le total approché, les images sautées et les images clés reçues par minute.
   Le chiffre « Latence » devient « Aller-retour » : c'est le ping du lien, pas le retard de l'image. Avec une app iPhone plus ancienne, les temps de l'iPhone affichent « inconnu ».
+- **E2b — H.264 sans attente au décodage** (choisi par Evan le 2026-11-02, après la mesure E2). Le PC ajoute au SPS de chaque image clé H.264 la promesse « jamais d'images dans le désordre » (`max_num_reorder_frames = 0`). Le décodeur rend alors chaque image tout de suite au lieu de remplir sa mémoire (110 à 420 ms mesurés).
 - **E3 — Débit qui suit le lien.** Dans tous les profils, le débit monte jusqu'à ce que le lien sature, puis se cale juste en dessous. Un débit choisi à la main est un plafond, pas une consigne fixe.
 - **E4 — Pas de pic d'image clé.** Mode faible latence de VideoToolbox, ou rafraîchissement progressif, si l'iPhone le permet (à vérifier). Plus d'image clé forcée après chaque image sautée quand ce n'est pas nécessaire.
 - **E5 — Profil Max par défaut** : 4K60 ou 1080p60 selon le lien mesuré, débit le plus haut que le lien tient.

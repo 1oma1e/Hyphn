@@ -300,6 +300,9 @@ fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
+/// The « SPS not read » line is written once, not on every keyframe.
+static H264_NOTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn now_us() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_micros() as i64).unwrap_or(0)
 }
@@ -996,8 +999,16 @@ impl Hub {
         }
         // A media connection that goes quiet (Wi-Fi lost) is closed too.
         while let Ok(Ok(Some(m))) = timeout(SILENCE_LIMIT, read_msg(&mut io)).await {
-            let Some(Msg::VideoFrame(f)) = m.msg else { continue };
+            let Some(Msg::VideoFrame(mut f)) = m.msg else { continue };
             let arrival = now_us();
+            if f.keyframe && f.codec == proto::Codec::H264 as i32 {
+                // Decoders show each frame at once instead of filling their buffer.
+                if let Some(d) = crate::h264::low_delay(&f.data) {
+                    f.data = d.into();
+                } else if !H264_NOTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                    journal("h264 keyframe left as it is (SPS not read)");
+                }
+            }
             let sinks: Vec<VideoSink> = {
                 let mut st = self.lock();
                 let offset = st.session.as_ref().and_then(|s| s.clock.offset_us());
