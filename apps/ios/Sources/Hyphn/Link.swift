@@ -80,6 +80,7 @@ final class PCLink: ObservableObject {
         info.onChange = { [weak self] s in self?.send(.deviceStatus(s)) }
         cable.pinned = pc?.fingerprint
         cable.onConnection = { [weak self] c in self?.cableArrived(c) }
+        cable.onLog = { [weak self] what in self?.log(what) }
     }
 
     var pcName: String { pc?.name ?? "PC" }
@@ -400,8 +401,14 @@ final class PCLink: ObservableObject {
             return
         }
         // Not paired (E5): the cable replaces the QR, the code and « Oui »
-        // stay. Only on the scan screen, where the code can be shown.
-        guard prime != nil, pairing == nil, case .idle = pairStep else { nw.cancel(); return }
+        // stay. From the welcome or the scan screen: RootView opens the scan
+        // screen, where the code is shown.
+        guard pairing == nil, case .idle = pairStep else {
+            log("Câble : PC refusé (appairage déjà en cours)")
+            nw.cancel()
+            return
+        }
+        log("Câble : PC trouvé, appairage")
         pairing = (c, nil)
         pairStep = .connecting(host: Self.cableHost, secured: false)
         c.onReady = { [weak self] in

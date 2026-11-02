@@ -42,6 +42,10 @@ struct RootView: View {
         .onChange(of: link.wantsCam) { _, want in
             if want { tab = .cam; link.wantsCam = false }
         }
+        // Plugged on the welcome screen (cable E5): the code shows on the scan screen.
+        .onChange(of: link.pairStep) { _, step in
+            if case .connecting(host: PCLink.cableHost, _) = step, link.pc == nil { scanning = true }
+        }
         .onChange(of: link.pc) { _, pc in
             if pc == nil { tab = .home; camera.close() }
         }
