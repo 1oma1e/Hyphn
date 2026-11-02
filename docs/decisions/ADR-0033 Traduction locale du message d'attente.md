@@ -22,6 +22,7 @@ Evan veut que le message de l'écran d'attente, tapé une fois, s'affiche tradui
 - **Où ça tourne** : le moteur WebAssembly de Firefox dans un worker de la fenêtre (`ui/translate-worker.js`, colle `ui/vendor/bergamot-translator.js` copiée de Firefox) ; Rust télécharge et range les fichiers (`src/translate.rs`). La fenêtre autorise le WebAssembly (`'wasm-unsafe-eval'`).
 - **Mesure** : fr→en→de en 0,7 s sur le PC d'Evan (page d'essai, vrais modèles).
 - Une langue sans modèle garde le texte d'Evan.
+- **58 langues au choix** (demande d'Evan, 2026-11-02) : les 18 de départ cochées ; une langue décochée est supprimée du disque (place libérée affichée). Une carte en bas de l'écran montre l'installation et la traduction.
 
 ## Conséquences
 - Téléchargement au premier message traduit, tout seul, avec la progression affichée dans le panneau : ce n'est pas du cloud (rien de l'utilisateur ne part), mais c'est un accès internet, dit dans l'info-bulle.

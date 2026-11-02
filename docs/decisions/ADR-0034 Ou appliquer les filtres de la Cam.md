@@ -27,4 +27,10 @@ Pourquoi c'est devenu simple : depuis [[ADR-0035 Webcam sans forcer le H.264]], 
 - Les mesures de [[Cam - Latence et fluidite]] incluent le coût des effets ; bon choix si le flou en 1080p60 n'ajoute pas plus d'une image de latence ni de saccade.
 - Ce que perd B : ARKit (caméra TrueDepth) pour les masques. Les effets visage viendront d'un modèle sur le PC.
 
+## Mise en œuvre (2026-11-02)
+Evan : « ce qu'on voit dans l'app, Discord le voit », avec des outils libres existants. Choisi après recherche :
+- **Fenêtre** : le canvas dessine l'image avec ses effets (filtres et modes de fusion du canvas, accélérés par la carte graphique, comme les recettes CSSgram des filtres Instagram, licence MIT) ; **MediaPipe** de Google (Apache-2.0) pour les 478 points du visage et le détourage de la personne, délégué GPU. MediaPipe et ses deux modèles (19 Mo) sont dans l'app (`ui/vendor/mediapipe`, empreintes dans `SHA256SUMS`) : rien n'est téléchargé.
+- **Webcam** : avec un effet, la fenêtre envoie son image finale à Rust (WebSocket local, `HFX1`), convertie en NV12 BT.709 (`vcam::fx`) et donnée à la webcam à la place du décodage de l'app. Sans effet, rien ne change (le moins de retard).
+- Mesuré dans la page d'essai, 720p : fond (flou ou image) ≈ 26 ms par image ; points du visage ≈ 11 ms. Non vérifié : retard réel dans Discord, fenêtre cachée près de l'horloge, OBS (garde encore l'image sans effets).
+
 Liens : [[Decisions - Index]]

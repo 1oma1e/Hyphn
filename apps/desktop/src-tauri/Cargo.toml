@@ -62,3 +62,8 @@ tempfile = "3"
 codegen-units = 1
 lto = true
 strip = true
+
+# The effect pictures are turned into NV12 here 30 times a second (vcam::fx):
+# a little optimisation keeps it fast with `npm run dev` too.
+[profile.dev.package.hyphn-desktop]
+opt-level = 1

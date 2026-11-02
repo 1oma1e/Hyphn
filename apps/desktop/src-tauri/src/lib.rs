@@ -119,6 +119,8 @@ struct VcamView {
     in_use: u32,
     can_install: bool,
     error: Option<String>,
+    /// Size the window draws at when the camera effects are on (the webcam's).
+    fx_size: Option<(u32, u32)>,
 }
 
 #[derive(Serialize, Clone)]
@@ -157,6 +159,7 @@ fn snapshot(h: &Hyphn) -> Snapshot {
             in_use: h.vcam_readers.load(Ordering::Relaxed) as u32,
             can_install: inner.native.is_some(),
             error: inner.camera_error.clone(),
+            fx_size: vcam::fx::size(),
         }
     };
     let connected = match (&device, v.connected) {
@@ -213,20 +216,28 @@ fn vcam_state(h: &Hyphn) -> vcam::VcamState {
         multi: c.get("multi").and_then(|v| v.as_bool()).unwrap_or(true),
         style: c.get("wst").and_then(|v| v.as_u64()).unwrap_or(0).min(2) as u8,
         message: c.get("msg").and_then(|v| v.as_str()).unwrap_or("Je reviens bientôt").to_string(),
-        texts: translations(c),
+        lines: wait_lines(c),
     }
 }
 
-/// The waiting message in each language, when the window translated this very
-/// message (`tr` in the Cam settings, ADR-0033); the French one is the message.
-fn translations(c: &serde_json::Value) -> Vec<String> {
+/// The lines of the waiting screen as the window resolved them for this very
+/// message (`lines` in the Cam settings: [locale, whole, text], ADR-0033).
+fn wait_lines(c: &serde_json::Value) -> Vec<vcam::Line> {
     let msg = c.get("msg").and_then(|v| v.as_str()).unwrap_or_default();
-    let Some(tr) = c.get("tr").filter(|t| t.get("msg").and_then(|m| m.as_str()) == Some(msg)) else {
+    if c.get("linesFor").and_then(|v| v.as_str()) != Some(msg) {
+        return vec![];
+    }
+    let Some(list) = c.get("lines").and_then(|v| v.as_array()) else {
         return vec![];
     };
-    vcam::LANGS
-        .iter()
-        .map(|l| tr.get("t").and_then(|t| t.get(*l)).and_then(|v| v.as_str()).unwrap_or(msg).to_string())
+    list.iter()
+        .filter_map(|l| {
+            Some(vcam::Line {
+                locale: l.get(0)?.as_str()?.to_string(),
+                whole: l.get(1)?.as_bool()?,
+                text: l.get(2)?.as_str()?.to_string(),
+            })
+        })
         .collect()
 }
 
@@ -246,6 +257,13 @@ async fn translate_prepare(app: AppHandle, langs: Vec<String>) -> Result<transla
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Frees the space of the languages no longer chosen (ADR-0033); bytes freed.
+#[tauri::command]
+async fn translate_forget(app: AppHandle, langs: Vec<String>) -> Result<u64, String> {
+    let dir = translate_dir(&app)?;
+    tauri::async_runtime::spawn_blocking(move || translate::forget(&dir, &langs)).await.map_err(|e| e.to_string())?
 }
 
 /// One translation file, as raw bytes for the engine in the window.
@@ -848,6 +866,7 @@ pub fn run() {
             toggle_fullscreen,
             translate_prepare,
             translate_read,
+            translate_forget,
             pair_offer,
             forget_device,
             get_settings,

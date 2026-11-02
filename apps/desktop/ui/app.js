@@ -37,7 +37,8 @@ const TIPS = {
   codec: ['Compression', 'Comment l’image est rendue plus légère avant l’envoi.', 'HEVC est deux fois plus léger. H.264 seulement si l’image ne s’affiche pas.'],
   rate: ['Débit', 'Combien de données partent chaque seconde. Plus : image plus fine.', 'Auto convient. Trop haut en Wi-Fi donne des saccades.'],
   msg: ['Message de pause', 'Le texte que voient Discord et OBS quand la caméra est en pause.'],
-  multi: ['Toutes les langues', 'Le message défile en 18 langues, traduit sur ce PC.', 'Le moteur de traduction de Firefox : il se télécharge une fois, puis tout reste sur ce PC.'],
+  multi: ['Plusieurs langues', 'Le message défile dans les langues choisies, traduit sur ce PC.', 'Le moteur de traduction de Firefox : il se télécharge une fois, puis tout reste sur ce PC.'],
+  langs: ['Langues', 'Les langues dans lesquelles le message défile, 2,6 secondes chacune. 58 au choix.', 'Une langue de plus allonge le tour ; 18 font environ 47 secondes.'],
   wst: ['Style', 'Animé : l’enseigne néon bouge. Calme : la même, immobile.'],
   cat_profile: ['Profil', 'Règle la taille, la fluidité et la protection de l’iPhone d’un seul clic.'],
   cat_light: ['Lumière', 'Image plus claire ou plus sombre.'],
@@ -46,6 +47,16 @@ const TIPS = {
   cat_frame: ['Cadrage', 'Zoom, anti-tremblement, contre-jour et lampe.'],
   cat_stream: ['Envoi', 'Taille, fluidité et compression de l’image envoyée par l’iPhone.'],
   cat_wait: ['Pause', 'Ce que voient Discord et OBS quand la caméra est en pause.'],
+  // Cam › Effets (spec `Cam - Filtres et effets`)
+  fx: ['Effets', 'Filtres de couleur, masques sur le visage, fond flou ou remplacé, retouche. Ce que tu vois ici, Discord et Teams le voient aussi.'],
+  fx_filter: ['Filtre', 'Change les couleurs de toute l’image, comme sur Instagram.', 'Clique sur une vignette : elle montre déjà ton image avec le filtre.'],
+  fx_amount: ['Force du filtre', 'À gauche, le filtre est léger ; à droite, il est complet.'],
+  fx_mask: ['Masque', 'Un dessin qui suit ton visage, comme sur Snapchat ou Messenger.', 'Ouvre la bouche avec le masque Chien.'],
+  fx_bg: ['Fond', 'Floute ce qu’il y a derrière toi, ou le remplace par une image. Ton visage et ton corps restent nets.', 'Une image à toi : « Ton image », puis choisis un fichier.'],
+  fx_smooth: ['Peau lisse', 'Adoucit la peau du visage. Les yeux et la bouche restent nets.', 'Vers 30 % : naturel.'],
+  fx_light: ['Lumière douce', 'Éclaire un peu le visage, comme une lampe devant toi.'],
+  fx_off: ['Tout enlever', 'Retire tous les effets : l’image redevient celle de l’iPhone.'],
+  fx_webcam: ['Vers Discord', 'Avec un effet, la webcam reçoit l’image dessinée ici. Sans effet, elle reçoit l’image de l’iPhone telle quelle, avec le moins de retard.'],
   // Cam › barre du bas
   pause: ['Pause ou Afficher', 'Envoie l’image ou la met en pause. En pause, Discord voit l’écran de pause et l’iPhone se repose.'],
   lens: ['Objectif', '0,5× : très large. 1× : le principal, le plus net. 2× et 5× : zoom.', 'Changer d’objectif coupe l’image une demi-seconde.'],
@@ -196,6 +207,11 @@ const I = {
   frame: svg('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3"/>'),
   moon: svg('<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>'),
   spark: svg('<path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"/>'),
+  wand: svg('<path d="M4 20l10-10"/><path d="M15 3.5l.9 2 2 .9-2 .9-.9 2-.9-2-2-.9 2-.9z"/><path d="M19.5 10l.5 1.1 1.1.5-1.1.5-.5 1.1-.5-1.1-1.1-.5 1.1-.5z"/>'),
+  smile: svg('<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0M9 9.5v.5M15 9.5v.5"/>'),
+  layers: svg('<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>'),
+  globe: svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'),
+  trash: svg('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'),
   expand: svg('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
   shrink: svg('<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>'),
 };
@@ -258,6 +274,47 @@ function toast(text, kind = 'ok') {
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 5200);
 }
+
+// A card in the corner for what takes a moment (installing, translating,
+// freeing space): it slides in, shows its progress, ends with a check.
+const Popup = {
+  el: null,
+  key: '',
+  hideT: 0,
+  // pct: null = no bar, -1 = working (no number), 0..100 = progress.
+  show({ icon = 'down', title, text = '', pct = null, done = false, bad = false }) {
+    if (!this.el) {
+      this.el = document.createElement('div');
+      this.el.className = 'pop';
+      this.el.setAttribute('role', 'status');
+      document.body.appendChild(this.el);
+    }
+    clearTimeout(this.hideT);
+    const el = this.el;
+    const key = [title, done, bad, pct == null].join('|');
+    if (key !== this.key || !el.classList.contains('on')) {
+      this.key = key;
+      el.innerHTML = `<span class="pic">${done ? I.check : bad ? I.alert : I[icon]}</span>
+        <div class="ptx"><b>${esc(title)}</b><small></small>${pct == null || done ? '' : '<div class="pbar"><i></i></div>'}</div>
+        <span class="ppct mono"></span>`;
+      el.className = `pop${done ? ' done' : ''}${bad ? ' bad' : ''}`;
+      void el.offsetWidth; // restarts the entrance
+      el.classList.add('on');
+    }
+    $('small', el).textContent = text;
+    const bar = $('.pbar', el);
+    if (bar) {
+      bar.classList.toggle('busy', pct < 0);
+      $('i', bar).style.width = (pct < 0 ? 35 : Math.max(3, Math.min(100, pct))) + '%';
+    }
+    $('.ppct', el).textContent = pct != null && pct >= 0 && !done ? Math.round(pct) + ' %' : '';
+    if (done || bad) this.hideT = setTimeout(() => this.hide(), bad ? 7000 : 3600);
+  },
+  hide() {
+    if (this.el) this.el.classList.remove('on');
+  },
+};
+const langList = (ls) => (ls.length > 3 ? ls.slice(0, 3).map((l) => LANG_NAMES[l]).join(', ') + ` et ${ls.length - 3} autres` : ls.map((l) => LANG_NAMES[l]).join(', '));
 
 async function saveSettings() {
   try {
@@ -655,7 +712,7 @@ const CAM_DEFAULTS = {
   res: 0, fps: 3, codec: 0, rate: 0, power: 'max',
   ev: 0, focus: 50, wb: 5600, afA: true, wbA: true, torch: false, stab: 0,
   aeA: true, iso: 200, shutter: 10000, tint: 0, zoom: 100, hdr: false, poi: null,
-  msg: 'Je reviens bientôt', multi: true, wst: 0, prof: 0, lens: 1, front: false, mirror: false, turn: 0,
+  msg: 'Je reviens bientôt', multi: true, langs: null, wst: 0, prof: 0, lens: 1, front: false, mirror: false, turn: 0,
 };
 // Stops offered by the stepped sliders, cut to what the iPhone allows.
 const ISO_STOPS = [20, 25, 32, 40, 50, 64, 80, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 2000, 2500, 3200, 4000, 5000, 6400, 8000, 10000, 12800];
@@ -664,23 +721,68 @@ const SHUTTER_DEN = [8000, 6400, 5000, 4000, 3200, 2500, 2000, 1600, 1250, 1000,
 const RESETS = {
   exp: ['aeA', 'ev', 'iso', 'shutter'], focus: ['afA', 'focus'], wb: ['wbA', 'wb', 'tint'], zoom: ['zoom'], poi: ['poi'],
   stab: ['stab'], hdr: ['hdr'], torch: ['torch'], res: ['res'], fps: ['fps'], codec: ['codec'], rate: ['rate'], power: ['power'],
-  msg: ['msg'], multi: ['multi'], wst: ['wst'],
+  msg: ['msg'], multi: ['multi'], langs: ['langs'], wst: ['wst'],
 };
-const GROUPS = { light: ['exp'], sharp: ['focus', 'poi'], color: ['wb'], frame: ['zoom', 'stab', 'hdr', 'torch'], stream: ['res', 'fps', 'codec', 'rate', 'power'], wait: ['msg', 'multi', 'wst'] };
+const GROUPS = { light: ['exp'], sharp: ['focus', 'poi'], color: ['wb'], frame: ['zoom', 'stab', 'hdr', 'torch'], stream: ['res', 'fps', 'codec', 'rate', 'power'], wait: ['msg', 'multi', 'langs', 'wst'] };
 // The « Auto » half of each Auto / Manuel switch: [setting, value meaning Auto].
 const AUTOS = { exp: ['aeA', true], focus: ['afA', true], wb: ['wbA', true] };
 // Settings that make the iPhone camera work again (sent at once).
 const SENT = ['res', 'fps', 'rate', 'codec', 'stab', 'power', 'aeA', 'ev', 'iso', 'shutter', 'afA', 'focus', 'wbA', 'wb', 'tint', 'zoom', 'hdr', 'poi', 'torch'];
 // Slider value shown for a setting key.
 const VK = { wb: 'wbK', focus: 'focusP' };
-// [lang, text], 2.6 s each (same list and order in apps/desktop-vcam/src/feed.cpp).
-const LANGS = [
-  ['fr', 'Je reviens bientôt'], ['en', 'Be right back'], ['es', 'Vuelvo enseguida'], ['de', 'Bin gleich zurück'],
-  ['it', 'Torno subito'], ['pt', 'Volto já'], ['nl', 'Ben zo terug'], ['pl', 'Zaraz wracam'],
-  ['tr', 'Hemen dönüyorum'], ['ru', 'Скоро вернусь'], ['uk', 'Скоро повернуся'], ['ar', 'سأعود قريبًا'],
-  ['hi', 'थोड़ी देर में वापस'], ['zh', '马上回来'], ['ja', 'すぐ戻ります'], ['ko', '곧 돌아올게요'],
-  ['vi', 'Quay lại ngay'], ['id', 'Segera kembali'],
-];
+// Languages of the waiting message (ADR-0033): the 18 with words written by
+// hand for the default message (same list and order as kLangs in
+// apps/desktop-vcam/src/feed.cpp), then every other language Mozilla
+// translates into. 2.6 s each.
+const BUILTIN = {
+  fr: 'Je reviens bientôt', en: 'Be right back', es: 'Vuelvo enseguida', de: 'Bin gleich zurück',
+  it: 'Torno subito', pt: 'Volto já', nl: 'Ben zo terug', pl: 'Zaraz wracam',
+  tr: 'Hemen dönüyorum', ru: 'Скоро вернусь', uk: 'Скоро повернуся', ar: 'سأعود قريبًا',
+  hi: 'थोड़ी देर में वापस', zh: '马上回来', ja: 'すぐ戻ります', ko: '곧 돌아올게요',
+  vi: 'Quay lại ngay', id: 'Segera kembali',
+};
+const DEFAULT_LANGS = Object.keys(BUILTIN);
+const LANG_NAMES = {
+  fr: 'Français', en: 'Anglais', es: 'Espagnol', de: 'Allemand', it: 'Italien', pt: 'Portugais', nl: 'Néerlandais', pl: 'Polonais',
+  tr: 'Turc', ru: 'Russe', uk: 'Ukrainien', ar: 'Arabe', hi: 'Hindi', zh: 'Chinois simplifié', ja: 'Japonais', ko: 'Coréen',
+  vi: 'Vietnamien', id: 'Indonésien', af: 'Afrikaans', sq: 'Albanais', az: 'Azéri', eu: 'Basque', bn: 'Bengali', be: 'Biélorusse',
+  bs: 'Bosnien', bg: 'Bulgare', ca: 'Catalan', 'zh-Hant': 'Chinois traditionnel', hr: 'Croate', da: 'Danois', et: 'Estonien',
+  fi: 'Finnois', gl: 'Galicien', el: 'Grec', gu: 'Gujarati', he: 'Hébreu', hu: 'Hongrois', is: 'Islandais', kn: 'Kannada',
+  lv: 'Letton', lt: 'Lituanien', ms: 'Malais', ml: 'Malayalam', mr: 'Marathi', nb: 'Norvégien', ug: 'Ouïghour', ur: 'Ourdou',
+  fa: 'Persan', ro: 'Roumain', sr: 'Serbe', sk: 'Slovaque', sl: 'Slovène', sv: 'Suédois', tl: 'Tagalog', ta: 'Tamoul',
+  cs: 'Tchèque', te: 'Télougou', th: 'Thaï',
+};
+const ALL_LANGS = Object.keys(LANG_NAMES);
+// Right to left, and joined letters shown whole instead of letter by letter.
+const RTL = new Set(['ar', 'fa', 'ur', 'ug', 'he']);
+const WHOLE = new Set(['ar', 'fa', 'ur', 'ug', 'he', 'hi', 'mr', 'bn', 'gu', 'ta', 'te', 'kn', 'ml', 'th']);
+const LOCALE = { fr: 'fr-fr', en: 'en-us', es: 'es-es', de: 'de-de', it: 'it-it', pt: 'pt-pt', nl: 'nl-nl', pl: 'pl-pl', tr: 'tr-tr',
+  ru: 'ru-ru', uk: 'uk-ua', ar: 'ar-sa', hi: 'hi-in', zh: 'zh-cn', 'zh-Hant': 'zh-tw', ja: 'ja-jp', ko: 'ko-kr', vi: 'vi-vn', id: 'id-id' };
+const chosenLangs = (c) => (Array.isArray(c.langs) && c.langs.length ? c.langs : DEFAULT_LANGS).filter((l) => LANG_NAMES[l]);
+// The lines that roll: [lang, text] for each chosen language that has its words.
+function waitLines(c) {
+  const own = c.msg !== CAM_DEFAULTS.msg;
+  const tr = c.tr && c.tr.msg === c.msg ? c.tr.t : {};
+  return chosenLangs(c).map((l) => [l, own ? (l === 'fr' ? c.msg : tr[l]) : BUILTIN[l] || tr[l]]).filter(([, t]) => t);
+}
+// Languages still to translate for the message in use.
+function untranslated(c) {
+  const own = c.msg !== CAM_DEFAULTS.msg;
+  const tr = c.tr && c.tr.msg === c.msg ? c.tr.t : {};
+  return chosenLangs(c).filter((l) => l !== 'fr' && !(own ? tr[l] : BUILTIN[l] || tr[l]));
+}
+// One set of keyframes per number of languages: each one shows for 2.6 s of the round.
+function rollKeyframes(n) {
+  const id = 'nw-ch-' + n;
+  if (!document.getElementById(id)) {
+    const T = n * 2.6, pc = (sec) => (sec / T * 100).toFixed(3) + '%';
+    const st = document.createElement('style');
+    st.id = id;
+    st.textContent = `@keyframes ${id} { 0% { opacity: 0; filter: blur(1.9cqh); transform: translateY(1.9cqh); } ${pc(0.936)}, ${pc(2.106)} { opacity: 1; filter: blur(0); transform: none; } ${pc(2.527)}, 100% { opacity: 0; filter: blur(1.9cqh); transform: translateY(-1.1cqh); } }`;
+    document.head.appendChild(st);
+  }
+  return id;
+}
 
 // Video from the iPhone (spec `Cam - Flux v1`): Annex-B packets over a local
 // WebSocket, decoded by WebCodecs on the graphics card. Only the newest frame
@@ -725,7 +827,7 @@ const Video = {
     ws.binaryType = 'arraybuffer';
     ws.onmessage = (e) => this.packet(new Uint8Array(e.data));
     // The app restarted or the socket dropped: come back quietly.
-    ws.onclose = () => setTimeout(() => { if (gen === this.gen && this.canvas) this.connect(url, gen); }, 800);
+    ws.onclose = () => setTimeout(() => { if (gen === this.gen && this.ws === ws) this.connect(url, gen); }, 800);
     this.ws = ws;
   },
   stop() {
@@ -740,6 +842,10 @@ const Video = {
   },
   key() {
     if (this.ws && this.ws.readyState === 1) this.ws.send('key');
+  },
+  // Off the page (effects for the webcam): decoding goes on, nothing on screen.
+  detach() {
+    this.canvas = null;
   },
   close() {
     if (this.pending) this.pending.close();
@@ -768,7 +874,9 @@ const Video = {
         if (this.pending) this.pending.close();
         this.pending = frame;
         this.pendingAt = now;
-        if (!this.raf) this.raf = requestAnimationFrame(() => this.paint());
+        // Out of sight (effects for the webcam): no screen refresh to wait for.
+        if (document.hidden || !this.canvas) this.paint();
+        else if (!this.raf) this.raf = requestAnimationFrame(() => this.paint());
       },
       error: (e) => {
         console.warn('decoder', e);
@@ -802,25 +910,36 @@ const Video = {
       f = fixed;
     }
     const c = this.canvas;
+    const dpr = window.devicePixelRatio || 1;
+    const box = c ? c.getBoundingClientRect() : { width: 0, height: 0 };
+    // With effects, the picture is drawn by them first (fx.js), once.
+    let src = f, sw = f.displayWidth, sh = f.displayHeight;
+    if (Effects.active()) {
+      try {
+        src = Effects.render(f, { w: box.width * dpr });
+        sw = src.width;
+        sh = src.height;
+      } catch (e) {
+        console.warn('effects', e);
+      }
+    }
     if (c) {
       // Drawn at the size shown on screen, not at the 4K of the stream.
-      const box = c.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      const scale = Math.min(1, (box.width * dpr) / f.displayWidth, (box.height * dpr) / f.displayHeight) || 1;
-      const w = Math.max(2, Math.round(f.displayWidth * scale)), h = Math.max(2, Math.round(f.displayHeight * scale));
+      const scale = Math.min(1, (box.width * dpr) / sw, (box.height * dpr) / sh) || 1;
+      const w = Math.max(2, Math.round(sw * scale)), h = Math.max(2, Math.round(sh * scale));
       if (c.width !== w || c.height !== h) {
         c.width = w;
         c.height = h;
       }
-      this.ctx.drawImage(f, 0, 0, w, h);
-      this.lastFrame = performance.now();
-      this.draw_ms[0] += this.lastFrame - this.pendingAt;
-      this.draw_ms[1]++;
+      this.ctx.drawImage(src, 0, 0, w, h);
     }
+    this.lastFrame = performance.now();
+    this.draw_ms[0] += this.lastFrame - this.pendingAt;
+    this.draw_ms[1]++;
     f.close();
   },
   packet(u8) {
-    if (!this.canvas || u8.length < 18) return;
+    if (!this.ws || u8.length < 18) return;
     const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
     const codec = u8[0], key = u8[1] === 1;
     const pts = Number(dv.getBigInt64(2, true));
@@ -865,20 +984,18 @@ const LENS_L = ['0,5×', '1×', '2×', '5×'];
 // The waiting screen (ADR-0018): what Discord and OBS see while paused. The
 // Windows webcam draws the same design itself (apps/desktop-vcam).
 function waitScreen(c, sub) {
-  // The default message has its own words; Evan's own message rolls once
-  // translated (ADR-0033), a missing language keeping his text.
-  const own = c.msg !== CAM_DEFAULTS.msg;
-  const tr = own && c.tr && c.tr.msg === c.msg ? c.tr.t : null;
-  const cycle = c.multi && (!own || !!tr);
-  const list = own ? LANGS.map(([l]) => [l, (tr && tr[l]) || c.msg]) : LANGS;
-  // The languages follow the Windows clock (2.6 s each, 46.8 s a round, as in
-  // app.css), like the webcam (feed.cpp): Discord shows the same one.
-  const phase = (Date.now() % (LANGS.length * 2600)) / 1000;
-  // Letter by letter, 30 ms apart; Arabic and Hindi stay whole (joined letters).
+  // The chosen languages roll once they have their words (ADR-0033).
+  const list = waitLines(c);
+  const cycle = c.multi && list.length > 1;
+  // The languages follow the Windows clock (2.6 s each), like the webcam
+  // (feed.cpp): Discord shows the same one.
+  const phase = (Date.now() % (list.length * 2600)) / 1000;
+  const anim = rollKeyframes(list.length);
+  // Letter by letter, 30 ms apart; joined letters (Arabic, Hindi…) stay whole.
   const line = ([lang, t], i) => {
-    const parts = lang === 'ar' || lang === 'hi' ? [t] : Array.from(t);
-    return `<div class="wl" lang="${lang}"${lang === 'ar' ? ' dir="rtl"' : ''}>${parts.map((ch, j) =>
-      `<span style="animation-delay:${(i * 2.6 + j * 0.03 - phase).toFixed(3)}s">${ch === ' ' ? '&nbsp;' : esc(ch)}</span>`).join('')}</div>`;
+    const parts = WHOLE.has(lang) ? [t] : Array.from(t);
+    return `<div class="wl" lang="${lang}"${RTL.has(lang) ? ' dir="rtl"' : ''}>${parts.map((ch, j) =>
+      `<span style="animation-name:${anim};animation-duration:${(list.length * 2.6).toFixed(1)}s;animation-delay:${(i * 2.6 + j * 0.03 - phase).toFixed(3)}s">${ch === ' ' ? '&nbsp;' : esc(ch)}</span>`).join('')}</div>`;
   };
   const text = cycle
     ? `<div class="wmsg" aria-label="${esc(c.msg)}">${list.map(line).join('')}</div>`
@@ -927,11 +1044,11 @@ const Translator = {
     const b = await invoke('translate_read', { path });
     return b instanceof ArrayBuffer ? b : new Uint8Array(b).buffer;
   },
-  // French text → { lang: text } for LANGS; a language without a model is left out.
-  async run(text, step) {
-    const plan = await invoke('translate_prepare', { langs: LANGS.map(([l]) => l) });
+  // French text → { lang: text } for `langs`; a language without a model is left out.
+  async run(text, langs, step) {
+    const plan = await invoke('translate_prepare', { langs });
     if (!plan || !plan.pairs['fr-en']) throw new Error('pas de modèle français → anglais');
-    step('Démarrage du traducteur…');
+    step({ start: true });
     const wasm = await this.bytes(plan.wasm);
     await this.call({ type: 'start', wasm }, [wasm]);
     for (const [pair, files] of Object.entries(plan.pairs)) {
@@ -940,10 +1057,12 @@ const Translator = {
       await this.call({ type: 'load', pair, files: list }, list.map((f) => f.bytes));
     }
     const out = { fr: text };
-    for (const [l] of LANGS) {
+    let i = 0;
+    for (const l of langs) {
       const code = l === 'zh' ? 'zh-Hans' : l;
+      i++;
       if (l === 'fr' || (l !== 'en' && !plan.pairs['en-' + code])) continue;
-      step(`Traduction… ${Object.keys(out).length + 1} / ${LANGS.length}`);
+      step({ i, n: langs.length, lang: l });
       out[l] = await this.call({ type: 'translate', text, to: code });
     }
     return out;
@@ -959,6 +1078,8 @@ const Cam = {
     if (settings.cam && Object.keys(settings.cam).length && !('power' in settings.cam)) Object.assign(this.cs, { power: 'max', prof: CUSTOM });
     // The point is chosen on the live picture, never kept from one time to the next.
     this.cs.poi = null;
+    this.cs.fx = Object.assign({}, FX_DEFAULTS, this.cs.fx || {});
+    Effects.set(this.cs.fx);
     // The iPhone's own lens wins over the one saved here.
     const ph = S && S.cam.phone;
     if (ph) Object.assign(this.cs, { front: ph.front, lens: ph.lens });
@@ -995,7 +1116,10 @@ const Cam = {
     // Hidden window (tray, minimized): no decoding for nobody to see.
     this.onVis = () => {
       this.pushPreview();
-      document.hidden ? Video.stop() : Video.start($('#c-scene'));
+      // Hidden with effects in Discord: still drawn, for the webcam.
+      if (!document.hidden) Video.start($('#c-scene'));
+      else if (Effects.active() && S && S.vcam && S.vcam.in_use) Video.detach();
+      else Video.stop();
     };
     document.addEventListener('visibilitychange', this.onVis);
     // Edge to edge: the top bar, the dock and the chips fade out when the
@@ -1030,7 +1154,9 @@ const Cam = {
     // The panel lives in the picture; the next visit starts with it closed.
     this.panel = '';
     invoke('cam_preview', { on: false });
-    Video.stop();
+    // Effects shown in Discord: the window keeps drawing them, out of sight.
+    if (Effects.active() && S && S.vcam && S.vcam.in_use) Video.detach();
+    else Video.stop();
   },
   connected: () => !!(S && S.connected),
   // The paused preview is on unless Evan hid it (dock or ×); hidden, the
@@ -1060,7 +1186,11 @@ const Cam = {
   save() {
     clearTimeout(this.saveT);
     this.saveT = setTimeout(() => {
-      settings.cam = this.cs;
+      // The lines as they roll here, for the Windows webcam (feed.cpp).
+      const c = this.cs;
+      c.lines = c.multi ? waitLines(c).map(([l, t]) => [LOCALE[l] || l, WHOLE.has(l), t]) : [];
+      c.linesFor = c.msg;
+      settings.cam = c;
       saveSettings();
     }, 400);
   },
@@ -1103,6 +1233,7 @@ const Cam = {
       <button class="db" type="button" aria-label="Changer de caméra"${tipAttr('flipcam')} data-act="flipcam">${I.flip}</button>
       ${live ? '' : `<button class="db${this.peekOn() ? ' on' : ''}" type="button" aria-label="${this.peekOn() ? 'Cacher' : 'Montrer'} l’aperçu" aria-pressed="${this.peekOn()}"${tipAttr('peek')} data-act="peek">${this.peekOn() ? I.eye : I.eyeOff}</button>`}
       <span class="sep"></span>
+      <button class="db fxb${this.panel === 'fx' ? ' on' : ''}${Effects.active() ? ' lit' : ''}" type="button" aria-label="Effets"${tipAttr('fx')} data-act="panel" data-v="fx">${I.wand}</button>
       <button class="db${this.panel === 'info' ? ' on' : ''}" type="button" aria-label="Infos du flux"${tipAttr('info')} data-act="panel" data-v="info">${I.info}</button>
       <button class="db${this.panel === 'set' ? ' on' : ''}" type="button" aria-label="Réglages de la caméra"${tipAttr('set')} data-act="panel" data-v="set">${I.sliders}</button>
       <button class="db" type="button" aria-label="${this.full ? 'Quitter le plein écran' : 'Plein écran'}"${tipAttr('full')} data-act="full">${this.full ? I.shrink : I.expand}</button>`;
@@ -1149,7 +1280,7 @@ const Cam = {
       }
       this.dockKey = '';
     }
-    const dockKey = [this.connected(), this.isLive(), this.cs.front, this.cs.lens, this.cs.mirror, this.cs.turn, this.peekOn(), this.full].join('|');
+    const dockKey = [this.connected(), this.isLive(), this.cs.front, this.cs.lens, this.cs.mirror, this.cs.turn, this.peekOn(), this.full, Effects.active()].join('|');
     if (dockKey !== this.dockKey) {
       this.dockKey = dockKey;
       this.paintDock();
@@ -1234,9 +1365,14 @@ const Cam = {
     // The panels sit on the live picture (spec `Cam - Reglages avances`, E1).
     $('#c-pv').classList.toggle('adj-on', !!this.panel);
     $('#c-adj').innerHTML = '';
+    clearInterval(this.thumbT);
     if (this.panel === 'set') {
       this.paintAdj();
       this.placePoint();
+    } else if (this.panel === 'fx') {
+      this.paintFx();
+      // The filter previews follow the picture.
+      this.thumbT = setInterval(() => this.fxThumbs(), 1500);
     } else if (this.panel === 'info') {
       this.paintInfo(true);
     }
@@ -1349,7 +1485,10 @@ const Cam = {
       + row('rate', 'Débit', opts('rate', RATE.map((v, i) => [i, i ? String(v) : 'Auto', i ? 'Mb/s' : 'Conseillé'])));
     const tr = this.trState();
     const wait = row('msg', 'Message', `<input class="txt" type="text" maxlength="60" value="${esc(c.msg)}" data-change="msg" aria-label="Message de pause">`)
-      + row('multi', 'Toutes les langues', tog('multi', 'Oui', 'Non') + (c.multi && tr ? `<div class="hint${tr.bad ? ' warn' : ''}" id="c-tr">${esc(tr.text)}</div>` : ''))
+      + row('multi', 'Plusieurs langues', tog('multi', 'Oui', 'Non') + (c.multi && tr ? `<div class="hint${tr.bad ? ' warn' : ''}" id="c-tr">${esc(tr.text)}</div>` : ''))
+      + (c.multi ? row('langs', 'Langues', `<div class="hint">${chosenLangs(c).length} choisies sur ${ALL_LANGS.length}. Environ 25 Mo à télécharger par nouvelle langue, une seule fois.</div>
+          <div class="lchoice">${ALL_LANGS.map((l) => `<button type="button" class="lc${chosenLangs(c).includes(l) ? ' on' : ''}" data-act="lang" data-v="${l}" aria-pressed="${chosenLangs(c).includes(l)}" ${l === 'fr' ? 'disabled' : ''}>${esc(LANG_NAMES[l])}</button>`).join('')}</div>
+          <div class="row" style="gap:6px"><button type="button" class="lc" data-act="langs" data-v="default">Les 18 de départ</button><button type="button" class="lc" data-act="langs" data-v="all">Toutes</button></div>`) : '')
       + row('wst', 'Style', opts('wst', [[0, 'Animé', 'L’enseigne bouge'], [1, 'Calme', 'Immobile']]))
       + `<div class="wprev">${waitScreen(c, '')}</div>`;
     const sections = [
@@ -1375,6 +1514,75 @@ const Cam = {
     body.scrollTop = scroll;
     body.addEventListener('scroll', () => this.spy(), { passive: true });
     this.spy();
+  },
+  // The effects panel (spec `Cam - Filtres et effets`): filters with a live
+  // preview each, masks, background, touch-ups.
+  paintFx() {
+    const el = $('#c-adj');
+    if (!el || this.panel !== 'fx') return;
+    const f = this.cs.fx;
+    const prev = $('.abody', el);
+    const scroll = prev ? prev.scrollTop : 0;
+    const sec = (id, title, icon, tipKey, body) => `<section class="ag" id="cat-${id}" data-cat="${id}">
+        <div class="agh"><span class="gi">${I[icon]}</span><h3>${title}</h3>${tip(tipKey)}</div>${body}</section>`;
+    const range = (k, label, ends) => `<div class="sl"><div class="r"><span>${esc(label)}${tip('fx_' + k)}</span><span class="val" id="fv-${k}">${f[k]} %</span></div>
+        <input type="range" min="0" max="100" step="1" value="${f[k]}" data-input="fxslide" data-change="fxslid" data-k="${k}" style="--p:${f[k]}%" aria-label="${esc(label)}">
+        <div class="ends"><span>${esc(ends[0])}</span><span>${esc(ends[1])}</span></div></div>`;
+    const MASK_ICON = { none: '🚫', lunettes: '🕶️', chien: '🐶', chat: '🐱', couronne: '👑', moustache: '🥸', coeurs: '😍' };
+    const BG_ICON = { none: '🚫', blur: '💧', strong: '🌫️', studio: '🎙️', sunset: '🌅', ocean: '🌊', neonbg: '🌆', image: '🖼️' };
+    const status = Effects.error ? `<div class="hint warn">${esc(Effects.error)}</div>`
+      : (Effects.needsFace() || f.bg !== 'none') && !Effects.face ? '<div class="hint">Préparation de la détection du visage…</div>' : '';
+    const webcam = S && S.vcam && S.vcam.in_use
+      ? (S.vcam.fx_size ? `<div class="upd ok">${I.check}<span>Discord, Teams ou OBS voit ces effets.</span>${tip('fx_webcam')}</div>` : `<div class="upd">${I.info}<span>Cette webcam ne reçoit pas encore les effets : installe la nouvelle webcam (Réglages).</span></div>`)
+      : '';
+    el.innerHTML = `
+      <div class="ahd"><div class="aht">${I.wand}Effets</div>
+        <button class="ib" type="button" aria-label="Fermer les effets" data-act="close"${tipAttr('adjclose')}>${I.close}</button></div>
+      <nav class="anav" aria-label="Catégories">${[['fxfilter', 'Filtres', 'palette'], ['fxmask', 'Masques', 'smile'], ['fxbg', 'Fond', 'layers'], ['fxtouch', 'Retouche', 'spark']]
+        .map(([id, n, ic]) => `<button type="button" data-act="jump" data-v="${id}">${I[ic]}<span>${n}</span></button>`).join('')}</nav>
+      <div class="abody">
+        ${webcam}${status}
+        ${sec('fxfilter', 'Filtres', 'palette', 'fx_filter', `<div class="fgrid">${FX_FILTERS.map(([id, n]) => `<button type="button" class="fcard${f.filter === id ? ' on' : ''}" data-act="fx" data-k="filter" data-v="${id}" aria-pressed="${f.filter === id}"><canvas width="160" height="90" data-thumb="${id}"></canvas><b>${esc(n)}</b></button>`).join('')}</div>
+          ${f.filter !== 'none' ? range('amount', 'Force du filtre', ['Léger', 'Complet']) : ''}`)}
+        ${sec('fxmask', 'Masques', 'smile', 'fx_mask', `<div class="egrid">${FX_MASKS.map(([id, n]) => `<button type="button" class="ecard${f.mask === id ? ' on' : ''}" data-act="fx" data-k="mask" data-v="${id}" aria-pressed="${f.mask === id}"><i aria-hidden="true">${MASK_ICON[id]}</i><b>${esc(n)}</b></button>`).join('')}</div>`)}
+        ${sec('fxbg', 'Fond', 'layers', 'fx_bg', `<div class="egrid">${FX_BG.map(([id, n]) => `<button type="button" class="ecard${f.bg === id ? ' on' : ''}" data-act="${id === 'image' ? 'fxpick' : 'fx'}" data-k="bg" data-v="${id}" aria-pressed="${f.bg === id}"><i aria-hidden="true">${BG_ICON[id]}</i><b>${esc(n)}</b></button>`).join('')}</div>
+          <input type="file" accept="image/*" id="fx-file" hidden data-change="fxfile">`)}
+        ${sec('fxtouch', 'Retouche', 'spark', 'fx_smooth', range('smooth', 'Peau lisse', ['Naturel', 'Très lisse']) + range('light', 'Lumière douce', ['Aucune', 'Forte']))}
+        <button type="button" class="allr" data-act="fxoff"${tipAttr('fx_off')}>${I.refresh}Tout enlever</button>
+      </div>`;
+    const body = $('.abody', el);
+    body.scrollTop = scroll;
+    body.addEventListener('scroll', () => this.spy(), { passive: true });
+    this.spy();
+    this.fxThumbs();
+  },
+  // Each filter shown on the current picture.
+  fxThumbs() {
+    const src = $('#c-scene');
+    if (!src || !src.width || this.panel !== 'fx') return;
+    for (const cv of document.querySelectorAll('#c-adj canvas[data-thumb]')) {
+      const f = FX_FILTERS.find(([id]) => id === cv.dataset.thumb);
+      const g = cv.getContext('2d');
+      const s = Math.max(cv.width / src.width, cv.height / src.height);
+      g.filter = f[2];
+      g.drawImage(src, (cv.width - src.width * s) / 2, (cv.height - src.height * s) / 2, src.width * s, src.height * s);
+      g.filter = 'none';
+      if (f[3]) {
+        g.globalCompositeOperation = f[3][1];
+        g.globalAlpha = f[3][2];
+        g.fillStyle = f[3][0];
+        g.fillRect(0, 0, cv.width, cv.height);
+        g.globalCompositeOperation = 'source-over';
+        g.globalAlpha = 1;
+      }
+    }
+  },
+  fxChanged() {
+    Effects.set(this.cs.fx);
+    this.dockKey = '';
+    this.paintDock();
+    this.paintFx();
+    this.save();
   },
   // The category on screen is lit in the menu.
   spy() {
@@ -1442,27 +1650,37 @@ const Cam = {
     this.save();
   },
   resetKeys(keys) {
+    const before = chosenLangs(this.cs);
     for (const k of keys) for (const f of RESETS[k] || []) this.cs[f] = CAM_DEFAULTS[f];
+    const removed = before.filter((l) => !chosenLangs(this.cs).includes(l));
+    if (removed.length) this.forgetLangs(removed);
     if (keys.includes('poi')) this.placePoint();
     this.matchProfile();
     this.changed(true, keys.some((k) => GROUPS.wait.includes(k)));
     if (keys.includes('msg')) this.translate();
   },
-  // The waiting message in 18 languages (ADR-0033): translated once on this
+  // The waiting message in the chosen languages (ADR-0033): translated once on this
   // PC, kept with the settings. `tr` = { msg, t: { lang: text } }.
   trState() {
     const c = this.cs;
-    if (c.msg === CAM_DEFAULTS.msg) return null;
     if (this.trBusy) return { text: this.trBusy };
-    if (c.tr && c.tr.msg === c.msg) {
-      const n = LANGS.filter(([l]) => c.tr.t[l]).length;
-      return { text: n >= LANGS.length ? 'Traduit dans les 18 langues.' : `Traduit dans ${n} langues sur 18 ; les autres gardent ton texte.` };
-    }
+    if (c.msg === CAM_DEFAULTS.msg && !untranslated(c).length) return null;
     if (this.trErr) return { text: this.trErr, bad: true };
-    return { text: 'Pas encore traduit.' };
+    const n = waitLines(c).length, all = chosenLangs(c).length;
+    if (!untranslated(c).length) return { text: `Prêt dans ${n} langues.` };
+    return { text: n > 1 ? `Prêt dans ${n} langues sur ${all} ; les autres arrivent.` : 'Pas encore traduit.' };
   },
-  // Shows where the translation is, without rebuilding the panel.
-  trStep(text) {
+  // Shows where the translation is: under the setting and in the corner card.
+  trStep(st) {
+    let text;
+    if (typeof st === 'string') text = st;
+    else if (st.start) {
+      text = 'Démarrage du traducteur…';
+      Popup.show({ icon: 'globe', title: 'Traduction du message', text, pct: -1 });
+    } else {
+      text = `Traduction en ${LANG_NAMES[st.lang]}… ${st.i} / ${st.n}`;
+      Popup.show({ icon: 'globe', title: 'Traduction du message', text: `${LANG_NAMES[st.lang]} · ${st.i} sur ${st.n}`, pct: (st.i / st.n) * 100 });
+    }
     this.trBusy = text;
     const el = $('#c-tr');
     if (el) el.textContent = text;
@@ -1470,26 +1688,50 @@ const Cam = {
   // Download progress of the engine and models, from Rust (first time only).
   trProgress([done, total]) {
     if (!this.trBusy || !total || done >= total) return;
-    this.trStep(`Téléchargement du traducteur, une seule fois : ${Math.round(done / 1e6)} / ${Math.round(total / 1e6)} Mo`);
+    const mo = `${Math.round(done / 1e6)} / ${Math.round(total / 1e6)} Mo`;
+    Popup.show({ icon: 'down', title: 'Installation des langues', text: `${langList(this.trNeed || [])} · ${mo}`, pct: (done / total) * 100 });
+    this.trBusy = `Installation, une seule fois : ${mo}`;
+    const el = $('#c-tr');
+    if (el) el.textContent = this.trBusy;
+  },
+  // Languages unticked: their models leave the disk (a moment later, so
+  // several clicks make one clean-up).
+  forgetLangs(removed) {
+    this.trGone = (this.trGone || []).concat(removed);
+    clearTimeout(this.forgetT);
+    this.forgetT = setTimeout(async () => {
+      const gone = this.trGone;
+      this.trGone = [];
+      try {
+        const freed = await invoke('translate_forget', { langs: chosenLangs(this.cs) });
+        if (freed > 0) Popup.show({ icon: 'trash', title: 'Espace libéré', text: `${langList(gone)} retiré${gone.length > 1 ? 's' : ''} · ${Math.max(1, Math.round(freed / 1e6))} Mo libérés`, done: true });
+      } catch (e) { /* nothing freed */ }
+    }, 1200);
   },
   async translate() {
     const c = this.cs;
-    if (this.trBusy || !c.multi || c.msg === CAM_DEFAULTS.msg || (c.tr && c.tr.msg === c.msg)) return;
+    const need = untranslated(c);
+    if (this.trBusy || !c.multi || !need.length) return;
     const msg = c.msg;
     this.trErr = '';
+    this.trNeed = need;
     this.trBusy = 'Préparation de la traduction…';
+    Popup.show({ icon: 'globe', title: 'Préparation des langues', text: langList(need), pct: -1 });
     if (this.panel === 'set') this.paintAdj();
     try {
-      const t = await Translator.run(msg, (s) => this.trStep(s));
-      if (this.cs.msg === msg) this.cs.tr = { msg, t };
+      const t = await Translator.run(msg, need, (s) => this.trStep(s));
+      // Added to what this message already had (more languages chosen later).
+      if (this.cs.msg === msg) this.cs.tr = { msg, t: Object.assign({}, this.cs.tr && this.cs.tr.msg === msg ? this.cs.tr.t : {}, t) };
+      Popup.show({ title: 'Message traduit', text: `${waitLines(this.cs).length} langues prêtes`, done: true });
     } catch (e) {
       this.trErr = 'Traduction impossible : ' + (e && e.message ? e.message : String(e));
+      Popup.show({ title: 'Traduction impossible', text: e && e.message ? e.message : String(e), bad: true });
     }
     this.trBusy = '';
     if (page === Cam) this.changed(false);
     else this.save();
-    // Typed again meanwhile: that one too.
-    if (this.cs.msg !== msg) this.translate();
+    // Typed again or more languages meanwhile: those too.
+    if (!this.trErr && untranslated(this.cs).length) this.translate();
   },
   acts: {
     pause: () => {
@@ -1593,6 +1835,66 @@ const Cam = {
       Cam.paintAdj();
     },
     close: () => Cam.openPanel(Cam.panel),
+    fx: (el) => {
+      Cam.cs.fx[el.dataset.k] = el.dataset.v;
+      Cam.fxChanged();
+    },
+    fxslide: (el) => {
+      Cam.cs.fx[el.dataset.k] = Number(el.value);
+      el.style.setProperty('--p', el.value + '%');
+      const v = $('#fv-' + el.dataset.k);
+      if (v) v.textContent = el.value + ' %';
+      Effects.set(Cam.cs.fx);
+    },
+    fxslid: () => Cam.fxChanged(),
+    fxoff: () => {
+      Cam.cs.fx = Object.assign({}, FX_DEFAULTS, { bgImg: Cam.cs.fx.bgImg });
+      Cam.fxChanged();
+    },
+    // « Ton image »: the one already chosen, or a file to pick.
+    fxpick: () => {
+      if (Cam.cs.fx.bgImg && Cam.cs.fx.bg !== 'image') {
+        Cam.cs.fx.bg = 'image';
+        return Cam.fxChanged();
+      }
+      $('#fx-file').click();
+    },
+    fxfile: (el) => {
+      const file = el.files && el.files[0];
+      if (!file) return;
+      const img = new Image();
+      img.onload = () => {
+        // Kept small in the settings: 1920 wide at most, JPEG.
+        const s = Math.min(1, 1920 / img.naturalWidth);
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.naturalWidth * s);
+        c.height = Math.round(img.naturalHeight * s);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        Object.assign(Cam.cs.fx, { bg: 'image', bgImg: c.toDataURL('image/jpeg', 0.85) });
+        URL.revokeObjectURL(img.src);
+        Cam.fxChanged();
+      };
+      img.src = URL.createObjectURL(file);
+    },
+    // A language of the waiting message, on or off; French is the message itself.
+    lang: (el) => {
+      const set = new Set(chosenLangs(Cam.cs));
+      const l = el.dataset.v;
+      const off = set.has(l);
+      off ? set.delete(l) : set.add(l);
+      Cam.cs.langs = ALL_LANGS.filter((x) => set.has(x));
+      Cam.changed(false);
+      if (off) Cam.forgetLangs([l]);
+      else Cam.translate();
+    },
+    langs: (el) => {
+      const before = chosenLangs(Cam.cs);
+      Cam.cs.langs = el.dataset.v === 'all' ? ALL_LANGS.slice() : null;
+      const removed = before.filter((l) => !chosenLangs(Cam.cs).includes(l));
+      Cam.changed(false);
+      if (removed.length) Cam.forgetLangs(removed);
+      Cam.translate();
+    },
     msg: (el) => {
       Cam.cs.msg = el.value.trim() || CAM_DEFAULTS.msg;
       Cam.changed(false);

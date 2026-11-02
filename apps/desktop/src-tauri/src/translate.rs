@@ -213,6 +213,35 @@ pub fn prepare(dir: &Path, langs: &[String], progress: impl Fn(u64, u64)) -> Res
     Ok(plan)
 }
 
+/// Deletes the models no chosen language needs any more (and leftovers of a
+/// stopped download); returns the bytes freed. Works from the lists already
+/// on disk: no network.
+pub fn forget(dir: &Path, langs: &[String]) -> Result<u64, String> {
+    let (Ok(models), Ok(engines)) = (records(dir, MODELS, false), records(dir, ENGINE, false)) else {
+        return Ok(0);
+    };
+    let (plan, _) = plan_from(dir, &models, &engines, langs)?;
+    let keep: BTreeSet<PathBuf> = plan
+        .pairs
+        .values()
+        .flatten()
+        .map(|f| PathBuf::from(&f.path))
+        .chain(std::iter::once(PathBuf::from(&plan.wasm)))
+        .collect();
+    let mut freed = 0;
+    for e in std::fs::read_dir(dir).map_err(|e| e.to_string())?.flatten() {
+        let p = e.path();
+        if p.extension().is_some_and(|x| x == "json") || keep.contains(&p) || !p.is_file() {
+            continue;
+        }
+        let len = e.metadata().map(|m| m.len()).unwrap_or(0);
+        if std::fs::remove_file(&p).is_ok() {
+            freed += len;
+        }
+    }
+    Ok(freed)
+}
+
 /// Only files of the translation folder can be read by the window.
 pub fn read(dir: &Path, path: &str) -> Result<Vec<u8>, String> {
     let p = PathBuf::from(path);
@@ -256,6 +285,31 @@ mod tests {
         ];
         let names: Vec<_> = pick(&r, "en", "de").into_iter().map(|r| r.name).collect();
         assert_eq!(names, vec!["model.ende.new", "vocab.ende"]);
+    }
+
+    #[test]
+    fn unchosen_languages_are_deleted() {
+        let dir = std::env::temp_dir().join("hyphn-translate-forget");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut r = vec![
+            rec("bergamot-translator", "", "4.0", "", "", ""),
+            rec("model.fren", "model", "3.0", "fr", "en", ""),
+            rec("model.ende", "model", "3.0", "en", "de", ""),
+            rec("model.enit", "model", "3.0", "en", "it", ""),
+        ];
+        for (i, x) in r.iter_mut().enumerate() {
+            x.decompressed_hash = format!("{i:0>64}");
+            std::fs::write(local(&dir, x), b"12345").unwrap();
+        }
+        let json = |d: &[Record]| serde_json::to_vec(&Records { data: d.to_vec() }).unwrap();
+        std::fs::write(dir.join(format!("{ENGINE}.json")), json(&r[..1])).unwrap();
+        std::fs::write(dir.join(format!("{MODELS}.json")), json(&r[1..])).unwrap();
+        std::fs::write(dir.join("x.part"), b"123").unwrap();
+        let langs: Vec<String> = ["fr", "en", "de"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(forget(&dir, &langs).unwrap(), 5 + 3);
+        assert!(!local(&dir, &r[3]).exists());
+        assert!(local(&dir, &r[0]).exists() && local(&dir, &r[1]).exists() && local(&dir, &r[2]).exists());
     }
 
     /// Real download from Mozilla (≈ 50 MB): `cargo test mozilla -- --ignored`.

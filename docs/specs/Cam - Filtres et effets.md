@@ -13,18 +13,20 @@ Des filtres simples d'abord (couleur, lumière, flou d'arrière-plan), puis des 
 - Effets qui demandent internet ou un compte.
 
 ## Parcours
-Maquette à faire : une rangée de vignettes sur l'image en direct, comme les réglages avancés ([[Cam - Reglages avances]]).
+Bouton « Effets » (baguette magique) dans la barre de la Cam : panneau à droite, comme les réglages ([[Cam - Reglages avances]]), avec Filtres (vignettes qui montrent l'image en direct avec le filtre), Masques, Fond, Retouche et « Tout enlever ». Un point vert sur le bouton quand un effet est actif. Codé direct (demande d'Evan, 2026-11-02), pas de maquette.
 
 ## Où calculer
 Sur la carte graphique du PC, juste après le décodage, avant la fenêtre et la webcam ([[ADR-0034 Ou appliquer les filtres de la Cam]]). L'iPhone ne fait que filmer et envoyer.
 
 ## Exigences (à valider)
-- **E1 — Filtres de base (v1)** : luminosité, contraste, saturation, chaleur, netteté, vignettage, noir et blanc, quelques looks prêts. Chacun réglable et remis à zéro.
-- **E2 — Fond (v1)** : flou d'arrière-plan et remplacement par une image, avec le détourage de la personne par un modèle sur la carte graphique du PC (modèle à choisir après recherche de l'existant).
-- **E3 — Visage (v2)** : masques, lunettes, chapeaux, déformations, qui suivent le visage. Points du visage trouvés par un modèle sur le PC, dans l'image reçue (avant ou arrière, même chose).
+- **E1 — Filtres** (fait) : 12 looks façon Instagram (Vif, Chaud, Froid, Noir et blanc, Vintage, Film, Pastel, Néon, Ciné, Doux, Dramatique) et leur force.
+- **E2 — Fond** (fait) : flou, très flou, 4 fonds dessinés par l'app, ou une image à soi ; détourage MediaPipe (selfie segmenter).
+- **E3 — Visage** (fait, v1) : masques Lunettes, Chien (la langue sort quand la bouche s'ouvre), Chat, Couronne, Moustache, Cœurs ; dessinés par l'app, accrochés aux points MediaPipe et tournés avec la tête. Déformations : plus tard.
+- **E3b — Retouche** (fait) : peau lisse (yeux et bouche gardés nets), lumière douce.
 - **E4 — Animations (v2)** : effets déclenchés par un bouton ou par une expression (sourire, bouche ouverte).
 - **E5 — Coût visible** : la latence ajoutée et les images/s s'affichent dans « Infos du flux » ; un effet trop lourd pour le profil choisi est signalé.
-- **E6** : carte graphique du PC seulement ([[RULES]], PC) ; rien de plus à faire pour l'iPhone.
+- **E6** : carte graphique du PC seulement ([[RULES]], PC) ; rien de plus à faire pour l'iPhone. Si MediaPipe n'a pas de carte graphique, il passe au processeur (plus lent).
+- **E7** : la webcam reçoit l'image avec les effets (fait, [[ADR-0034 Ou appliquer les filtres de la Cam]]) ; OBS pas encore.
 
 ## Cas limites
 - PC sans carte graphique assez forte : l'effet trop lourd est signalé (E5), jamais calculé sur le CPU en silence.

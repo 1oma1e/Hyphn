@@ -402,9 +402,10 @@ bool Feed::ServerIsHyphn(HANDLE pipe) {
 }
 
 void Feed::OnState(const BYTE* p, uint32_t len) {
-    // The app sends at most 60 characters, then optionally a 0 and the 18
-    // translations separated by 0 (ADR-0033); anything longer is not from it.
-    if (len < 4 || len > 4 + 8192) return;
+    // The app sends at most 60 characters, then optionally the lines that
+    // roll, each after a 0: locale, 0x1F, whole (1/0), 0x1F, text (ADR-0033).
+    // Anything longer is not from it.
+    if (len < 4 || len > 4 + 32768) return;
     WaitState s;
     s.app = true;
     s.live = p[0] != 0;
@@ -428,7 +429,12 @@ void Feed::OnState(const BYTE* p, uint32_t len) {
         }
     }
     s.message = parts.empty() ? std::wstring() : parts[0];
-    if (parts.size() == 1 + static_cast<size_t>(kLangCount)) s.texts.assign(parts.begin() + 1, parts.end());
+    for (size_t i = 1; i < parts.size() && s.lines.size() < 64; ++i) {
+        const std::wstring& e = parts[i];
+        const size_t a = e.find(L'\x1F'), b = a == std::wstring::npos ? a : e.find(L'\x1F', a + 1);
+        if (b == std::wstring::npos || b + 1 >= e.size()) continue;
+        s.lines.push_back({e.substr(0, a), e.substr(a + 1, b - a - 1) == L"1", e.substr(b + 1)});
+    }
     std::lock_guard<std::mutex> l(stateLock_);
     state_ = s;
 }
@@ -1083,8 +1089,9 @@ HRESULT Feed::DrawWait(const WaitState& st, bool /*videoExpected*/) {
         return l;
     };
 
-    const bool translated = st.texts.size() == static_cast<size_t>(kLangCount);
-    if (!(st.multi && (st.message == kLangs[0].text || translated))) {
+    const bool own = st.lines.size() >= 2;
+    const int lineCount = own ? static_cast<int>(st.lines.size()) : kLangCount;
+    if (!(st.multi && (st.message == kLangs[0].text || own))) {
         // A message of the user's own: still, wrapped if long.
         if (auto f = format(L"fr-fr")) {
             f->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
@@ -1102,17 +1109,18 @@ HRESULT Feed::DrawWait(const WaitState& st, bool /*videoExpected*/) {
         FILETIME ft;
         GetSystemTimePreciseAsFileTime(&ft);
         const uint64_t unix100ns = ((static_cast<uint64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime) - 116444736000000000ull;
-        const uint64_t cycle100ns = static_cast<uint64_t>(kLangCount * kLangSeconds * 1e7 + 0.5);
+        const uint64_t cycle100ns = static_cast<uint64_t>(lineCount * kLangSeconds * 1e7 + 0.5);
         const double tl = static_cast<double>(unix100ns % cycle100ns) / 1e7;
         const int cur = static_cast<int>(tl / kLangSeconds);
         const double ph = tl - cur * kLangSeconds;
         for (int back = 1; back >= 0; --back) {
-            const int li = ((cur - back) % kLangCount + kLangCount) % kLangCount;
-            const Lang& lang = kLangs[li];
-            // The user's own message once translated, else the built-in words.
-            const wchar_t* text = translated ? st.texts[li].c_str() : lang.text;
+            const int li = ((cur - back) % lineCount + lineCount) % lineCount;
+            // The lines from the app, else the built-in words.
+            const wchar_t* text = own ? st.lines[li].text.c_str() : kLangs[li].text;
+            const wchar_t* locale = own ? st.lines[li].locale.c_str() : kLangs[li].locale;
+            const bool whole = own ? st.lines[li].whole : kLangs[li].whole;
             const double local = ph + back * kLangSeconds;
-            auto f = format(lang.locale);
+            auto f = format(locale);
             if (!f) continue;
             const UINT32 n = static_cast<UINT32>(wcslen(text));
             if (!n) continue;
@@ -1121,7 +1129,7 @@ HRESULT Feed::DrawWait(const WaitState& st, bool /*videoExpected*/) {
             // Per letter: [start, length] in the text and its advance.
             std::vector<DWRITE_CLUSTER_METRICS> clusters(n);
             UINT32 count = 0;
-            if (lang.whole || FAILED(full->GetClusterMetrics(clusters.data(), n, &count))) {
+            if (whole || FAILED(full->GetClusterMetrics(clusters.data(), n, &count))) {
                 DWRITE_TEXT_METRICS m{};
                 full->GetMetrics(&m);
                 clusters.assign(1, DWRITE_CLUSTER_METRICS{});
