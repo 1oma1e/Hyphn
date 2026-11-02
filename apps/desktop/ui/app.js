@@ -632,9 +632,9 @@ const Video = {
       this.configure(codec, w, h);
     }
     if (this.waitKey && !key) return;
-    // A Wi-Fi burst of a few frames is fine (the graphics card catches up);
-    // a real backlog means old pictures: start again from a fresh keyframe.
-    if (this.dec.decodeQueueSize > 12) {
+    // A burst of a couple of frames is fine (the graphics card catches up);
+    // more means old pictures, seen late: start again from a fresh keyframe.
+    if (this.dec.decodeQueueSize > 3) {
       this.drops++;
       this.waitKey = true;
       return this.key();

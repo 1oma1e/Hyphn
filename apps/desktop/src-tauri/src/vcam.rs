@@ -45,7 +45,7 @@ pub mod kind {
 /// Longest payload a reader may send (its messages are tiny).
 const MAX_IN: usize = 4096;
 /// Frames waiting for one reader before it skips (and asks for a keyframe).
-const QUEUE: usize = 8;
+const QUEUE: usize = 3;
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 

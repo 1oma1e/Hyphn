@@ -415,6 +415,9 @@ final class FramePump: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private var encodedCodec: Codec = .unknown
     private var needKey = true
     private var sentBytes = 0
+    /// Size of the last keyframe: one keyframe alone must never count as a
+    /// backlog, or skipping would ask for another keyframe, again and again.
+    private var lastKeyBytes = 0
     private var _connection: PinnedConnection?
 
     var connection: PinnedConnection? {
@@ -468,7 +471,7 @@ final class FramePump: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         }
         guard let enc = encoder else { return }
         if !adapt(to: conn) {
-            // A real backlog (over half a second): skip this frame; the next
+            // A real backlog (~180 ms): skip this frame; the next
             // one is a keyframe so the PC picture is whole again.
             needKey = true
             return
@@ -488,10 +491,11 @@ final class FramePump: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private func adapt(to conn: PinnedConnection) -> Bool {
         let now = DispatchTime.now()
         let ms = { (t: DispatchTime) in Double(now.uptimeNanoseconds &- t.uptimeNanoseconds) / 1e6 }
-        // Bytes the current rate sends in 150 ms.
-        let budget = max(60_000, currentKbps * 1000 / 8 * 0.15)
+        // Bytes the current rate sends in 60 ms: waiting longer is a delay
+        // Evan sees (lips late on the voice). Over 3× (~180 ms), skip a frame.
+        let budget = max(60_000, currentKbps * 1000 / 8 * 0.06)
         let pending = Double(conn.pendingBytes)
-        if pending > budget * 4 {
+        if pending > max(budget * 3, Double(lock.withLock { lastKeyBytes }) * 1.5) {
             if ms(lastCut) > 500 { cut(0.7, now) }
             return false
         }
@@ -595,7 +599,10 @@ final class FramePump: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         }
         let pts = CMSampleBufferGetPresentationTimeStamp(sbuf)
         let us = Int64(CMTimeGetSeconds(pts) * 1_000_000)
-        lock.withLock { sentBytes += out.count }
+        lock.withLock {
+            sentBytes += out.count
+            if key { lastKeyBytes = out.count }
+        }
         conn.send(.videoFrame(VideoFrame(ptsUs: us, keyframe: key, codec: codec, width: UInt32(width), height: UInt32(height), data: out)))
     }
 

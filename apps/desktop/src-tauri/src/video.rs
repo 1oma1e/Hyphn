@@ -19,7 +19,7 @@ use crate::link::{keyed_sink, video_packet, Hub, WINDOW_SINK};
 
 /// Frames waiting for the window. Beyond that the window is behind: the frame
 /// is skipped and the iPhone sends a keyframe, rather than a growing delay.
-const QUEUE: usize = 6;
+const QUEUE: usize = 3;
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 

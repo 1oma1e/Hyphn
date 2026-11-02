@@ -414,7 +414,7 @@ impl Hub {
                 lens_count: c.lens_count,
             }),
             live: st.cam.live && s.is_some(),
-            effective: cam::effective(st.cam.request, thermal, st.cam.adapt),
+            effective: cam::effective(st.cam.request, thermal, st.cam.adapt, st.on_cable()),
             stats: st.stats.clone(),
             pair_seconds_left: st.pairing.seconds_left(Instant::now()),
             drop: st.drop.clone(),
@@ -1227,6 +1227,10 @@ impl Hub {
 }
 
 impl State {
+    fn on_cable(&self) -> bool {
+        self.session.as_ref().is_some_and(|s| matches!(s.via, Via::Cable(_)))
+    }
+
     fn thermal(&self) -> Thermal {
         match (&self.session, &self.last_status) {
             (Some(_), Some(s)) => s.thermal.unwrap_or(Thermal::Nominal),
@@ -1235,7 +1239,7 @@ impl State {
     }
 
     fn control(&self) -> proto::CamControl {
-        let eff = cam::effective(self.cam.request, self.thermal(), self.cam.adapt);
+        let eff = cam::effective(self.cam.request, self.thermal(), self.cam.adapt, self.on_cable());
         proto::CamControl {
             live: self.cam.live,
             height: eff.quality.height,
