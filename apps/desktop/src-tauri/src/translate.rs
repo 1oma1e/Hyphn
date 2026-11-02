@@ -16,6 +16,8 @@ const RECORDS: &str = "https://firefox.settings.services.mozilla.com/v1/buckets/
 const CDN: &str = "https://firefox-settings-attachments.cdn.mozilla.net/";
 const MODELS: &str = "translations-models-v2";
 const ENGINE: &str = "translations-wasm-v2";
+/// One download or clean-up at a time: two would touch the same files.
+static ONE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 /// The message is typed in French; other languages go through English.
 pub const SOURCE: &str = "fr";
 const PIVOT: &str = "en";
@@ -128,11 +130,21 @@ fn local(dir: &Path, r: &Record) -> PathBuf {
     dir.join(format!("{}-{}", &r.decompressed_hash[..16], r.name))
 }
 
-fn get(url: &str, limit: u64) -> Result<Vec<u8>, String> {
+/// A download; `on(bytes so far)` while it comes, for a smooth progress bar.
+fn get(url: &str, limit: u64, mut on: impl FnMut(u64)) -> Result<Vec<u8>, String> {
     let agent = ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(10)).timeout_read(Duration::from_secs(60)).build();
     let resp = agent.get(url).call().map_err(|e| format!("téléchargement impossible ({e})"))?;
     let mut out = Vec::new();
-    resp.into_reader().take(limit).read_to_end(&mut out).map_err(|e| e.to_string())?;
+    let mut rd = resp.into_reader().take(limit);
+    let mut buf = vec![0u8; 256 << 10];
+    loop {
+        let n = rd.read(&mut buf).map_err(|e| format!("téléchargement coupé ({e})"))?;
+        if n == 0 {
+            break;
+        }
+        out.extend_from_slice(&buf[..n]);
+        on(out.len() as u64);
+    }
     Ok(out)
 }
 
@@ -143,7 +155,7 @@ fn records(dir: &Path, collection: &str, fresh: bool) -> Result<Vec<Record>, Str
             return Ok(r.data);
         }
     }
-    let body = get(&format!("{RECORDS}{collection}/records"), 32 << 20)?;
+    let body = get(&format!("{RECORDS}{collection}/records"), 32 << 20, |_| {})?;
     let r: Records = serde_json::from_slice(&body).map_err(|e| format!("liste de Mozilla illisible ({e})"))?;
     std::fs::write(&cache, &body).map_err(|e| e.to_string())?;
     Ok(r.data)
@@ -151,8 +163,8 @@ fn records(dir: &Path, collection: &str, fresh: bool) -> Result<Vec<Record>, Str
 
 /// Downloads one file, checks the published hash of the download and of the
 /// unpacked file, then keeps it.
-fn fetch(dir: &Path, r: &Record) -> Result<(), String> {
-    let packed = get(&format!("{CDN}{}", r.attachment.location), r.attachment.size + 1)?;
+fn fetch(dir: &Path, r: &Record, on: impl FnMut(u64)) -> Result<(), String> {
+    let packed = get(&format!("{CDN}{}", r.attachment.location), r.attachment.size + 1, on)?;
     if packed.len() as u64 != r.attachment.size || sha256_hex(&packed) != r.attachment.hash {
         return Err(format!("{} : fichier abîmé pendant le téléchargement", r.name));
     }
@@ -196,6 +208,7 @@ fn plan_from(dir: &Path, models: &[Record], engines: &[Record], langs: &[String]
 /// Everything for translating into `langs`, downloaded the first time only.
 /// `progress(done, total)` in bytes.
 pub fn prepare(dir: &Path, langs: &[String], progress: impl Fn(u64, u64)) -> Result<Plan, String> {
+    let _one = ONE.lock().unwrap_or_else(|e| e.into_inner());
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let (mut plan, mut missing) = plan_from(dir, &records(dir, MODELS, false)?, &records(dir, ENGINE, false)?, langs)?;
     if !missing.is_empty() {
@@ -206,40 +219,85 @@ pub fn prepare(dir: &Path, langs: &[String], progress: impl Fn(u64, u64)) -> Res
     let mut done = 0;
     progress(done, total);
     for r in &missing {
-        fetch(dir, r)?;
+        fetch(dir, r, |n| progress(done + n, total))?;
         done += r.attachment.size;
         progress(done, total);
     }
     Ok(plan)
 }
 
-/// Deletes the models no chosen language needs any more (and leftovers of a
-/// stopped download); returns the bytes freed. Works from the lists already
-/// on disk: no network.
-pub fn forget(dir: &Path, langs: &[String]) -> Result<u64, String> {
+/// The files for `langs` as they are on disk, nothing downloaded (the window
+/// translates with what is installed).
+pub fn plan(dir: &Path, langs: &[String]) -> Result<Plan, String> {
+    let (plan, missing) = plan_from(dir, &records(dir, MODELS, false)?, &records(dir, ENGINE, false)?, langs)?;
+    if missing.is_empty() {
+        Ok(plan)
+    } else {
+        Err("langue pas encore installée".into())
+    }
+}
+
+/// The language of the waiting screen behind one of Mozilla's codes.
+fn lang_of(code: &str) -> String {
+    match code {
+        "zh-Hans" => "zh".into(),
+        c => c.into(),
+    }
+}
+
+/// Languages whose files are all on disk, read from the disk itself (the app
+/// may have been closed in the middle of a download). No network.
+pub fn installed(dir: &Path) -> Vec<String> {
+    let (Ok(models), Ok(engines)) = (records(dir, MODELS, false), records(dir, ENGINE, false)) else {
+        return vec![];
+    };
+    let whole = |rs: &[Record]| rs.iter().any(|r| r.file_type == "model") && rs.iter().all(|r| local(dir, r).exists());
+    if !engine(&engines).is_some_and(|w| local(dir, &w).exists()) || !whole(&pick(&models, SOURCE, PIVOT)) {
+        return vec![];
+    }
+    let targets: BTreeSet<&str> = models.iter().filter(|r| r.source == PIVOT).map(|r| r.target.as_str()).collect();
+    std::iter::once(PIVOT.to_string())
+        .chain(targets.into_iter().filter(|t| whole(&pick(&models, PIVOT, t))).map(lang_of))
+        .collect()
+}
+
+/// Uninstalls one language: its files leave the disk. English, the way to
+/// every other language, goes (with the engine) only once it is the last one.
+/// Returns the bytes freed.
+pub fn remove(dir: &Path, lang: &str) -> Result<u64, String> {
+    let _one = ONE.lock().unwrap_or_else(|e| e.into_inner());
     let (Ok(models), Ok(engines)) = (records(dir, MODELS, false), records(dir, ENGINE, false)) else {
         return Ok(0);
     };
-    let (plan, _) = plan_from(dir, &models, &engines, langs)?;
-    let keep: BTreeSet<PathBuf> = plan
-        .pairs
-        .values()
-        .flatten()
-        .map(|f| PathBuf::from(&f.path))
-        .chain(std::iter::once(PathBuf::from(&plan.wasm)))
-        .collect();
-    let mut freed = 0;
-    for e in std::fs::read_dir(dir).map_err(|e| e.to_string())?.flatten() {
-        let p = e.path();
-        if p.extension().is_some_and(|x| x == "json") || keep.contains(&p) || !p.is_file() {
-            continue;
+    let files = if lang == PIVOT {
+        if installed(dir).len() > 1 {
+            return Ok(0);
         }
-        let len = e.metadata().map(|m| m.len()).unwrap_or(0);
+        let mut f = pick(&models, SOURCE, PIVOT);
+        f.extend(engine(&engines));
+        f
+    } else {
+        pick(&models, PIVOT, code(lang))
+    };
+    let mut freed = 0;
+    for r in files {
+        let p = local(dir, &r);
+        let len = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
         if std::fs::remove_file(&p).is_ok() {
             freed += len;
         }
     }
     Ok(freed)
+}
+
+/// Leftovers of a download stopped with the app.
+pub fn clean(dir: &Path) {
+    let _one = ONE.lock().unwrap_or_else(|e| e.into_inner());
+    for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        if e.path().extension().is_some_and(|x| x == "part") {
+            let _ = std::fs::remove_file(e.path());
+        }
+    }
 }
 
 /// Only files of the translation folder can be read by the window.
@@ -288,15 +346,16 @@ mod tests {
     }
 
     #[test]
-    fn unchosen_languages_are_deleted() {
-        let dir = std::env::temp_dir().join("hyphn-translate-forget");
+    fn installed_is_read_from_the_disk_and_remove_really_deletes() {
+        let dir = std::env::temp_dir().join("hyphn-translate-remove");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let mut r = vec![
             rec("bergamot-translator", "", "4.0", "", "", ""),
             rec("model.fren", "model", "3.0", "fr", "en", ""),
             rec("model.ende", "model", "3.0", "en", "de", ""),
-            rec("model.enit", "model", "3.0", "en", "it", ""),
+            rec("vocab.ende", "vocab", "3.0", "en", "de", ""),
+            rec("model.enzh", "model", "3.0", "en", "zh-Hans", ""),
         ];
         for (i, x) in r.iter_mut().enumerate() {
             x.decompressed_hash = format!("{i:0>64}");
@@ -305,11 +364,19 @@ mod tests {
         let json = |d: &[Record]| serde_json::to_vec(&Records { data: d.to_vec() }).unwrap();
         std::fs::write(dir.join(format!("{ENGINE}.json")), json(&r[..1])).unwrap();
         std::fs::write(dir.join(format!("{MODELS}.json")), json(&r[1..])).unwrap();
-        std::fs::write(dir.join("x.part"), b"123").unwrap();
-        let langs: Vec<String> = ["fr", "en", "de"].iter().map(|s| s.to_string()).collect();
-        assert_eq!(forget(&dir, &langs).unwrap(), 5 + 3);
-        assert!(!local(&dir, &r[3]).exists());
-        assert!(local(&dir, &r[0]).exists() && local(&dir, &r[1]).exists() && local(&dir, &r[2]).exists());
+        assert_eq!(installed(&dir), vec!["en", "de", "zh"]);
+        // A file missing (app closed mid-download): that language is not installed.
+        std::fs::remove_file(local(&dir, &r[3])).unwrap();
+        assert_eq!(installed(&dir), vec!["en", "zh"]);
+        // Removing Chinese deletes its file; English stays while it is needed.
+        assert_eq!(remove(&dir, "zh").unwrap(), 5);
+        assert!(!local(&dir, &r[4]).exists());
+        assert_eq!(remove(&dir, "de").unwrap(), 5);
+        assert_eq!(installed(&dir), vec!["en"]);
+        // The last one: English and the engine go too.
+        assert_eq!(remove(&dir, "en").unwrap(), 10);
+        assert!(installed(&dir).is_empty());
+        assert!(plan(&dir, &["de".to_string()]).is_err());
     }
 
     /// Real download from Mozilla (≈ 50 MB): `cargo test mozilla -- --ignored`.

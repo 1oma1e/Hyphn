@@ -63,3 +63,6 @@ Toutes les sources consultées le 2026-10-29 pour préparer le projet. Chaque no
 - [Bergamot — traduction locale](https://browser.mt/) ; [BergamotTranslatorSharp](https://github.com/Freeesia/BergamotTranslatorSharp)
 
 Liens : [[00-Accueil]]
+
+## Filtres et effets de la Cam
+Voir [[Filtres et effets existants]] (consultées le 2026-11-02).

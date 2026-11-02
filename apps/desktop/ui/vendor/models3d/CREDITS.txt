@@ -1,0 +1,4 @@
+3D models from the MindAR face-tracking examples (github.com/hiukim/mind-ar-js), CC-BY-4.0:
+- glasses: "Thug Life | Cool glasses | Stylise goggles" (https://sketchfab.com/3d-models/thug-life-cool-glasses-stylise-goggles-75945f055a8c47098fa8aa4b6a698b07) by MR EXPERT (https://sketchfab.com/Rahul.Kumar5), licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+- hat: "Clown Hat" (https://sketchfab.com/3d-models/clown-hat-0f5ef2e6205c4b438c593a979a3ccdae) by PatelDev (https://sketchfab.com/PatelDev), licensed under CC-BY-4.0
+- earring: "Earring Jade" (https://sketchfab.com/3d-models/earring-jade-c91e552728fb4b149d52193fd3e03ac5) by Softmind Game Factory (https://sketchfab.com/softmind), licensed under CC-BY-4.0

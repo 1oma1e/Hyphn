@@ -53,7 +53,22 @@ function load(pair, files) {
     vocab.push_back(mem.trgvocab);
   }
   const [from, to] = pair.split(/-(.+)/);
-  models[pair] = new bergamot.TranslationModel(from, to, config(modelName), mem.model, mem.lex ?? null, vocab, null);
+  const model = new bergamot.TranslationModel(from, to, config(modelName), mem.model, mem.lex ?? null, vocab, null);
+  models[pair] = { model, mem: [...Object.values(mem), vocab] };
+}
+
+// A model no longer needed leaves the memory.
+function unload(pair) {
+  const m = models[pair];
+  if (!m) return;
+  delete models[pair];
+  // The model took the files' memory (moved into it): deleting it frees them;
+  // the emptied holders go after.
+  for (const x of [m.model, ...m.mem]) {
+    try {
+      x.delete();
+    } catch (e) { /* already freed */ }
+  }
 }
 
 // One sentence; through English when the target is not English.
@@ -63,8 +78,8 @@ function translate(text, to) {
   msgs.push_back(text);
   opts.push_back({ qualityScores: false, alignment: true, html: false });
   const out = to === 'en'
-    ? service.translate(models['fr-en'], msgs, opts)
-    : service.translateViaPivoting(models['fr-en'], models['en-' + to], msgs, opts);
+    ? service.translate(models['fr-en'].model, msgs, opts)
+    : service.translateViaPivoting(models['fr-en'].model, models['en-' + to].model, msgs, opts);
   const t = out.get(0).getTranslatedText();
   msgs.delete();
   opts.delete();
@@ -82,6 +97,8 @@ self.onmessage = async ({ data }) => {
       }
     } else if (data.type === 'load') {
       if (!models[data.pair]) load(data.pair, data.files);
+    } else if (data.type === 'unload') {
+      unload(data.pair);
     } else if (data.type === 'translate') {
       result = translate(data.text, data.to);
     }

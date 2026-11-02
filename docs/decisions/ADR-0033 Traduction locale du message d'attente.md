@@ -22,7 +22,9 @@ Evan veut que le message de l'écran d'attente, tapé une fois, s'affiche tradui
 - **Où ça tourne** : le moteur WebAssembly de Firefox dans un worker de la fenêtre (`ui/translate-worker.js`, colle `ui/vendor/bergamot-translator.js` copiée de Firefox) ; Rust télécharge et range les fichiers (`src/translate.rs`). La fenêtre autorise le WebAssembly (`'wasm-unsafe-eval'`).
 - **Mesure** : fr→en→de en 0,7 s sur le PC d'Evan (page d'essai, vrais modèles).
 - Une langue sans modèle garde le texte d'Evan.
-- **58 langues au choix** (demande d'Evan, 2026-11-02) : les 18 de départ cochées ; une langue décochée est supprimée du disque (place libérée affichée). Une carte en bas de l'écran montre l'installation et la traduction.
+- **58 langues au choix** (demande d'Evan, 2026-11-02) : les 18 de départ cochées ; une langue décochée est supprimée du disque (place libérée affichée).
+- **Une langue à la fois** (après un bug d'Evan avec « Toutes », 623 Mo : app figée et téléchargement qui recommençait) : téléchargement, traduction, puis le modèle quitte la mémoire ; chaque langue est gardée dès qu'elle est prête ; une langue en échec est sautée, jamais retentée en boucle. Lecture des modèles hors du fil principal ; un seul téléchargement ou nettoyage à la fois. Une carte montre chaque langue et le total ; pareil pour la suppression.
+- **Une file côté Rust** (`src/langs.rs`, demande d'Evan) : installations et suppressions continuent si la fenêtre change de page ou se recharge ; l'état affiché est relu sur le disque (une langue est installée si tous ses fichiers y sont) ; supprimer efface vraiment les fichiers, réinstaller les retélécharge. Une seule étape à la fois : la traduction du message attend la fin des installations, et une demande faite pendant la traduction attend sa fin.
 
 ## Conséquences
 - Téléchargement au premier message traduit, tout seul, avec la progression affichée dans le panneau : ce n'est pas du cloud (rien de l'utilisateur ne part), mais c'est un accès internet, dit dans l'info-bulle.

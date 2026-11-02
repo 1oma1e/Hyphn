@@ -48,11 +48,11 @@ const TIPS = {
   cat_stream: ['Envoi', 'Taille, fluidité et compression de l’image envoyée par l’iPhone.'],
   cat_wait: ['Pause', 'Ce que voient Discord et OBS quand la caméra est en pause.'],
   // Cam › Effets (spec `Cam - Filtres et effets`)
-  fx: ['Effets', 'Filtres de couleur, masques sur le visage, fond flou ou remplacé, retouche. Ce que tu vois ici, Discord et Teams le voient aussi.'],
+  fx: ['Effets', 'Filtres de couleur, emojis sur le visage, fond flou ou remplacé, retouche. Ce que tu vois ici, Discord et Teams le voient aussi.'],
   fx_filter: ['Filtre', 'Change les couleurs de toute l’image, comme sur Instagram.', 'Clique sur une vignette : elle montre déjà ton image avec le filtre.'],
   fx_amount: ['Force du filtre', 'À gauche, le filtre est léger ; à droite, il est complet.'],
-  fx_mask: ['Masque', 'Un dessin qui suit ton visage, comme sur Snapchat ou Messenger.', 'Ouvre la bouche avec le masque Chien.'],
-  fx_bg: ['Fond', 'Floute ce qu’il y a derrière toi, ou le remplace par une image. Ton visage et ton corps restent nets.', 'Une image à toi : « Ton image », puis choisis un fichier.'],
+  fx_mask: ['Emojis', 'Des emojis qui suivent ton visage, comme sur Snapchat ou Messenger : les Fluent Emoji 3D de Microsoft.', 'Ouvre grand la bouche avec Arc-en-ciel.'],
+  fx_bg: ['Fond', 'Floute ce qu’il y a derrière toi, ou le remplace par un décor (vraies photos libres de droits) ou ta propre image. Ton visage et ton corps restent nets.', 'Une image à toi : « Ton image », puis choisis un fichier.'],
   fx_smooth: ['Peau lisse', 'Adoucit la peau du visage. Les yeux et la bouche restent nets.', 'Vers 30 % : naturel.'],
   fx_light: ['Lumière douce', 'Éclaire un peu le visage, comme une lampe devant toi.'],
   fx_off: ['Tout enlever', 'Retire tous les effets : l’image redevient celle de l’iPhone.'],
@@ -312,6 +312,48 @@ const Popup = {
   },
   hide() {
     if (this.el) this.el.classList.remove('on');
+  },
+  // One item after the other (languages to install or remove): its name, its
+  // steps lit in turn, its own bar that never goes back, and a thin bar for
+  // the whole list. { icon, name, i, n, steps, step, pct, sub }
+  item(o) {
+    if (!this.el) this.show({ title: '' });
+    clearTimeout(this.hideT);
+    const el = this.el;
+    if (!el.classList.contains('item') || !el.classList.contains('on')) {
+      this.key = '';
+      el.className = 'pop item';
+      el.innerHTML = `<span class="pic"></span>
+        <div class="ptx"><div class="phead"><b></b><span class="pcount mono"></span></div>
+          <div class="psteps"></div><div class="pbar"><i></i></div><small></small><div class="pall"><i></i></div></div>`;
+      void el.offsetWidth;
+      el.classList.add('on');
+    }
+    // A new item: its name slides in and its bar starts from zero.
+    const id = o.name + '|' + o.i;
+    if (id !== this.itemId) {
+      this.itemId = id;
+      this.itemPct = 0;
+      const b = $('.phead b', el);
+      b.textContent = o.name;
+      b.classList.remove('swap');
+      void b.offsetWidth;
+      b.classList.add('swap');
+      $('.pbar i', el).style.transition = 'none';
+      $('.pbar i', el).style.width = '0%';
+      void el.offsetWidth;
+      $('.pbar i', el).style.transition = '';
+    }
+    this.itemPct = Math.max(this.itemPct, Math.min(100, o.pct));
+    $('.pic', el).innerHTML = I[o.icon || 'down'];
+    $('.pcount', el).textContent = `${o.i} / ${o.n}`;
+    $('.psteps', el).innerHTML = o.steps.map((st, k) => `<span class="${k < o.step ? 'done' : k === o.step ? 'now' : ''}">${k < o.step ? I.check : ''}${esc(st)}</span>`).join('<em>›</em>');
+    $('.pbar i', el).style.width = Math.max(2, this.itemPct) + '%';
+    $('small', el).textContent = o.sub || '';
+    // The whole list: never goes back either.
+    const all = ((o.i - 1) + this.itemPct / 100) / o.n * 100;
+    this.allPct = o.i === 1 && this.itemPct === 0 ? 0 : Math.max(this.allPct || 0, all);
+    $('.pall i', el).style.width = this.allPct + '%';
   },
 };
 const langList = (ls) => (ls.length > 3 ? ls.slice(0, 3).map((l) => LANG_NAMES[l]).join(', ') + ` et ${ls.length - 3} autres` : ls.map((l) => LANG_NAMES[l]).join(', '));
@@ -765,11 +807,14 @@ function waitLines(c) {
   const tr = c.tr && c.tr.msg === c.msg ? c.tr.t : {};
   return chosenLangs(c).map((l) => [l, own ? (l === 'fr' ? c.msg : tr[l]) : BUILTIN[l] || tr[l]]).filter(([, t]) => t);
 }
+// A language needs its model from Mozilla to show the message in use.
+const needsModel = (c, l) => l !== 'fr' && (c.msg !== CAM_DEFAULTS.msg || !BUILTIN[l]);
 // Languages still to translate for the message in use.
 function untranslated(c) {
   const own = c.msg !== CAM_DEFAULTS.msg;
   const tr = c.tr && c.tr.msg === c.msg ? c.tr.t : {};
-  return chosenLangs(c).filter((l) => l !== 'fr' && !(own ? tr[l] : BUILTIN[l] || tr[l]));
+  const failed = (typeof Cam !== 'undefined' && Cam.trFailed) || new Set();
+  return chosenLangs(c).filter((l) => l !== 'fr' && !failed.has(l) && !(own ? tr[l] : BUILTIN[l] || tr[l]));
 }
 // One set of keyframes per number of languages: each one shows for 2.6 s of the round.
 function rollKeyframes(n) {
@@ -1025,6 +1070,7 @@ const Translator = {
   worker: null,
   seq: 0,
   wait: {},
+  started: false,
   call(msg, transfer = []) {
     if (!this.worker) {
       this.worker = new Worker('translate-worker.js');
@@ -1032,6 +1078,14 @@ const Translator = {
         const w = this.wait[data.id];
         delete this.wait[data.id];
         if (w) data.error ? w[1](new Error(data.error)) : w[0](data.result);
+      };
+      // The engine died (memory…): the next time starts it again.
+      this.worker.onerror = () => {
+        this.worker.terminate();
+        this.worker = null;
+        this.started = false;
+        for (const id of Object.keys(this.wait)) this.wait[id][1](new Error('le traducteur s’est arrêté'));
+        this.wait = {};
       };
     }
     const id = ++this.seq;
@@ -1044,28 +1098,43 @@ const Translator = {
     const b = await invoke('translate_read', { path });
     return b instanceof ArrayBuffer ? b : new Uint8Array(b).buffer;
   },
-  // French text → { lang: text } for `langs`; a language without a model is left out.
-  async run(text, langs, step) {
-    const plan = await invoke('translate_prepare', { langs });
+  async load(pair, files) {
+    const list = [];
+    for (const f of files) list.push({ kind: f.kind, name: f.name, bytes: await this.bytes(f.path) });
+    await this.call({ type: 'load', pair, files: list }, list.map((f) => f.bytes));
+  },
+  // The engine and the French → English model, once.
+  async start() {
+    if (this.started) return;
+    const plan = await invoke('translate_plan', { langs: ['en'] });
     if (!plan || !plan.pairs['fr-en']) throw new Error('pas de modèle français → anglais');
-    step({ start: true });
     const wasm = await this.bytes(plan.wasm);
     await this.call({ type: 'start', wasm }, [wasm]);
-    for (const [pair, files] of Object.entries(plan.pairs)) {
-      const list = [];
-      for (const f of files) list.push({ kind: f.kind, name: f.name, bytes: await this.bytes(f.path) });
-      await this.call({ type: 'load', pair, files: list }, list.map((f) => f.bytes));
+    await this.load('fr-en', plan.pairs['fr-en']);
+    this.started = true;
+  },
+  // One language: its model downloaded if needed, used, then let go, so the
+  // memory never holds more than two models. null: no model for it.
+  async one(text, l, translating = () => {}) {
+    await this.start();
+    if (l === 'en') {
+      translating();
+      return this.call({ type: 'translate', text, to: 'en' });
     }
-    const out = { fr: text };
-    let i = 0;
-    for (const l of langs) {
-      const code = l === 'zh' ? 'zh-Hans' : l;
-      i++;
-      if (l === 'fr' || (l !== 'en' && !plan.pairs['en-' + code])) continue;
-      step({ i, n: langs.length, lang: l });
-      out[l] = await this.call({ type: 'translate', text, to: code });
+    const code = l === 'zh' ? 'zh-Hans' : l;
+    let plan = null;
+    try {
+      plan = await invoke('translate_plan', { langs: [l] });
+    } catch (e) { /* not installed */ }
+    const files = plan && plan.pairs['en-' + code];
+    if (!files) return null;
+    await this.load('en-' + code, files);
+    translating();
+    try {
+      return await this.call({ type: 'translate', text, to: code });
+    } finally {
+      await this.call({ type: 'unload', pair: 'en-' + code });
     }
-    return out;
   },
 };
 
@@ -1140,8 +1209,8 @@ const Cam = {
     document.addEventListener('pointermove', this.wake);
     document.addEventListener('keydown', this.onKey);
     this.wake();
-    // A message of Evan's not translated yet: done now, by itself.
-    this.translate();
+    // The languages as they really are on disk; what is missing comes next.
+    this.langsFetch();
   },
   unmount() {
     // The camera keeps going: Discord or OBS may be using the Windows webcam.
@@ -1369,6 +1438,7 @@ const Cam = {
     if (this.panel === 'set') {
       this.paintAdj();
       this.placePoint();
+      this.langsFetch();
     } else if (this.panel === 'fx') {
       this.paintFx();
       // The filter previews follow the picture.
@@ -1487,7 +1557,7 @@ const Cam = {
     const wait = row('msg', 'Message', `<input class="txt" type="text" maxlength="60" value="${esc(c.msg)}" data-change="msg" aria-label="Message de pause">`)
       + row('multi', 'Plusieurs langues', tog('multi', 'Oui', 'Non') + (c.multi && tr ? `<div class="hint${tr.bad ? ' warn' : ''}" id="c-tr">${esc(tr.text)}</div>` : ''))
       + (c.multi ? row('langs', 'Langues', `<div class="hint">${chosenLangs(c).length} choisies sur ${ALL_LANGS.length}. Environ 25 Mo à télécharger par nouvelle langue, une seule fois.</div>
-          <div class="lchoice">${ALL_LANGS.map((l) => `<button type="button" class="lc${chosenLangs(c).includes(l) ? ' on' : ''}" data-act="lang" data-v="${l}" aria-pressed="${chosenLangs(c).includes(l)}" ${l === 'fr' ? 'disabled' : ''}>${esc(LANG_NAMES[l])}</button>`).join('')}</div>
+          <div class="lchoice">${ALL_LANGS.map((l) => `<button type="button" class="lc${chosenLangs(c).includes(l) ? ' on' : ''}" data-act="lang" data-v="${l}" aria-pressed="${chosenLangs(c).includes(l)}" ${l === 'fr' ? 'disabled' : ''}><i aria-hidden="true"></i>${esc(LANG_NAMES[l])}</button>`).join('')}</div>
           <div class="row" style="gap:6px"><button type="button" class="lc" data-act="langs" data-v="default">Les 18 de départ</button><button type="button" class="lc" data-act="langs" data-v="all">Toutes</button></div>`) : '')
       + row('wst', 'Style', opts('wst', [[0, 'Animé', 'L’enseigne bouge'], [1, 'Calme', 'Immobile']]))
       + `<div class="wprev">${waitScreen(c, '')}</div>`;
@@ -1514,6 +1584,7 @@ const Cam = {
     body.scrollTop = scroll;
     body.addEventListener('scroll', () => this.spy(), { passive: true });
     this.spy();
+    this.paintLangs();
   },
   // The effects panel (spec `Cam - Filtres et effets`): filters with a live
   // preview each, masks, background, touch-ups.
@@ -1528,8 +1599,7 @@ const Cam = {
     const range = (k, label, ends) => `<div class="sl"><div class="r"><span>${esc(label)}${tip('fx_' + k)}</span><span class="val" id="fv-${k}">${f[k]} %</span></div>
         <input type="range" min="0" max="100" step="1" value="${f[k]}" data-input="fxslide" data-change="fxslid" data-k="${k}" style="--p:${f[k]}%" aria-label="${esc(label)}">
         <div class="ends"><span>${esc(ends[0])}</span><span>${esc(ends[1])}</span></div></div>`;
-    const MASK_ICON = { none: '🚫', lunettes: '🕶️', chien: '🐶', chat: '🐱', couronne: '👑', moustache: '🥸', coeurs: '😍' };
-    const BG_ICON = { none: '🚫', blur: '💧', strong: '🌫️', studio: '🎙️', sunset: '🌅', ocean: '🌊', neonbg: '🌆', image: '🖼️' };
+    const BG_ICON = { none: '🚫', blur: '💧', strong: '🌫️', image: '🖼️' };
     const status = Effects.error ? `<div class="hint warn">${esc(Effects.error)}</div>`
       : (Effects.needsFace() || f.bg !== 'none') && !Effects.face ? '<div class="hint">Préparation de la détection du visage…</div>' : '';
     const webcam = S && S.vcam && S.vcam.in_use
@@ -1538,14 +1608,14 @@ const Cam = {
     el.innerHTML = `
       <div class="ahd"><div class="aht">${I.wand}Effets</div>
         <button class="ib" type="button" aria-label="Fermer les effets" data-act="close"${tipAttr('adjclose')}>${I.close}</button></div>
-      <nav class="anav" aria-label="Catégories">${[['fxfilter', 'Filtres', 'palette'], ['fxmask', 'Masques', 'smile'], ['fxbg', 'Fond', 'layers'], ['fxtouch', 'Retouche', 'spark']]
+      <nav class="anav" aria-label="Catégories">${[['fxfilter', 'Filtres', 'palette'], ['fxmask', 'Emojis', 'smile'], ['fxbg', 'Fond', 'layers'], ['fxtouch', 'Retouche', 'spark']]
         .map(([id, n, ic]) => `<button type="button" data-act="jump" data-v="${id}">${I[ic]}<span>${n}</span></button>`).join('')}</nav>
       <div class="abody">
         ${webcam}${status}
         ${sec('fxfilter', 'Filtres', 'palette', 'fx_filter', `<div class="fgrid">${FX_FILTERS.map(([id, n]) => `<button type="button" class="fcard${f.filter === id ? ' on' : ''}" data-act="fx" data-k="filter" data-v="${id}" aria-pressed="${f.filter === id}"><canvas width="160" height="90" data-thumb="${id}"></canvas><b>${esc(n)}</b></button>`).join('')}</div>
           ${f.filter !== 'none' ? range('amount', 'Force du filtre', ['Léger', 'Complet']) : ''}`)}
-        ${sec('fxmask', 'Masques', 'smile', 'fx_mask', `<div class="egrid">${FX_MASKS.map(([id, n]) => `<button type="button" class="ecard${f.mask === id ? ' on' : ''}" data-act="fx" data-k="mask" data-v="${id}" aria-pressed="${f.mask === id}"><i aria-hidden="true">${MASK_ICON[id]}</i><b>${esc(n)}</b></button>`).join('')}</div>`)}
-        ${sec('fxbg', 'Fond', 'layers', 'fx_bg', `<div class="egrid">${FX_BG.map(([id, n]) => `<button type="button" class="ecard${f.bg === id ? ' on' : ''}" data-act="${id === 'image' ? 'fxpick' : 'fx'}" data-k="bg" data-v="${id}" aria-pressed="${f.bg === id}"><i aria-hidden="true">${BG_ICON[id]}</i><b>${esc(n)}</b></button>`).join('')}</div>
+        ${sec('fxmask', 'Emojis', 'smile', 'fx_mask', `<div class="egrid">${FX_MASKS.map(([id, n, pic]) => `<button type="button" class="ecard${f.mask === id ? ' on' : ''}" data-act="fx" data-k="mask" data-v="${id}" aria-pressed="${f.mask === id}">${pic ? `<img src="${fxPicture(pic)}" alt="" loading="lazy">` : '<i aria-hidden="true">🚫</i>'}<b>${esc(n)}</b></button>`).join('')}</div>`)}
+        ${sec('fxbg', 'Fond', 'layers', 'fx_bg', `<div class="egrid">${FX_BG.map(([id, n]) => `<button type="button" class="ecard${BG_ICON[id] ? '' : ' photo'}${f.bg === id ? ' on' : ''}" data-act="${id === 'image' ? 'fxpick' : 'fx'}" data-k="bg" data-v="${id}" aria-pressed="${f.bg === id}">${BG_ICON[id] ? `<i aria-hidden="true">${BG_ICON[id]}</i>` : `<img src="vendor/backgrounds/${id}.jpg" alt="" loading="lazy">`}<b>${esc(n)}</b></button>`).join('')}</div>
           <input type="file" accept="image/*" id="fx-file" hidden data-change="fxfile">`)}
         ${sec('fxtouch', 'Retouche', 'spark', 'fx_smooth', range('smooth', 'Peau lisse', ['Naturel', 'Très lisse']) + range('light', 'Lumière douce', ['Aucune', 'Forte']))}
         <button type="button" class="allr" data-act="fxoff"${tipAttr('fx_off')}>${I.refresh}Tout enlever</button>
@@ -1558,7 +1628,9 @@ const Cam = {
   },
   // Each filter shown on the current picture.
   fxThumbs() {
-    const src = $('#c-scene');
+    // Always the picture as it comes, never one already filtered.
+    const raw = Effects.active() && Effects.canvases.small;
+    const src = raw && raw.width ? raw : $('#c-scene');
     if (!src || !src.width || this.panel !== 'fx') return;
     for (const cv of document.querySelectorAll('#c-adj canvas[data-thumb]')) {
       const f = FX_FILTERS.find(([id]) => id === cv.dataset.thumb);
@@ -1589,8 +1661,15 @@ const Cam = {
     const body = $('#c-adj .abody');
     if (!body) return;
     let on = '';
-    for (const s of body.querySelectorAll('.ag')) if (s.offsetTop - body.scrollTop <= 60) on = s.dataset.cat;
-    if (!on) on = (body.querySelector('.ag') || { dataset: {} }).dataset.cat;
+    const all = body.querySelectorAll('.ag');
+    for (const s of all) if (s.offsetTop - body.scrollTop <= 60) on = s.dataset.cat;
+    if (!on) on = (all[0] || { dataset: {} }).dataset.cat;
+    // At the bottom, the last categories cannot reach the top: the one asked
+    // for (or the last) is lit.
+    const bottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 4;
+    if (!bottom && Date.now() - (this.jumpedAt || 0) > 900) this.jumped = '';
+    if (bottom) on = this.jumped || (all[all.length - 1] || { dataset: {} }).dataset.cat;
+    if (this.jumped && Date.now() - this.jumpedAt < 900) on = this.jumped;
     for (const b of document.querySelectorAll('#c-adj .anav button')) {
       b.classList.toggle('on', b.dataset.v === on);
       // The lit one stays in view in the menu.
@@ -1649,89 +1728,193 @@ const Cam = {
     if (send) this.push();
     this.save();
   },
+  // Languages unticked are uninstalled (their files deleted, their
+  // translation forgotten); ticked ones are installed. In line, step by step.
+  langsChanged(removed, added) {
+    if (this.cs.tr && removed.length) {
+      const t = Object.assign({}, this.cs.tr.t);
+      for (const l of removed) delete t[l];
+      this.cs.tr = { msg: this.cs.tr.msg, t };
+    }
+    this.changed(false);
+    const rm = removed.filter((l) => l !== 'fr' && (this.ls ? this.ls.installed.includes(l) || this.ls.queue.some(([, x]) => x === l) : true));
+    if (rm.length) this.ask('remove', rm);
+    const add = added.filter((l) => needsModel(this.cs, l));
+    if (add.length) this.ask('install', add);
+    if (!rm.length && !add.length) this.pump();
+  },
   resetKeys(keys) {
     const before = chosenLangs(this.cs);
     for (const k of keys) for (const f of RESETS[k] || []) this.cs[f] = CAM_DEFAULTS[f];
-    const removed = before.filter((l) => !chosenLangs(this.cs).includes(l));
-    if (removed.length) this.forgetLangs(removed);
+    const after = chosenLangs(this.cs);
+    if (before.join() !== after.join()) this.langsChanged(before.filter((l) => !after.includes(l)), after.filter((l) => !before.includes(l)));
     if (keys.includes('poi')) this.placePoint();
     this.matchProfile();
     this.changed(true, keys.some((k) => GROUPS.wait.includes(k)));
-    if (keys.includes('msg')) this.translate();
+    if (keys.includes('msg')) this.pump();
   },
-  // The waiting message in the chosen languages (ADR-0033): translated once on this
-  // PC, kept with the settings. `tr` = { msg, t: { lang: text } }.
+  // The waiting message in the chosen languages (ADR-0033). One step at a
+  // time, never two together: installs and removals (Rust, `langs.rs`, they
+  // go on through a reload), then the translation (here). Asked meanwhile:
+  // it waits for the step in progress to end.
   trState() {
-    const c = this.cs;
+    const c = this.cs, st = this.ls;
     if (this.trBusy) return { text: this.trBusy };
-    if (c.msg === CAM_DEFAULTS.msg && !untranslated(c).length) return null;
+    if (st && st.current) {
+      const name = LANG_NAMES[st.current.lang] || st.current.lang;
+      return { text: st.current.op === 'install' ? `Installation de ${name}… La traduction suivra.` : `Suppression de ${name}…` };
+    }
     if (this.trErr) return { text: this.trErr, bad: true };
     const n = waitLines(c).length, all = chosenLangs(c).length;
+    if (c.msg === CAM_DEFAULTS.msg && !untranslated(c).length) return { text: `Prêt dans ${n} langues.` };
     if (!untranslated(c).length) return { text: `Prêt dans ${n} langues.` };
     return { text: n > 1 ? `Prêt dans ${n} langues sur ${all} ; les autres arrivent.` : 'Pas encore traduit.' };
   },
-  // Shows where the translation is: under the setting and in the corner card.
-  trStep(st) {
-    let text;
-    if (typeof st === 'string') text = st;
-    else if (st.start) {
-      text = 'Démarrage du traducteur…';
-      Popup.show({ icon: 'globe', title: 'Traduction du message', text, pct: -1 });
-    } else {
-      text = `Traduction en ${LANG_NAMES[st.lang]}… ${st.i} / ${st.n}`;
-      Popup.show({ icon: 'globe', title: 'Traduction du message', text: `${LANG_NAMES[st.lang]} · ${st.i} sur ${st.n}`, pct: (st.i / st.n) * 100 });
-    }
+  trStep(text) {
     this.trBusy = text;
     const el = $('#c-tr');
     if (el) el.textContent = text;
   },
-  // Download progress of the engine and models, from Rust (first time only).
-  trProgress([done, total]) {
-    if (!this.trBusy || !total || done >= total) return;
-    const mo = `${Math.round(done / 1e6)} / ${Math.round(total / 1e6)} Mo`;
-    Popup.show({ icon: 'down', title: 'Installation des langues', text: `${langList(this.trNeed || [])} · ${mo}`, pct: (done / total) * 100 });
-    this.trBusy = `Installation, une seule fois : ${mo}`;
-    const el = $('#c-tr');
-    if (el) el.textContent = this.trBusy;
+  // The state of the languages, read from the disk by Rust.
+  async langsFetch() {
+    try {
+      this.onLangs(await invoke('langs_status'));
+    } catch (e) { /* older app */ }
   },
-  // Languages unticked: their models leave the disk (a moment later, so
-  // several clicks make one clean-up).
-  forgetLangs(removed) {
-    this.trGone = (this.trGone || []).concat(removed);
-    clearTimeout(this.forgetT);
-    this.forgetT = setTimeout(async () => {
-      const gone = this.trGone;
-      this.trGone = [];
-      try {
-        const freed = await invoke('translate_forget', { langs: chosenLangs(this.cs) });
-        if (freed > 0) Popup.show({ icon: 'trash', title: 'Espace libéré', text: `${langList(gone)} retiré${gone.length > 1 ? 's' : ''} · ${Math.max(1, Math.round(freed / 1e6))} Mo libérés`, done: true });
-      } catch (e) { /* nothing freed */ }
-    }, 1200);
+  onLangs(st) {
+    this.ls = st;
+    this.langsCard(st);
+    this.paintLangs();
+    this.pump();
   },
+  // The corner card for the install or removal in hand.
+  langsCard(st) {
+    const c = st.current;
+    const mo = (b) => Math.round(b / 1e6);
+    if (c) {
+      const inst = c.op === 'install';
+      Popup.item({
+        icon: inst ? (c.stage === 0 ? 'down' : 'check') : 'trash',
+        name: LANG_NAMES[c.lang] || c.lang,
+        i: st.batch_done + 1,
+        n: Math.max(st.batch_total, st.batch_done + 1),
+        steps: inst ? ['Téléchargement', 'Vérification', 'Installée'] : ['Suppression', 'Espace libéré'],
+        step: inst ? c.stage : c.stage >= 2 ? 1 : 0,
+        pct: inst ? (c.stage === 0 ? (c.total ? (c.done / c.total) * 90 : 2) : c.stage === 1 ? 95 : 100) : c.stage >= 2 ? 100 : 45,
+        sub: inst ? (c.stage === 0 ? (c.total ? `${mo(c.done)} / ${mo(c.total)} Mo` : 'Connexion à Mozilla…') : c.stage === 1 ? 'Vérification de l’empreinte…' : 'Installée')
+          : c.stage >= 2 ? 'Fichiers effacés' : 'Suppression des fichiers…',
+      });
+      return;
+    }
+    // A batch just ended: its summary, once.
+    const key = [st.batch_total, st.batch_done, st.freed, st.failed.join()].join('|');
+    if (!st.batch_total || st.batch_done < st.batch_total || key === this.lsSummary) return;
+    this.lsSummary = key;
+    if (st.failed.length) Popup.show({ title: 'Certaines langues n’ont pas pu être ajoutées', text: langList(st.failed), bad: true });
+    else if (st.freed) Popup.show({ icon: 'trash', title: 'Espace libéré', text: `${mo(st.freed)} Mo libérés`, done: true });
+    else Popup.show({ title: 'Langues installées', text: 'La traduction du message suit.', done: true });
+  },
+  // The next step, only when nothing is going on: queued asks first, then
+  // the chosen languages still missing, then the translation.
+  pump() {
+    const st = this.ls;
+    if (!st || this.trBusy || st.current || st.queue.length) return;
+    if (this.asks && this.asks.length) {
+      const asks = this.asks;
+      this.asks = [];
+      for (const [op, list] of asks) invoke('langs_ask', { op, list });
+      return;
+    }
+    const c = this.cs;
+    const missing = c.multi ? chosenLangs(c).filter((l) => needsModel(c, l) && !st.installed.includes(l) && !st.failed.includes(l)) : [];
+    if (missing.length) {
+      invoke('langs_ask', { op: 'install', list: missing });
+      return;
+    }
+    this.translate();
+  },
+  // A language ticked or unticked: in line behind the step in progress.
+  ask(op, list) {
+    const st = this.ls;
+    // Still waiting in Rust's line: changed there at once (not a second step).
+    const queued = list.filter((l) => st && st.queue.some(([, x]) => x === l));
+    if (queued.length) invoke('langs_ask', { op, list: queued });
+    const rest = list.filter((l) => !queued.includes(l));
+    if (rest.length) (this.asks = this.asks || []).push([op, rest]);
+    this.pump();
+    this.paintLangs();
+  },
+  // The language chips follow the disk and the line, without rebuilding the panel.
+  paintLangs() {
+    const st = this.ls;
+    for (const b of document.querySelectorAll('#c-adj .lc[data-v]')) {
+      const l = b.dataset.v;
+      const cur = st && st.current && st.current.lang === l ? st.current : null;
+      const waiting = (st && st.queue.some(([, x]) => x === l)) || (this.asks || []).some(([, ls]) => ls.includes(l));
+      const ready = !needsModel(this.cs, l) || (st && st.installed.includes(l));
+      b.classList.toggle('inst', !!ready && !cur);
+      b.classList.toggle('busy', !!cur);
+      b.classList.toggle('wait', !cur && waiting);
+      b.style.setProperty('--lp', cur && cur.total ? Math.round((cur.done / cur.total) * 100) + '%' : '0%');
+    }
+    const h = $('#c-tr');
+    const t = this.trState();
+    if (h && t) h.textContent = t.text;
+  },
+  // Installed languages still to translate, one after the other.
   async translate() {
     const c = this.cs;
-    const need = untranslated(c);
-    if (this.trBusy || !c.multi || !need.length) return;
+    const st = this.ls;
+    if (this.trBusy || !c.multi || !st || st.current || st.queue.length) return;
+    const need = untranslated(c).filter((l) => !needsModel(c, l) || st.installed.includes(l));
+    if (!need.length) return;
     const msg = c.msg;
     this.trErr = '';
-    this.trNeed = need;
-    this.trBusy = 'Préparation de la traduction…';
-    Popup.show({ icon: 'globe', title: 'Préparation des langues', text: langList(need), pct: -1 });
-    if (this.panel === 'set') this.paintAdj();
+    this.trStep('Traduction du message…');
+    let ok = 0;
+    const failed = [];
     try {
-      const t = await Translator.run(msg, need, (s) => this.trStep(s));
-      // Added to what this message already had (more languages chosen later).
-      if (this.cs.msg === msg) this.cs.tr = { msg, t: Object.assign({}, this.cs.tr && this.cs.tr.msg === msg ? this.cs.tr.t : {}, t) };
-      Popup.show({ title: 'Message traduit', text: `${waitLines(this.cs).length} langues prêtes`, done: true });
+      for (let i = 0; i < need.length; i++) {
+        const l = need[i];
+        if (this.cs.msg !== msg || !this.cs.multi) break;
+        if (!chosenLangs(this.cs).includes(l)) continue;
+        const step = (k, pct, sub) => Popup.item({ icon: k ? 'check' : 'globe', name: LANG_NAMES[l], i: i + 1, n: need.length, steps: ['Traduction', 'Prête'], step: k, pct, sub });
+        step(0, 40, 'Traduction du message…');
+        this.trStep(`Traduction en ${LANG_NAMES[l]}… (${i + 1} sur ${need.length})`);
+        let t = null;
+        try {
+          t = await Translator.one(msg, l);
+        } catch (e) {
+          this.trErr = 'Une langue n’a pas pu être traduite : ' + (e && e.message ? e.message : String(e));
+        }
+        if (t == null || this.cs.msg !== msg) {
+          failed.push(l);
+          continue;
+        }
+        this.cs.tr = { msg, t: Object.assign({}, this.cs.tr && this.cs.tr.msg === msg ? this.cs.tr.t : {}, { [l]: t }) };
+        ok++;
+        this.save();
+        if (page === Cam) {
+          this.overlayKey = '';
+          this.paintWait();
+        }
+        step(1, 100, 'Prête');
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      Popup.show(failed.length && !ok
+        ? { title: 'Traduction impossible', text: langList(failed), bad: true }
+        : { title: 'Message traduit', text: `${waitLines(this.cs).length} langues prêtes`, done: true });
     } catch (e) {
       this.trErr = 'Traduction impossible : ' + (e && e.message ? e.message : String(e));
-      Popup.show({ title: 'Traduction impossible', text: e && e.message ? e.message : String(e), bad: true });
+      Popup.show({ title: 'Traduction impossible', text: this.trErr, bad: true });
     }
     this.trBusy = '';
     if (page === Cam) this.changed(false);
     else this.save();
-    // Typed again or more languages meanwhile: those too.
-    if (!this.trErr && untranslated(this.cs).length) this.translate();
+    // The next step (asked meanwhile), now that this one is over. A language
+    // that failed here is not tried again until the message changes.
+    if (failed.length) this.trFailed = new Set([...(this.trFailed || []), ...failed]);
+    this.pump();
   },
   acts: {
     pause: () => {
@@ -1754,7 +1937,7 @@ const Cam = {
       const k = el.dataset.k;
       Cam.cs[k] = !Cam.cs[k];
       Cam.changed(SENT.includes(k), k === 'multi');
-      if (k === 'multi') Cam.translate();
+      if (k === 'multi') Cam.pump();
     },
     profile: (el) => {
       const i = Number(el.dataset.v);
@@ -1775,8 +1958,12 @@ const Cam = {
       Cam.changed(true, false);
     },
     jump: (el) => {
+      Cam.jumped = el.dataset.v;
+      Cam.jumpedAt = Date.now();
+      el.blur();
       const body = $('#c-adj .abody'), s = $('#cat-' + el.dataset.v);
       if (body && s) body.scrollTo({ top: s.offsetTop - 8, behavior: 'smooth' });
+      Cam.spy();
     },
     reset: (el) => Cam.resetKeys([el.dataset.k]),
     greset: (el) => Cam.resetKeys(GROUPS[el.dataset.v]),
@@ -1883,22 +2070,20 @@ const Cam = {
       const off = set.has(l);
       off ? set.delete(l) : set.add(l);
       Cam.cs.langs = ALL_LANGS.filter((x) => set.has(x));
-      Cam.changed(false);
-      if (off) Cam.forgetLangs([l]);
-      else Cam.translate();
+      if (Cam.trFailed) Cam.trFailed.delete(l);
+      Cam.langsChanged(off ? [l] : [], off ? [] : [l]);
     },
     langs: (el) => {
       const before = chosenLangs(Cam.cs);
       Cam.cs.langs = el.dataset.v === 'all' ? ALL_LANGS.slice() : null;
-      const removed = before.filter((l) => !chosenLangs(Cam.cs).includes(l));
-      Cam.changed(false);
-      if (removed.length) Cam.forgetLangs(removed);
-      Cam.translate();
+      const after = chosenLangs(Cam.cs);
+      Cam.langsChanged(before.filter((l) => !after.includes(l)), after.filter((l) => !before.includes(l)));
     },
     msg: (el) => {
       Cam.cs.msg = el.value.trim() || CAM_DEFAULTS.msg;
+      Cam.trFailed = new Set();
       Cam.changed(false);
-      Cam.translate();
+      Cam.pump();
     },
   },
 };
@@ -2306,6 +2491,7 @@ const Settings = {
                 <div><b>Rien ne sort de chez toi.</b><small>Hyphn parle seulement à ton iPhone, sur ton réseau, et tout est chiffré.</small></div>
                 <div class="pills"><span class="pl"><b>0</b>compte</span><span class="pl"><b>0</b>serveur</span><span class="pl"><b>0</b>donnée envoyée</span></div>
               </div>
+              <div class="scred"><b>Crédits</b> Traduction : moteur et modèles de Firefox (Mozilla, MPL-2.0). Effets : MediaPipe (Google, Apache-2.0), three.js (MIT), méthode de MindAR (MIT), Fluent Emoji (Microsoft, MIT). Modèles 3D (CC-BY-4.0) : « Thug Life | Cool glasses » par MR EXPERT, « Clown Hat » par PatelDev, « Earring Jade » par Softmind Game Factory (Sketchfab). Décors : photos CC0 et domaine public (Wikimedia Commons, NASA).</div>
               <div class="sver mono">Hyphn ${S ? esc(S.version) : ''} · ${esc(S ? S.pc_name : '')} · empreinte du PC ${esc(S ? S.pc_fingerprint : '')}</div>`)}
           </div>
         </div>
@@ -2408,7 +2594,13 @@ function onSnapshot(snap) {
   listen('pair', (e) => Pair.onPair(e.payload));
   // Installed by itself at launch (one admin « Oui »).
   listen('vcam_installed', () => toast('Webcam Windows prête'));
-  listen('translate_progress', (e) => Cam.trProgress(e.payload));
+  listen('langs', (e) => {
+    Cam.cs = Cam.cs || Object.assign({}, CAM_DEFAULTS, settings.cam || {});
+    Cam.onLangs(e.payload);
+  });
+  // Installs or a translation left half done (app closed, reload): picked up.
+  Cam.cs = Cam.cs || Object.assign({}, CAM_DEFAULTS, settings.cam || {});
+  Cam.langsFetch();
   // « Afficher » touched on the iPhone: the PC shows the picture at once.
   listen('cam_phone_live', () => { if (route() !== 'cam') go('cam'); });
   // The iPhone asks to send (ADR-0030): its confirmation shows here.

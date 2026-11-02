@@ -16,6 +16,7 @@ mod store;
 mod timing;
 mod tls;
 mod translate;
+mod langs;
 mod vcam;
 mod video;
 
@@ -245,32 +246,33 @@ fn translate_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("translate"))
 }
 
-/// Gets the translation engine and models for `langs`, downloading what is
-/// missing once (ADR-0033); « translate_progress » tells the window how far.
+/// The files of installed languages, for the engine in the window; nothing is
+/// downloaded here (installs go through `langs_ask`).
 #[tauri::command]
-async fn translate_prepare(app: AppHandle, langs: Vec<String>) -> Result<translate::Plan, String> {
+async fn translate_plan(app: AppHandle, langs: Vec<String>) -> Result<translate::Plan, String> {
     let dir = translate_dir(&app)?;
-    tauri::async_runtime::spawn_blocking(move || {
-        translate::prepare(&dir, &langs, |done, total| {
-            let _ = app.emit("translate_progress", (done, total));
-        })
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || translate::plan(&dir, &langs)).await.map_err(|e| e.to_string())?
 }
 
-/// Frees the space of the languages no longer chosen (ADR-0033); bytes freed.
+/// The languages on disk, and the installs or removals going on (ADR-0033).
 #[tauri::command]
-async fn translate_forget(app: AppHandle, langs: Vec<String>) -> Result<u64, String> {
-    let dir = translate_dir(&app)?;
-    tauri::async_runtime::spawn_blocking(move || translate::forget(&dir, &langs)).await.map_err(|e| e.to_string())?
+fn langs_status(langs: State<'_, Arc<langs::Langs>>) -> langs::Status {
+    langs.status()
 }
 
-/// One translation file, as raw bytes for the engine in the window.
+/// Queues installs or removals; they go on whatever the window does.
 #[tauri::command]
-fn translate_read(app: AppHandle, path: String) -> Result<tauri::ipc::Response, String> {
+fn langs_ask(op: langs::Op, list: Vec<String>, langs: State<'_, Arc<langs::Langs>>) {
+    langs.ask(op, &list);
+}
+
+/// One translation file, as raw bytes for the engine in the window. Read off
+/// the main thread: a 25 MB model must never freeze the window or the Cam.
+#[tauri::command]
+async fn translate_read(app: AppHandle, path: String) -> Result<tauri::ipc::Response, String> {
     let dir = translate_dir(&app)?;
-    Ok(tauri::ipc::Response::new(translate::read(&dir, &path)?))
+    let bytes = tauri::async_runtime::spawn_blocking(move || translate::read(&dir, &path)).await.map_err(|e| e.to_string())??;
+    Ok(tauri::ipc::Response::new(bytes))
 }
 
 /// Creates the webcam for this session if the DLL is registered (once).
@@ -808,6 +810,15 @@ pub fn run() {
             let native = vcam::native_dir(app.path().resource_dir().ok()).filter(|d| vcam::native_is_genuine(d));
             let (vcam_tx, vcam_rx) = tokio::sync::watch::channel(vcam::VcamState::default());
             let readers = Arc::new(AtomicUsize::new(0));
+            // The languages of the waiting message: installed and removed on a
+            // thread of their own, the window told of each step.
+            let lh = app.handle().clone();
+            if let Ok(dir) = translate_dir(&lh) {
+                let l = langs::Langs::start(dir, move |st| {
+                    let _ = lh.emit("langs", st);
+                });
+                app.manage(l);
+            }
             app.manage(Hyphn {
                 hub: hub.clone(),
                 inner: Mutex::new(Inner { settings, port, mdns, video_url, camera: false, camera_error: None, native }),
@@ -864,9 +875,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
             toggle_fullscreen,
-            translate_prepare,
+            translate_plan,
             translate_read,
-            translate_forget,
+            langs_status,
+            langs_ask,
             pair_offer,
             forget_device,
             get_settings,
