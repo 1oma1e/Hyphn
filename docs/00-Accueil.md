@@ -25,9 +25,10 @@ Le trait d'union entre l'iPhone et le PC : **Cam** (webcam 4K), **Drop** (transf
 - [[Claude Code - bonnes pratiques]]
 - [[Concurrents et projets open source]]
 - [[Points a tester]]
+- [[Latence et debit Cam]] — trajet d'une image, pistes contre la latence et les saccades
 - [[Noms]]
 - [[SOURCES]] — tous les liens
 
 ## Specs et journal
 - [[Specs - Index]] — une spec par fonctionnalité (à partir de la phase 1)
-- `sessions/` — un journal par session, le plus récent : [[2026-10-30]]
+- `sessions/` — un journal par session, le plus récent : [[2026-11-02]]

@@ -56,4 +56,10 @@ Toutes les sources consultées le 2026-10-29 pour préparer le projet. Chaque no
 - [API GitHub — compte hyphn](https://api.github.com/users/hyphn)
 - [API iTunes Search (App Store FR)](https://itunes.apple.com/search?term=hyphn&entity=software&country=fr)
 
+## Cam : latence, effets, traduction (2026-11-02)
+- [VideoToolbox — EnableLowLatencyRateControl](https://developer.apple.com/documentation/videotoolbox/kvtvideoencoderspecification_enablelowlatencyratecontrol)
+- [WWDC21 — Explore low-latency video encoding with VideoToolbox](https://developer.apple.com/videos/play/wwdc2021/10158/)
+- [ARKit — Tracking and visualizing faces](https://developer.apple.com/documentation/arkit/tracking-and-visualizing-faces)
+- [Bergamot — traduction locale](https://browser.mt/) ; [BergamotTranslatorSharp](https://github.com/Freeesia/BergamotTranslatorSharp)
+
 Liens : [[00-Accueil]]

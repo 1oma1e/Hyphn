@@ -38,7 +38,7 @@ Idées à ajouter petit à petit. **Aucune n'est validée** : Evan choisit, puis
 | Profil choisi tout seul selon l'app qui ouvre la caméra (Discord → Appel, OBS → Stream) | ★★ | M | Zéro réglage avant un appel |
 | Photo 48 Mpx déclenchée depuis le PC (arrive par Drop) | ★★ | M | Bouton présent dans la maquette V2 |
 | Format vertical 9:16 pour les lives TikTok | ★★ | M | Proposé dans la maquette V2 (Qualité › Format) |
-| Message de l'écran d'attente personnalisable, traduit dans toutes les langues | ★★ | M | Demandé par Evan pour plus tard ([[ADR-0018 Cam image seule et demarrage en pause]]) |
+| ~~Message de l'écran d'attente personnalisable, traduit dans toutes les langues~~ : devenu la spec [[Cam - Ecrans d'attente]] | ★★ | M | Demandé par Evan ([[ADR-0018 Cam image seule et demarrage en pause]]) |
 | Graphe du débit dans la fenêtre « Infos du flux », avec les baisses de qualité expliquées | ★★ | S | Dans la maquette V2 |
 | Test réseau avant le stream (débit, latence) → résolution conseillée | ★★★ | S | Évite de lancer un 4K60 qui va saccader |
 | Mesure de latence « verre à verre » (chronomètre filmé) | ★★ | S | Preuve chiffrée de la phase 4 |
@@ -46,7 +46,7 @@ Idées à ajouter petit à petit. **Aucune n'est validée** : Evan choisit, puis
 | Deux iPhone en même temps (deux caméras) | ★ | M | Neon montre que plusieurs caméras virtuelles sont possibles |
 | Sortie NDI ou SRT pour d'autres logiciels | ★ | M | Idée prise à NDI HX Camera |
 | Cadrage automatique (suivi du visage) | ★★ | L | Dans la maquette V2 (Effets), calculé par la carte graphique du PC, jamais sur l'iPhone |
-| Effets (flou d'arrière-plan, lumière du visage, filtres) appliqués **jusqu'à la webcam Windows**, dans la DLL sur la carte graphique | ★★ | L | Retirés de l'app le 2026-10-31 : ils ne changeaient que l'aperçu du PC, pas l'image de Discord |
+| ~~Effets (flou d'arrière-plan, lumière du visage, filtres) appliqués **jusqu'à la webcam Windows**~~ : devenu la spec [[Cam - Filtres et effets]] ([[ADR-0034 Ou appliquer les filtres de la Cam]]) | ★★ | L | Retirés de l'app le 2026-10-31 : ils ne changeaient que l'aperçu du PC, pas l'image de Discord |
 | « Afficher » tout seul quand une app (Discord, OBS) ouvre la webcam Hyphn | ★★ | S | Zéro clic avant un appel ; aujourd'hui la webcam démarre en pause ([[ADR-0018 Cam image seule et demarrage en pause]]) |
 
 ## Phase 6 — Finition

@@ -22,6 +22,10 @@ Statuts : `brouillon` (attend Evan), `validee` (date), `faite` (preuve notée).
 | [[Cam - Webcam Windows et OBS]] | 5 (en avance) | validee (2026-10-31) |
 | [[Drop - Photos vers le PC]] | 2 (en avance) | validee (2026-11-01) |
 | [[Core - Liaison par cable]] | 1 (avancée de la phase 3) | validee (2026-11-01) |
+| [[Cam - Latence et fluidite]] | 4 (en avance) | brouillon (2026-11-02) |
+| [[Cam - Reglages avances]] | 5 (en avance) | brouillon (2026-11-02) |
+| [[Cam - Filtres et effets]] | 5 (en avance) | brouillon (2026-11-02) |
+| [[Cam - Ecrans d'attente]] | 5 (en avance) | brouillon (2026-11-02) |
 | `Infos iPhone - Batterie par cable` | 1 | à écrire (après l'essai `idevicediagnostics`, [[ADR-0006 Sante batterie par cable]]) |
 
 Liens : [[00-Accueil]]
