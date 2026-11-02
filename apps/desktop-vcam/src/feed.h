@@ -40,6 +40,8 @@ struct WaitState {
     bool multi = true;
     uint8_t style = 0;  // 0 animated, 1 minimal
     std::wstring message = L"Je reviens bientôt";
+    // The user's message in each language of kLangs, same order (ADR-0033); empty: not translated.
+    std::vector<std::wstring> texts;
 };
 
 class Feed {

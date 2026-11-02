@@ -15,6 +15,7 @@ mod status;
 mod store;
 mod timing;
 mod tls;
+mod translate;
 mod vcam;
 mod video;
 
@@ -212,7 +213,46 @@ fn vcam_state(h: &Hyphn) -> vcam::VcamState {
         multi: c.get("multi").and_then(|v| v.as_bool()).unwrap_or(true),
         style: c.get("wst").and_then(|v| v.as_u64()).unwrap_or(0).min(2) as u8,
         message: c.get("msg").and_then(|v| v.as_str()).unwrap_or("Je reviens bientôt").to_string(),
+        texts: translations(c),
     }
+}
+
+/// The waiting message in each language, when the window translated this very
+/// message (`tr` in the Cam settings, ADR-0033); the French one is the message.
+fn translations(c: &serde_json::Value) -> Vec<String> {
+    let msg = c.get("msg").and_then(|v| v.as_str()).unwrap_or_default();
+    let Some(tr) = c.get("tr").filter(|t| t.get("msg").and_then(|m| m.as_str()) == Some(msg)) else {
+        return vec![];
+    };
+    vcam::LANGS
+        .iter()
+        .map(|l| tr.get("t").and_then(|t| t.get(*l)).and_then(|v| v.as_str()).unwrap_or(msg).to_string())
+        .collect()
+}
+
+fn translate_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("translate"))
+}
+
+/// Gets the translation engine and models for `langs`, downloading what is
+/// missing once (ADR-0033); « translate_progress » tells the window how far.
+#[tauri::command]
+async fn translate_prepare(app: AppHandle, langs: Vec<String>) -> Result<translate::Plan, String> {
+    let dir = translate_dir(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        translate::prepare(&dir, &langs, |done, total| {
+            let _ = app.emit("translate_progress", (done, total));
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// One translation file, as raw bytes for the engine in the window.
+#[tauri::command]
+fn translate_read(app: AppHandle, path: String) -> Result<tauri::ipc::Response, String> {
+    let dir = translate_dir(&app)?;
+    Ok(tauri::ipc::Response::new(translate::read(&dir, &path)?))
 }
 
 /// Creates the webcam for this session if the DLL is registered (once).
@@ -468,6 +508,15 @@ fn cam_live(on: bool, h: State<'_, Hyphn>) {
 #[tauri::command]
 fn cam_preview(on: bool, h: State<'_, Hyphn>) {
     h.hub.update_cam(|c| c.preview = on);
+}
+
+/// Cam full screen (F11 or the dock button): the window covers the whole
+/// screen, picture edge to edge. Returns the new state.
+#[tauri::command]
+fn toggle_fullscreen(window: tauri::WebviewWindow) -> Result<bool, String> {
+    let on = !window.is_fullscreen().map_err(|e| e.to_string())?;
+    window.set_fullscreen(on).map_err(|e| e.to_string())?;
+    Ok(on)
 }
 
 /// The window reads the picture here (WebSocket, `video.rs`).
@@ -796,6 +845,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
+            toggle_fullscreen,
+            translate_prepare,
+            translate_read,
             pair_offer,
             forget_device,
             get_settings,

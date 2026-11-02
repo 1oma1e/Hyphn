@@ -402,19 +402,33 @@ bool Feed::ServerIsHyphn(HANDLE pipe) {
 }
 
 void Feed::OnState(const BYTE* p, uint32_t len) {
-    // The app sends at most 60 characters; anything longer is not from it.
-    if (len < 4 || len > 4 + 256) return;
+    // The app sends at most 60 characters, then optionally a 0 and the 18
+    // translations separated by 0 (ADR-0033); anything longer is not from it.
+    if (len < 4 || len > 4 + 8192) return;
     WaitState s;
     s.app = true;
     s.live = p[0] != 0;
     s.phone = p[1] != 0;
     s.multi = p[2] != 0;
     s.style = p[3] > 1 ? 0 : p[3];
-    if (len > 4) {
-        int n = MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast<const char*>(p + 4), static_cast<int>(len - 4), nullptr, 0);
-        s.message.assign(static_cast<size_t>(n), L'\0');
-        MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast<const char*>(p + 4), static_cast<int>(len - 4), s.message.data(), n);
+    auto wide = [](const BYTE* b, uint32_t n) {
+        std::wstring w;
+        if (!n) return w;
+        int c = MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast<const char*>(b), static_cast<int>(n), nullptr, 0);
+        w.assign(static_cast<size_t>(c), L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast<const char*>(b), static_cast<int>(n), w.data(), c);
+        return w;
+    };
+    std::vector<std::wstring> parts;
+    uint32_t from = 4;
+    for (uint32_t i = 4; i <= len; ++i) {
+        if (i == len || p[i] == 0) {
+            parts.push_back(wide(p + from, i - from));
+            from = i + 1;
+        }
     }
+    s.message = parts.empty() ? std::wstring() : parts[0];
+    if (parts.size() == 1 + static_cast<size_t>(kLangCount)) s.texts.assign(parts.begin() + 1, parts.end());
     std::lock_guard<std::mutex> l(stateLock_);
     state_ = s;
 }
@@ -1069,7 +1083,8 @@ HRESULT Feed::DrawWait(const WaitState& st, bool /*videoExpected*/) {
         return l;
     };
 
-    if (!(st.multi && st.message == kLangs[0].text)) {
+    const bool translated = st.texts.size() == static_cast<size_t>(kLangCount);
+    if (!(st.multi && (st.message == kLangs[0].text || translated))) {
         // A message of the user's own: still, wrapped if long.
         if (auto f = format(L"fr-fr")) {
             f->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
@@ -1092,12 +1107,16 @@ HRESULT Feed::DrawWait(const WaitState& st, bool /*videoExpected*/) {
         const int cur = static_cast<int>(tl / kLangSeconds);
         const double ph = tl - cur * kLangSeconds;
         for (int back = 1; back >= 0; --back) {
-            const Lang& lang = kLangs[((cur - back) % kLangCount + kLangCount) % kLangCount];
+            const int li = ((cur - back) % kLangCount + kLangCount) % kLangCount;
+            const Lang& lang = kLangs[li];
+            // The user's own message once translated, else the built-in words.
+            const wchar_t* text = translated ? st.texts[li].c_str() : lang.text;
             const double local = ph + back * kLangSeconds;
             auto f = format(lang.locale);
             if (!f) continue;
-            const UINT32 n = static_cast<UINT32>(wcslen(lang.text));
-            auto full = layoutOf(f.Get(), lang.text, n, 100000.f);
+            const UINT32 n = static_cast<UINT32>(wcslen(text));
+            if (!n) continue;
+            auto full = layoutOf(f.Get(), text, n, 100000.f);
             if (!full) continue;
             // Per letter: [start, length] in the text and its advance.
             std::vector<DWRITE_CLUSTER_METRICS> clusters(n);
@@ -1130,7 +1149,7 @@ HRESULT Feed::DrawWait(const WaitState& st, bool /*videoExpected*/) {
                     dy = static_cast<float>(-e * 11 * s);
                 }
                 if (a > 0.003f) {
-                    auto one = layoutOf(f.Get(), lang.text + pos, c.length, c.width + size);
+                    auto one = layoutOf(f.Get(), text + pos, c.length, c.width + size);
                     if (one)
                         if (auto br = solid(0xF1F3F6, a)) dc_->DrawTextLayout(D2D1::Point2F(x, textY - size * 0.8f + dy), one.Get(), br.Get(), D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
                 }

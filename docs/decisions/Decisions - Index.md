@@ -36,8 +36,9 @@ Une décision par fichier, numérotée. Modèle : `_modele.md`. Statuts : `propo
 | [[ADR-0030 Drop commence sur l'iPhone et le PC confirme]] | Drop part de l'iPhone (choix puis confirmation), le PC confirme dans une fenêtre (dossier et rangement la première fois) ; plus de « Commencer » sur le PC | accepte (2026-11-01) |
 | [[ADR-0031 Liaison par cable USB]] | iPhone branché : liaison par usbmux (iTunes / Apple Devices, crate `idevice`), sans QR, prioritaire sur le Wi-Fi ; retour au Wi-Fi débranché | accepte (2026-11-01) |
 | [[ADR-0032 Profils de puissance au lieu de la protection batterie]] | Une liste de profils (Max par défaut, Équilibré, Économie, Appel, Stream, Cours, Personnalisé) ; protections batterie réglables sauf « critique » | accepte |
-| [[ADR-0033 Traduction locale du message d'attente]] | Message d'attente traduit sur le PC sans cloud (Bergamot), phrases prêtes traduites à la main | propose |
+| [[ADR-0033 Traduction locale du message d'attente]] | Message d'attente traduit sur le PC sans cloud : moteur de Firefox (Bergamot) dans la fenêtre, modèles de Mozilla téléchargés une fois et vérifiés, via l'anglais | accepte (2026-11-02) |
 | [[ADR-0034 Ou appliquer les filtres de la Cam]] | Tous les filtres et effets sur la carte graphique du PC, après le décodage ; l'iPhone filme seulement | accepte |
 | [[ADR-0035 Webcam sans forcer le H.264]] | H.264 plafonné à 1080p pendant un appel (D), puis l'app décode pour la webcam : HEVC partout (A) | accepte |
+| [[ADR-0036 Objectif exact au lieu de la camera combinee]] | L'iPhone ouvre l'objectif exact du bouton (0,5× / 1× / 2× / 5×) : réglages manuels possibles, courte coupure en changeant d'objectif | accepte (2026-11-02) |
 
 Liens : [[00-Accueil]]

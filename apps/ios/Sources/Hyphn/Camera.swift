@@ -37,6 +37,25 @@ final class Camera: NSObject, ObservableObject {
     private var format: (height: UInt32, fps: UInt32)?
 
     static let lensFactors: [CGFloat] = [0.5, 1, 2, 5]
+
+    /// How much each back lens magnifies, 1× = the wide lens. Read once on the
+    /// multi-lens camera (its switch-over factors), as the telephoto is 2×, 3× or 5×.
+    private static let nativeZoom: [AVCaptureDevice.DeviceType: CGFloat] = {
+        var z: [AVCaptureDevice.DeviceType: CGFloat] = [.builtInWideAngleCamera: 1, .builtInUltraWideCamera: 0.5, .builtInTelephotoCamera: 2]
+        let at = { (t: AVCaptureDevice.DeviceType) in
+            AVCaptureDevice.default(t, for: .video, position: .back)?.virtualDeviceSwitchOverVideoZoomFactors.map { CGFloat(truncating: $0) } ?? []
+        }
+        let triple = at(.builtInTripleCamera)
+        if triple.count == 2 {
+            z[.builtInUltraWideCamera] = 1 / triple[0]
+            z[.builtInTelephotoCamera] = triple[1] / triple[0]
+        } else if let w = at(.builtInDualWideCamera).first {
+            z[.builtInUltraWideCamera] = 1 / w
+        } else if let t = at(.builtInDualCamera).first {
+            z[.builtInTelephotoCamera] = t
+        }
+        return z
+    }()
     /// The paused preview for the PC window (ADR-0027): small, to spare the battery.
     static let previewQuality: (height: UInt32, fps: UInt32, kbps: UInt32) = (480, 15, 1_500)
 
@@ -136,7 +155,7 @@ final class Camera: NSObject, ObservableObject {
         if remirror, let r = rotation { applyRotation(r.videoRotationAngleForHorizonLevelCapture) }
         let wasConfigured = setLive(c.live && isOpen)
         if isOpen, !denied, !wasConfigured {
-            if relens { setZoom(c.lens) }
+            if relens { selectLens(c.lens) }
             if retune { applyTune() }
         }
         report()
@@ -175,7 +194,7 @@ final class Camera: NSObject, ObservableObject {
 
     func pickLens(_ i: UInt32) {
         control.lens = i
-        setZoom(i)
+        selectLens(i)
         report(byUser: true)
     }
 
@@ -346,18 +365,31 @@ final class Camera: NSObject, ObservableObject {
 
     // MARK: Capture setup
 
-    private func device(front: Bool) -> AVCaptureDevice? {
+    /// The real lens behind a button, never the multi-lens camera: iOS refuses
+    /// manual exposure, focus and white balance on that one (choice of Evan,
+    /// 2026-11-02). 2× is the wide lens zoomed in; a missing lens falls back to it.
+    private func device(front: Bool, lens: UInt32) -> AVCaptureDevice? {
         if front {
             return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
         }
-        return AVCaptureDevice.default(.builtInTripleCamera, for: .video, position: .back)
-            ?? AVCaptureDevice.default(.builtInDualWideCamera, for: .video, position: .back)
-            ?? AVCaptureDevice.default(.builtInDualCamera, for: .video, position: .back)
+        let wanted: AVCaptureDevice.DeviceType? = lens == 0 ? .builtInUltraWideCamera : lens == 3 ? .builtInTelephotoCamera : nil
+        return wanted.flatMap { AVCaptureDevice.default($0, for: .video, position: .back) }
             ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
     }
 
+    /// A lens button: zoom on the lens in use, or open the other lens (a short cut in the picture).
+    private func selectLens(_ i: UInt32) {
+        guard isOpen, !denied else { lens = i; return }
+        if let now = device, let next = device(front: front, lens: i), now.uniqueID != next.uniqueID {
+            let w = wanted
+            configure(front: front, lens: i, height: w.height, fps: w.fps)
+        } else {
+            setZoom(i)
+        }
+    }
+
     private func configure(front: Bool, lens: UInt32, height: UInt32, fps: UInt32) {
-        guard let dev = device(front: front) else { return }
+        guard let dev = device(front: front, lens: lens) else { return }
         self.front = front
         session.beginConfiguration()
         session.sessionPreset = .inputPriority
@@ -381,12 +413,6 @@ final class Camera: NSObject, ObservableObject {
             dev.activeVideoMinFrameDuration = CMTime(value: 1, timescale: CMTimeScale(r))
             dev.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: CMTimeScale(r))
             self.fps = UInt32(r)
-            // A multi-lens camera picks another lens by itself (macro when
-            // something is close, a brighter one in low light): the picture
-            // jumps. A webcam must not: lenses change only on 0,5× / 1× / 2× / 5×.
-            if dev.isVirtualDevice {
-                dev.setPrimaryConstituentDeviceSwitchingBehavior(.restricted, restrictedSwitchingBehaviorConditions: [])
-            }
             dev.unlockForConfiguration()
         }
         session.commitConfiguration()
@@ -438,8 +464,8 @@ final class Camera: NSObject, ObservableObject {
         }
     }
 
-    /// 0,5× / 1× / 2× / 5×. On a multi-camera device, 1× is the wide lens,
-    /// found at the first switch-over factor; without an ultra-wide, 0,5× stays 1×.
+    /// 0,5× / 1× / 2× / 5× on the lens in use; a lens that is missing is
+    /// replaced by the wide one zoomed in (0,5× then stays 1×).
     /// The fine zoom of the PC panel (zoomPercent) multiplies the lens zoom.
     private func setZoom(_ i: UInt32) {
         lens = i
@@ -455,9 +481,8 @@ final class Camera: NSObject, ObservableObject {
     /// Device zoom factor of a lens button, without the fine zoom.
     private func zoomOf(_ i: UInt32, _ dev: AVCaptureDevice) -> CGFloat {
         let factor = Self.lensFactors[Int(min(i, 3))]
-        let hasUltraWide = dev.constituentDevices.contains { $0.deviceType == .builtInUltraWideCamera }
-        let base = hasUltraWide ? (dev.virtualDeviceSwitchOverVideoZoomFactors.first.map { CGFloat(truncating: $0) } ?? 2) : 1
-        return factor * base
+        let native = dev.position == .front ? 1 : (Self.nativeZoom[dev.deviceType] ?? 1)
+        return max(1, factor / native)
     }
 }
 

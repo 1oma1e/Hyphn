@@ -1,7 +1,7 @@
 ---
 type: decision
 date: 2026-11-02
-statut: propose
+statut: accepte
 ---
 # ADR-0033 Traduction locale du message d'attente
 
@@ -16,10 +16,16 @@ Evan veut que le message de l'écran d'attente, tapé une fois, s'affiche tradui
 | C. Pas de traduction libre : phrases prêtes traduites à la main, au choix | Zéro poids, qualité parfaite | Pas le message libre qu'Evan veut |
 
 ## Décision
-Proposé : **A**, avec **C** pour les messages prêts (déjà en place pour le message par défaut). Langues sans modèle Bergamot : message laissé dans sa langue, avec le signal « non traduit ». À vérifier en début de session : la liste des langues couvertes, la taille, la licence, et l'appel depuis Rust (lib C++ ou exécutable à côté).
+**A** (choix d'Evan, 2026-11-02), avec **C** pour le message par défaut (déjà traduit à la main). Vérifié le 2026-11-02 :
+- **Source** : les listes publiques de Mozilla (Remote Settings, collections `translations-models-v2` et `translations-wasm-v2`), les fichiers sur leur CDN. Chaque fichier est vérifié deux fois avec l'empreinte SHA-256 publiée (téléchargé, puis décompressé). Licence MPL-2.0 (moteur et modèles).
+- **Langues** : les 17 existent, toujours via l'anglais (fr→en, puis en→X ; le chinois est `zh-Hans`). Environ 300 Mo en tout.
+- **Où ça tourne** : le moteur WebAssembly de Firefox dans un worker de la fenêtre (`ui/translate-worker.js`, colle `ui/vendor/bergamot-translator.js` copiée de Firefox) ; Rust télécharge et range les fichiers (`src/translate.rs`). La fenêtre autorise le WebAssembly (`'wasm-unsafe-eval'`).
+- **Mesure** : fr→en→de en 0,7 s sur le PC d'Evan (page d'essai, vrais modèles).
+- Une langue sans modèle garde le texte d'Evan.
 
 ## Conséquences
-- Téléchargement des modèles au premier usage : ce n'est pas du cloud, mais c'est un accès internet. À dire clairement à l'utilisateur ; possible aussi avec l'installateur.
+- Téléchargement au premier message traduit, tout seul, avec la progression affichée dans le panneau : ce n'est pas du cloud (rien de l'utilisateur ne part), mais c'est un accès internet, dit dans l'info-bulle.
+- La webcam Windows reçoit les 18 traductions avec le message (état de la DLL, séparées par un 0) : il faut la nouvelle DLL (`tools/build-native.ps1`).
 - Les traductions sont gardées dans les réglages : pas de nouveau calcul à chaque lancement.
 - Bon choix si les 18 langues s'affichent en moins de 5 s sur le PC d'Evan.
 

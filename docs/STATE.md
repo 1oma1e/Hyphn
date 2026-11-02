@@ -15,13 +15,16 @@ Mis à jour : 2026-11-02 (session « latence et fluidité de la Cam »). Réécr
 
 ## Fait, pas encore confirmé par Evan
 - **Drop v1** ([[ADR-0029 Drop guide avec anti-doublon des la v1]], [[ADR-0030 Drop commence sur l'iPhone et le PC confirme]]).
-- Info-bulles sur chaque réglage, bouton et chiffre de l'app PC (règle dans [[RULES]], PC) : vues sur une page d'essai seulement.
+- Info-bulles sur chaque réglage, bouton et chiffre de l'app PC (règle dans [[RULES]], PC), en trois parties (titre, explication, conseil) : vues sur une page d'essai seulement.
+- Nouveau design (2026-11-02, page d'essai seulement) : Cam bord à bord (barre et boutons qui s'effacent, plein écran F11), panneau à catégories ([[Cam - Reglages avances]]) qui cache ce que la caméra ne sait pas faire, « Infos du flux » dans le même panneau, accueil plus grand, page Réglages avec menu de catégories.
+- iPhone 0.9.1 (16) : objectif exact au lieu de la caméra combinée ([[ADR-0036 Objectif exact au lieu de la camera combinee]]) ; compile sur le serveur (essai), pas installé.
+- Traduction du message de pause ([[ADR-0033 Traduction locale du message d'attente]]) : téléchargement et contrôle des modèles Mozilla vérifiés (`cargo test mozilla -- --ignored`), vraie traduction fr→en→de dans la page d'essai ; pas encore dans la vraie app ni la webcam (nouvelle DLL compilée, pas installée).
 - SPS H.264 réécrit sur le PC (décodage sans attente) et H.264 plafonné à 1080p : utiles seulement quand le H.264 est encore utilisé.
-- Tests : `cargo test` dans `apps/desktop/src-tauri/` → 92 passent. DLL webcam et plugin OBS : `tools/build-native.ps1` → OK.
+- Tests : `cargo test` dans `apps/desktop/src-tauri/` → 98 passent. DLL webcam et plugin OBS : `tools/build-native.ps1` → OK.
 
 ## Pas fait
 - Specs en brouillon à valider : [[Cam - Reglages avances]], [[Cam - Filtres et effets]], [[Cam - Ecrans d'attente]] ; dans [[Cam - Latence et fluidite]] : E3 (débit qui suit le lien), E4 (encodeur iPhone faible latence), E5, E6.
-- ADR à trancher : [[ADR-0033 Traduction locale du message d'attente]]. Tranchés : [[ADR-0034 Ou appliquer les filtres de la Cam]] (tout sur le PC), [[ADR-0032 Profils de puissance au lieu de la protection batterie]] (Max par défaut, une liste de profils).
+- Tranchés le 2026-11-02 : [[ADR-0032 Profils de puissance au lieu de la protection batterie]], [[ADR-0033 Traduction locale du message d'attente]], [[ADR-0034 Ou appliquer les filtres de la Cam]], [[ADR-0036 Objectif exact au lieu de la camera combinee]].
 - Mesure en Wi-Fi ; but chiffré de latence (à fixer par Evan).
 - Porte phase 1 : iPhone visible en moins de 3 s après le scan. Batterie par câble ([[ADR-0006 Sante batterie par cable]]) ; notification Windows de batterie faible.
 - Notes texte de `docs/maquettes/` en retard sur l'app. `CLAUDE.md` (Commandes) ne cite pas `tools/build-native.ps1` : à ajouter par Evan.
