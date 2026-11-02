@@ -6,3 +6,9 @@ EXPORTS
     DllUnregisterServer PRIVATE
     HyphnVCamCreate
     HyphnVCamRemove
+    HyphnDecoderOpen
+    HyphnDecoderHevc
+    HyphnDecoderPush
+    HyphnDecoderWait
+    HyphnDecoderFill
+    HyphnDecoderClose

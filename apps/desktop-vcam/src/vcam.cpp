@@ -851,3 +851,53 @@ extern "C" HRESULT WINAPI HyphnVCamRemove() {
     g_camera.Reset();
     return hr;
 }
+
+// ---------------------------------------------------------------- decoder for the app
+
+// ADR-0035: the camera service cannot see the HEVC decoder (a Store app), so
+// the Hyphn app decodes for the webcam with this same code and sends decoded
+// NV12 pictures on the pipe. Any thread may call these; each joins the
+// multithreaded apartment once.
+static void JoinMta() {
+    thread_local bool joined = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED));
+    (void)joined;
+}
+
+extern "C" void* WINAPI HyphnDecoderOpen() {
+    JoinMta();
+    auto* f = new (std::nothrow) hyphn::Feed(g_module);
+    if (!f) return nullptr;
+    if (FAILED(f->StartLocal())) {
+        delete f;
+        return nullptr;
+    }
+    return f;
+}
+
+extern "C" BOOL WINAPI HyphnDecoderHevc(void* d) { return d && static_cast<hyphn::Feed*>(d)->HevcOk(); }
+
+// TRUE: the decoder needs a keyframe.
+extern "C" BOOL WINAPI HyphnDecoderPush(void* d, UINT8 codec, UINT32 w, UINT32 h, BOOL key, INT64 pts, const BYTE* p, UINT32 len) {
+    if (!d || !p) return FALSE;
+    JoinMta();
+    return static_cast<hyphn::Feed*>(d)->Decode(codec, w, h, key != FALSE, pts, p, len);
+}
+
+// TRUE: a new picture came out of the decoder within `ms`.
+extern "C" BOOL WINAPI HyphnDecoderWait(void* d, DWORD ms) {
+    return d && WaitForSingleObject(static_cast<hyphn::Feed*>(d)->FrameEvent(), ms) == WAIT_OBJECT_0;
+}
+
+// The latest picture as NV12, w x h, rows packed (w * h * 3 / 2 bytes).
+// TRUE: it is the iPhone picture (FALSE: nothing recent, `dst` holds no picture to send).
+extern "C" BOOL WINAPI HyphnDecoderFill(void* d, BYTE* dst, UINT32 w, UINT32 h) {
+    if (!d || !dst) return FALSE;
+    JoinMta();
+    bool video = false;
+    return SUCCEEDED(static_cast<hyphn::Feed*>(d)->Fill(dst, static_cast<LONG>(w), w, h, hyphn::Pixel::NV12, &video)) && video;
+}
+
+extern "C" void WINAPI HyphnDecoderClose(void* d) {
+    JoinMta();
+    delete static_cast<hyphn::Feed*>(d);
+}

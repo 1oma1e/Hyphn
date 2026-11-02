@@ -115,6 +115,26 @@ HRESULT Feed::Start(UINT32 w, UINT32 h) {
     return S_OK;
 }
 
+HRESULT Feed::StartLocal() {
+    if (started_) return S_OK;
+    HRESULT hr = MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET);
+    if (FAILED(hr)) return hr;
+    hr = InitDevice();
+    if (FAILED(hr)) {
+        MFShutdown();
+        return hr;
+    }
+    hevcOk_ = CanDecode(MFVideoFormat_HEVC);
+    {
+        // The app only hands frames while live: always show them.
+        std::lock_guard<std::mutex> l(stateLock_);
+        state_.app = true;
+        state_.live = true;
+    }
+    started_ = true;
+    return S_OK;
+}
+
 void Feed::Stop() {
     if (!started_) return;
     stop_ = true;
@@ -263,6 +283,47 @@ void Feed::SendKind(HANDLE pipe, uint16_t kind, uint16_t flags) {
     WriteAll(pipe, &h, sizeof h);
 }
 
+void Feed::SendSize(HANDLE pipe, uint32_t w, uint32_t h) {
+    Header m{};
+    m.magic = kMagic;
+    m.kind = kSize;
+    m.width = w;
+    m.height = h;
+    WriteAll(pipe, &m, sizeof m);
+}
+
+// A decoded picture from the app, read straight into its sample (no copy).
+bool Feed::ReadRaw(HANDLE pipe, const Header& h) {
+    const uint64_t want = static_cast<uint64_t>(h.width) * h.height * 3 / 2;
+    if (h.width < 2 || h.height < 2 || (h.width & 1) || (h.height & 1) || h.len != want) {
+        // Not a picture this code understands: read it away, keep the pipe.
+        std::vector<BYTE> skip(std::min<uint32_t>(h.len, 1u << 16));
+        for (uint32_t left = h.len; left;) {
+            const DWORD n = std::min<uint32_t>(left, static_cast<uint32_t>(skip.size()));
+            if (!ReadAll(pipe, skip.data(), n)) return false;
+            left -= n;
+        }
+        return true;
+    }
+    ComPtr<IMFMediaBuffer> buf;
+    ComPtr<IMFSample> s;
+    BYTE* d = nullptr;
+    if (FAILED(MFCreateMemoryBuffer(h.len, &buf)) || FAILED(MFCreateSample(&s)) || FAILED(buf->Lock(&d, nullptr, nullptr))) return false;
+    const bool ok = ReadAll(pipe, d, h.len);
+    buf->Unlock();
+    if (!ok) return false;
+    buf->SetCurrentLength(h.len);
+    s->AddBuffer(buf.Get());
+    {
+        std::lock_guard<std::mutex> l(frameLock_);
+        latestRect_ = RECT{0, 0, static_cast<LONG>(h.width), static_cast<LONG>(h.height)};
+        vidW_ = h.width;
+        vidH_ = h.height;
+    }
+    Publish(s.Get(), true);
+    return true;
+}
+
 void Feed::PipeLoop() {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     std::vector<BYTE> body;
@@ -287,14 +348,27 @@ void Feed::PipeLoop() {
         }
         Log("feed: pipe connected");
         waitKey_ = true;
-        SendKind(pipe, kHello, hevcOk_ ? 1 : 0);
+        SendKind(pipe, kHello, (hevcOk_ ? kCanHevc : 0) | kCanRaw);
+        uint32_t sentW = askW_, sentH = askH_;
         Header h{};
         while (!stop_ && ReadAll(pipe, &h, sizeof h)) {
             if (h.magic != kMagic || h.len > kMaxPayload) break;
-            body.resize(h.len);
-            if (h.len && !ReadAll(pipe, body.data(), h.len)) break;
-            if (h.kind == kState) OnState(body.data(), h.len);
-            else if (h.kind == kVideo) OnVideo(pipe, h.codec, h.width, h.height, h.key != 0, h.pts_us, body.data(), h.len);
+            if (h.kind == kRaw) {
+                if (!ReadRaw(pipe, h)) break;
+            } else {
+                body.resize(h.len);
+                if (h.len && !ReadAll(pipe, body.data(), h.len)) break;
+                if (h.kind == kState) OnState(body.data(), h.len);
+                else if (h.kind == kVideo && Decode(h.codec, h.width, h.height, h.key != 0, h.pts_us, body.data(), h.len))
+                    SendKind(pipe, kKey, 0);
+            }
+            // The app sends pictures at the size really shown (Discord may change it).
+            const uint32_t fw = fillW_, fh = fillH_;
+            if (fw && (fw != sentW || fh != sentH)) {
+                sentW = fw;
+                sentH = fh;
+                SendSize(pipe, fw, fh);
+            }
         }
         CloseHandle(pipe);
         DropDecoder();
@@ -451,30 +525,27 @@ HRESULT Feed::NegotiateOutput() {
     }
 }
 
-void Feed::OnVideo(HANDLE pipe, uint8_t codec, uint32_t w, uint32_t h, bool key, int64_t pts, const BYTE* p, uint32_t len) {
+bool Feed::Decode(uint8_t codec, uint32_t w, uint32_t h, bool key, int64_t pts, const BYTE* p, uint32_t len) {
     if (!mft_ || codec != decCodec_ || w != decW_ || h != decH_) {
         // After a failed decoder, wait a second before asking again (the app
         // switches the iPhone to H.264 when a reader cannot decode HEVC).
         const bool resting = GetTickCount64() - decoderFailTick_ < 1000;
-        if (!key) {
-            if (!resting) SendKind(pipe, kKey, 0);
-            return;
-        }
-        if (resting) return;
+        if (!key) return !resting;
+        if (resting) return false;
         if (FAILED(MakeDecoder(codec, w, h))) {
             DropDecoder();
             decoderFailTick_ = GetTickCount64();
-            return;
+            return false;
         }
         waitKey_ = false;
     }
-    if (waitKey_ && !key) return;
+    if (waitKey_ && !key) return false;
     waitKey_ = false;
     ComPtr<IMFMediaBuffer> buf;
     ComPtr<IMFSample> sample;
-    if (FAILED(MFCreateMemoryBuffer(len, &buf)) || FAILED(MFCreateSample(&sample))) return;
+    if (FAILED(MFCreateMemoryBuffer(len, &buf)) || FAILED(MFCreateSample(&sample))) return false;
     BYTE* dst = nullptr;
-    if (FAILED(buf->Lock(&dst, nullptr, nullptr))) return;
+    if (FAILED(buf->Lock(&dst, nullptr, nullptr))) return false;
     memcpy(dst, p, len);
     buf->Unlock();
     buf->SetCurrentLength(len);
@@ -492,8 +563,9 @@ void Feed::OnVideo(HANDLE pipe, uint8_t codec, uint32_t w, uint32_t h, bool key,
         // Broken stream: start again from the next keyframe, asked at once.
         waitKey_ = true;
         mft_->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0);
-        SendKind(pipe, kKey, 0);
+        return true;
     }
+    return false;
 }
 
 HRESULT Feed::Drain() {
@@ -527,9 +599,10 @@ HRESULT Feed::Drain() {
     }
 }
 
-void Feed::Publish(IMFSample* sample) {
+void Feed::Publish(IMFSample* sample, bool raw) {
     std::lock_guard<std::mutex> l(frameLock_);
     latest_ = sample;
+    latestRaw_ = raw;
     latestTick_ = GetTickCount64();
     latestSeq_++;
     SetEvent(frameEvent_);
@@ -753,6 +826,8 @@ bool Feed::HasLiveVideo() {
 HRESULT Feed::Fill(BYTE* dst, LONG pitch, UINT32 w, UINT32 h, Pixel fmt, bool* video) {
     if (video) *video = false;
     if (!dst || w < 2 || h < 2) return E_INVALIDARG;
+    fillW_ = w;
+    fillH_ = h;
     if (!started_) {
         // No graphics device: a black picture rather than none.
         for (UINT32 y = 0; y < h; y++) memset(dst + static_cast<ptrdiff_t>(y) * pitch, fmt == Pixel::NV12 ? 16 : 0, fmt == Pixel::NV12 ? w : w * 4);
@@ -771,14 +846,32 @@ HRESULT Feed::Fill(BYTE* dst, LONG pitch, UINT32 w, UINT32 h, Pixel fmt, bool* v
     ComPtr<IMFSample> sample;
     RECT src{};
     ULONGLONG tick = 0;
+    bool raw = false;
     {
         std::lock_guard<std::mutex> l(frameLock_);
         sample = latest_;
         src = latestRect_;
         tick = latestTick_;
+        raw = latestRaw_;
     }
     bool fresh = sample && GetTickCount64() - tick < kStaleMs;
     bool showVideo = st.app && st.live && fresh && src.right > src.left && src.bottom > src.top;
+    if (showVideo && raw && fmt == Pixel::NV12 && src.left == 0 && src.top == 0 && static_cast<UINT32>(src.right) == w &&
+        static_cast<UINT32>(src.bottom) == h) {
+        // Decoded by the app at exactly this size: a plain copy, no trip to the card.
+        ComPtr<IMFMediaBuffer> buf;
+        BYTE* p = nullptr;
+        DWORD cur = 0;
+        if (SUCCEEDED(sample->GetBufferByIndex(0, &buf)) && SUCCEEDED(buf->Lock(&p, nullptr, &cur))) {
+            if (cur >= static_cast<DWORD>(w) * h * 3 / 2) {
+                for (UINT32 y = 0; y < h * 3 / 2; y++) memcpy(dst + static_cast<ptrdiff_t>(y) * pitch, p + static_cast<size_t>(y) * w, w);
+                buf->Unlock();
+                if (video) *video = true;
+                return S_OK;
+            }
+            buf->Unlock();
+        }
+    }
     if (showVideo) {
         ComPtr<ID3D11Texture2D> tex;
         UINT slice = 0;

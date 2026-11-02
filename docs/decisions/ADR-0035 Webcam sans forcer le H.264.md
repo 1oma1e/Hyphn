@@ -10,7 +10,7 @@ Mesuré le 2026-11-02 ([[Latence et debit Cam]]) : dès que Discord ouvre la web
 
 Coût mesuré du H.264 forcé, en 4K60 par câble : encodage iPhone ~250 ms au lieu de 115 ms, 46 images/s au lieu de 60. Le décodage lent côté PC est déjà corrigé (SPS réécrit, E2b de [[Cam - Latence et fluidite]]).
 
-La webcam ne propose de toute façon pas plus que du 1080p60 aux apps (`kModes` dans `vcam.cpp`).
+La webcam propose jusqu'à la 4K aux apps (`kModes` dans `vcam.cpp`), mais Discord et Teams n'affichent pas plus que du 1080p.
 
 ## Options
 | Option | Pour | Contre |
@@ -29,7 +29,8 @@ Recommandation de départ : **A**. C'est la seule option qui garde le HEVC parto
 - Corrige l'option B de [[ADR-0022 Webcam Windows par DLL qui decode]] : le tuyau porte des images brutes à la taille demandée par l'app qui regarde, plus le flux compressé.
 - Le plugin OBS lit le même tuyau : à adapter de la même façon ([[Cam - Webcam Windows et OBS]]).
 - L'app décode seulement tant qu'une app affiche la webcam (message `HELLO` déjà en place).
-- À vérifier avant de coder : le débit réel du tuyau en 1080p60 ; et sur Microsoft Learn, pourquoi le Frame Server ne voit pas le décodeur HEVC.
+- Vérifié avant de coder (2026-11-02) : le tuyau tient environ 2,4 Go/s, soit 1,3 ms par image 1080p ; le décodeur HEVC vient de l'app du Store « HEVC Video Extensions » (`HEVCDECODER_STORE.dll`). Un programme normal le voit, le service caméra non : la raison exacte n'est pas écrite par Microsoft (**non vérifié**).
+- Fait (2026-11-02) : la DLL exporte son décodeur (`HyphnDecoderOpen`, `Push`, `Wait`, `Fill`, `Close`) ; l'app l'utilise pour un lecteur qui n'a pas le HEVC mais accepte `RAW` (`vcam.rs`, `RawFeed`). Essai hors app avec de vrais flux : HEVC et H.264 décodés, chaque image sort en 1,5 à 2 ms à 1280×720. Confirmé par Evan avec Discord, en HEVC 4K60 par câble (« parfait », sans chiffres notés).
 - Bon choix si, avec Discord allumé en 4K60 par câble, « Infos du flux » montre du HEVC à 60 images/s et un total proche de 130 ms, et si le processeur du PC reste bas.
 
 Liens : [[Decisions - Index]], [[Cam - Latence et fluidite]]

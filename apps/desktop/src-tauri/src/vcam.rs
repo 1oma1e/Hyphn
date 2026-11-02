@@ -6,9 +6,10 @@
 //! - The app creates the camera for this Windows session through the DLL
 //!   (`HyphnVCamCreate`): it exists while Hyphn runs, nothing stays behind.
 //! - The iPhone frames reach the DLL and the OBS plugin on a named pipe that
-//!   only this user, the Frame Server and SYSTEM may open. The pipe carries the
-//!   compressed stream; each reader decodes on the graphics card only while an
-//!   app actually shows the camera.
+//!   only this user, the Frame Server and SYSTEM may open, only while an app
+//!   actually shows the camera. A reader that decodes HEVC (OBS) gets the
+//!   compressed stream; the webcam, which cannot in the camera service, gets
+//!   pictures decoded by the app with the DLL's own decoder (ADR-0035).
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -36,11 +37,51 @@ pub mod kind {
     pub const VIDEO: u16 = 1;
     /// App → reader: live, iPhone connected, languages, style, then the message.
     pub const STATE: u16 = 2;
-    /// Reader → app: an app shows the camera, send frames. Flags bit 0: the
-    /// reader can decode HEVC (else the iPhone switches to H.264).
+    /// App → reader: one decoded NV12 picture, width × height, rows packed
+    /// (ADR-0035: the webcam cannot decode HEVC in the camera service).
+    pub const RAW: u16 = 3;
+    /// Reader → app: an app shows the camera at width × height, send frames.
+    /// Flags: CAN_HEVC (else RAW pictures, or H.264 for an older reader), CAN_RAW.
     pub const HELLO: u16 = 16;
     /// Reader → app: the decoder needs a keyframe.
     pub const KEY: u16 = 17;
+    /// Reader → app: the camera is now shown at width × height.
+    pub const SIZE: u16 = 18;
+}
+
+/// HELLO flags.
+pub const CAN_HEVC: u16 = 1;
+pub const CAN_RAW: u16 = 2;
+
+/// The reader gets decoded pictures from the app (ADR-0035): it cannot decode
+/// HEVC itself (the webcam in the camera service) but takes them. OBS, which
+/// sees the HEVC decoder, keeps the compressed stream.
+pub fn wants_raw(flags: u16) -> bool {
+    flags & CAN_HEVC == 0 && flags & CAN_RAW != 0
+}
+
+/// Picture size asked by a reader (HELLO, SIZE), even; None if it makes no
+/// sense. RAW pictures are 1080p at most (spec E10, 3 MB each): a reader that
+/// shows 4K gets 1080p, scaled up on its graphics card.
+pub fn asked_size(h: &[u8; HEADER]) -> Option<(u32, u32)> {
+    let w = u32::from_le_bytes(h[12..16].try_into().unwrap());
+    let ht = u32::from_le_bytes(h[16..20].try_into().unwrap());
+    if w < 2 || ht < 2 || w > 8192 || ht > 8192 {
+        return None;
+    }
+    // Same shape, inside 1920 × 1080 (or 1080 × 1920 upright).
+    let (long, short) = if w >= ht { (1920.0, 1080.0) } else { (1080.0, 1920.0) };
+    let scale = (long / w as f64).min(short / ht as f64).min(1.0);
+    let even = |v: f64| ((v as u32) & !1).max(2);
+    Some((even(w as f64 * scale), even(ht as f64 * scale)))
+}
+
+/// A RAW message with room for the picture after the header (filled in place).
+pub fn raw_message(w: u32, h: u32) -> Vec<u8> {
+    let len = (w * h * 3 / 2) as usize;
+    let mut out = vec![0u8; HEADER + len];
+    out[..HEADER].copy_from_slice(&header(kind::RAW, len, w, h, 0, false, 0));
+    out
 }
 /// Longest payload a reader may send (its messages are tiny).
 const MAX_IN: usize = 4096;
@@ -145,6 +186,7 @@ async fn reader(
     });
     let name = format!("vcam-{}", NEXT.fetch_add(1, Ordering::Relaxed));
     let mut active = false;
+    let mut raw: Option<RawFeed> = None;
     let mut h = [0u8; HEADER];
     let mut body = vec![0u8; MAX_IN];
     while rd.read_exact(&mut h).await.is_ok() {
@@ -159,21 +201,160 @@ async fn reader(
             kind::HELLO if !active => {
                 active = true;
                 readers.fetch_add(1, Ordering::Relaxed);
-                hub.set_reader_needs_h264(&name, flags & 1 == 0);
-                let t = tx.clone();
-                hub.set_video_sink(&name, Some(keyed_sink(move |f| t.try_send(video_bytes(f)).is_ok())));
+                raw = if wants_raw(flags) {
+                    // Opening the decoder takes a moment (graphics card): off the async threads.
+                    let (hb, nm, t, size) = (hub.clone(), name.clone(), tx.clone(), asked_size(&h).unwrap_or((1280, 720)));
+                    tokio::task::spawn_blocking(move || RawFeed::start(&hb, &nm, t, size)).await.ok().flatten()
+                } else {
+                    None
+                };
+                if raw.is_none() {
+                    // The compressed stream, decoded by the reader (H.264 if it cannot do HEVC).
+                    hub.set_reader_needs_h264(&name, flags & CAN_HEVC == 0);
+                    let t = tx.clone();
+                    hub.set_video_sink(&name, Some(keyed_sink(move |f| t.try_send(video_bytes(f)).is_ok())));
+                }
                 hub.request_key();
             }
             kind::KEY => hub.request_key(),
+            kind::SIZE => {
+                if let (Some(r), Some(size)) = (&raw, asked_size(&h)) {
+                    r.resize(size);
+                }
+            }
             _ => {}
         }
     }
     hub.set_video_sink(&name, None);
     hub.set_reader_needs_h264(&name, false);
+    drop(raw);
     if active {
         readers.fetch_sub(1, Ordering::Relaxed);
     }
     writer.abort();
+}
+
+/// The decoder of the webcam DLL, run by the app (ADR-0035). Thread safe on
+/// the C side: one thread decodes, another takes the pictures (like the pipe
+/// thread and the camera in the camera service).
+#[cfg(windows)]
+pub struct Decoder {
+    handle: usize,
+    api: sys::DecoderApi,
+}
+
+#[cfg(windows)]
+impl Decoder {
+    /// None: the loaded DLL is older (no decoder) or the graphics card refused.
+    pub fn open() -> Option<Arc<Self>> {
+        let api = sys::decoder_api()?;
+        let handle = unsafe { (api.open)() } as usize;
+        (handle != 0).then(|| Arc::new(Decoder { handle, api }))
+    }
+
+    pub fn hevc(&self) -> bool {
+        unsafe { (self.api.hevc)(self.handle as _) != 0 }
+    }
+
+    /// True: the decoder needs a keyframe.
+    pub fn push(&self, f: &proto::VideoFrame) -> bool {
+        let len = u32::try_from(f.data.len()).unwrap_or(0);
+        unsafe {
+            (self.api.push)(self.handle as _, f.codec as u8, f.width, f.height, f.keyframe as i32, f.pts_us, f.data.as_ptr(), len) != 0
+        }
+    }
+
+    /// True: a new picture came out within `ms`.
+    pub fn wait(&self, ms: u32) -> bool {
+        unsafe { (self.api.wait)(self.handle as _, ms) != 0 }
+    }
+
+    /// The latest picture, NV12 at `w` × `h`, into `out` (w × h × 3 / 2 bytes).
+    pub fn fill(&self, out: &mut [u8], w: u32, h: u32) -> bool {
+        if out.len() < (w * h * 3 / 2) as usize {
+            return false;
+        }
+        unsafe { (self.api.fill)(self.handle as _, out.as_mut_ptr(), w, h) != 0 }
+    }
+}
+
+#[cfg(windows)]
+unsafe impl Send for Decoder {}
+#[cfg(windows)]
+unsafe impl Sync for Decoder {}
+
+#[cfg(windows)]
+impl Drop for Decoder {
+    fn drop(&mut self) {
+        unsafe { (self.api.close)(self.handle as _) }
+    }
+}
+
+/// Decoded pictures for one reader: a thread feeds the decoder with the
+/// iPhone frames, another sends each new picture at the size the reader shows.
+#[cfg(windows)]
+struct RawFeed {
+    stop: Arc<std::sync::atomic::AtomicBool>,
+    size: Arc<AtomicU64>,
+}
+
+#[cfg(windows)]
+impl RawFeed {
+    fn start(hub: &Arc<Hub>, name: &str, out: mpsc::Sender<Vec<u8>>, size: (u32, u32)) -> Option<Self> {
+        let dec = Decoder::open()?;
+        if !dec.hevc() {
+            // The app cannot decode HEVC either: compressed H.264 as before.
+            return None;
+        }
+        let (ftx, frx) = std::sync::mpsc::sync_channel::<proto::VideoFrame>(QUEUE);
+        let (d, h) = (dec.clone(), hub.clone());
+        // Ends when the sink (and so `ftx`) is removed.
+        std::thread::spawn(move || {
+            for f in frx {
+                if d.push(&f) {
+                    h.request_key();
+                }
+            }
+        });
+        hub.set_video_sink(name, Some(keyed_sink(move |f| ftx.try_send(f.clone()).is_ok())));
+        let feed = RawFeed { stop: Arc::default(), size: Arc::new(AtomicU64::new(pack(size))) };
+        let (stop, cur) = (feed.stop.clone(), feed.size.clone());
+        std::thread::spawn(move || {
+            // Woken by each new picture; the 1 s timeout only notices the end.
+            while !stop.load(Ordering::Relaxed) {
+                if !dec.wait(1000) {
+                    continue;
+                }
+                let (w, h) = unpack(cur.load(Ordering::Relaxed));
+                let mut m = raw_message(w, h);
+                // Full pipe (the reader is late): this picture is skipped,
+                // the next one is whole anyway.
+                if dec.fill(&mut m[HEADER..], w, h) && out.try_send(m).is_err() && out.is_closed() {
+                    break;
+                }
+            }
+        });
+        Some(feed)
+    }
+
+    fn resize(&self, size: (u32, u32)) {
+        self.size.store(pack(size), Ordering::Relaxed);
+    }
+}
+
+#[cfg(windows)]
+impl Drop for RawFeed {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+    }
+}
+
+fn pack((w, h): (u32, u32)) -> u64 {
+    (w as u64) << 32 | h as u64
+}
+
+fn unpack(v: u64) -> (u32, u32) {
+    ((v >> 32) as u32, v as u32)
 }
 
 /// SHA-256 of the DLLs this app was built with (build.rs), empty if none.
@@ -397,6 +578,36 @@ mod sys {
         Ok(())
     }
 
+    /// The decoder functions of the loaded DLL (ADR-0035).
+    #[derive(Clone, Copy)]
+    pub struct DecoderApi {
+        pub open: unsafe extern "system" fn() -> *mut c_void,
+        pub hevc: unsafe extern "system" fn(*mut c_void) -> i32,
+        pub push: unsafe extern "system" fn(*mut c_void, u8, u32, u32, i32, i64, *const u8, u32) -> i32,
+        pub wait: unsafe extern "system" fn(*mut c_void, u32) -> i32,
+        pub fill: unsafe extern "system" fn(*mut c_void, *mut u8, u32, u32) -> i32,
+        pub close: unsafe extern "system" fn(*mut c_void),
+    }
+
+    /// None until the webcam is created, or with an older DLL.
+    pub fn decoder_api() -> Option<DecoderApi> {
+        let held = *LIB.lock().unwrap_or_else(|e| e.into_inner());
+        if held == 0 {
+            return None;
+        }
+        unsafe {
+            let get = |n: &std::ffi::CStr| GetProcAddress(held as _, n.as_ptr() as *const u8);
+            Some(DecoderApi {
+                open: std::mem::transmute(get(c"HyphnDecoderOpen")?),
+                hevc: std::mem::transmute(get(c"HyphnDecoderHevc")?),
+                push: std::mem::transmute(get(c"HyphnDecoderPush")?),
+                wait: std::mem::transmute(get(c"HyphnDecoderWait")?),
+                fill: std::mem::transmute(get(c"HyphnDecoderFill")?),
+                close: std::mem::transmute(get(c"HyphnDecoderClose")?),
+            })
+        }
+    }
+
     /// « Retirer »: the camera disappears before the DLL is unregistered.
     pub fn remove_camera() {
         let held = LIB.lock().unwrap_or_else(|e| e.into_inner());
@@ -474,5 +685,35 @@ mod tests {
         assert_eq!(&b[HEADER..HEADER + 4], &[1, 1, 0, 2]);
         assert_eq!(String::from_utf8(b[HEADER + 4..].to_vec()).unwrap().chars().count(), 60);
         assert_eq!(u32::from_le_bytes(b[8..12].try_into().unwrap()) as usize, b.len() - HEADER);
+    }
+
+    #[test]
+    fn only_a_reader_without_hevc_gets_decoded_pictures() {
+        // The webcam in the camera service: no HEVC, takes RAW.
+        assert!(wants_raw(CAN_RAW));
+        // OBS sees the HEVC decoder: compressed stream.
+        assert!(!wants_raw(CAN_HEVC | CAN_RAW));
+        // An older DLL (no RAW): compressed, H.264 as before.
+        assert!(!wants_raw(0));
+        assert!(!wants_raw(CAN_HEVC));
+    }
+
+    #[test]
+    fn raw_message_and_asked_size() {
+        let m = raw_message(1280, 720);
+        assert_eq!(m.len(), HEADER + 1280 * 720 * 3 / 2);
+        assert_eq!(u16::from_le_bytes([m[4], m[5]]), kind::RAW);
+        assert_eq!(u32::from_le_bytes(m[8..12].try_into().unwrap()) as usize, 1280 * 720 * 3 / 2);
+        let h: [u8; HEADER] = m[..HEADER].try_into().unwrap();
+        assert_eq!(asked_size(&h), Some((1280, 720)));
+        // Bigger than 1080p: same shape, 1080p at most; upright too.
+        assert_eq!(asked_size(&header(kind::SIZE, 0, 3840, 2160, 0, false, 0)), Some((1920, 1080)));
+        assert_eq!(asked_size(&header(kind::SIZE, 0, 2160, 3840, 0, false, 0)), Some((1080, 1920)));
+        assert_eq!(asked_size(&header(kind::SIZE, 0, 640, 360, 0, false, 0)), Some((640, 360)));
+        // Zero or absurd sizes are refused.
+        for (w, ht) in [(0, 720), (1280, 1), (100_000, 720)] {
+            assert_eq!(asked_size(&header(kind::SIZE, 0, w, ht, 0, false, 0)), None);
+        }
+        assert_eq!(unpack(pack((1920, 1080))), (1920, 1080));
     }
 }

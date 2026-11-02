@@ -26,6 +26,8 @@ using Microsoft::WRL::ComPtr;
 
 enum class Pixel { NV12, BGRA };
 
+struct Header;  // hyphn_pipe.h
+
 // Diagnostic log, written only if C:\ProgramData\Hyphn exists (made by the
 // installer): vcam.log, one line per event, never any picture.
 void Log(const char* fmt, ...);
@@ -52,6 +54,14 @@ public:
     HRESULT Start(UINT32 w, UINT32 h);
     void Stop();
 
+    // In the Hyphn app (ADR-0035): no pipe, the app hands the compressed
+    // frames to Decode and takes NV12 pictures with Fill, for the webcam,
+    // which cannot decode HEVC in the camera service.
+    HRESULT StartLocal();
+    // True when the decoder needs a keyframe (the app asks the iPhone).
+    bool Decode(uint8_t codec, uint32_t w, uint32_t h, bool key, int64_t pts, const BYTE* p, uint32_t len);
+    bool HevcOk() const { return hevcOk_; }
+
     // Set each time a new decoded picture is ready.
     HANDLE FrameEvent() const { return frameEvent_; }
 
@@ -73,15 +83,16 @@ private:
     bool WriteAll(HANDLE pipe, const void* buf, DWORD len);
     void SendKind(HANDLE pipe, uint16_t kind, uint16_t flags);
     bool ServerIsHyphn(HANDLE pipe);
+    void SendSize(HANDLE pipe, uint32_t w, uint32_t h);
     void OnState(const BYTE* p, uint32_t len);
-    void OnVideo(HANDLE pipe, uint8_t codec, uint32_t w, uint32_t h, bool key, int64_t pts, const BYTE* p, uint32_t len);
+    bool ReadRaw(HANDLE pipe, const Header& h);
 
     // Decoder (pipe thread only).
     HRESULT MakeDecoder(uint8_t codec, uint32_t w, uint32_t h);
     HRESULT NegotiateOutput();
     void DropDecoder();
     HRESULT Drain();
-    void Publish(IMFSample* sample);
+    void Publish(IMFSample* sample, bool raw = false);
     bool CanDecode(const GUID& subtype);
 
     // Rendering (caller of Fill, under renderLock_).
@@ -131,6 +142,10 @@ private:
     RECT latestRect_{};
     ULONGLONG latestTick_ = 0;
     uint64_t latestSeq_ = 0;
+    // The latest picture came decoded from the app (kRaw): NV12, rows packed.
+    bool latestRaw_ = false;
+    // Size the reader asked at its last Fill: sent to the app (kSize).
+    std::atomic<uint32_t> fillW_{0}, fillH_{0};
     UINT32 vidW_ = 0, vidH_ = 0;
     // Software decoder output, uploaded to the card.
     ComPtr<ID3D11Texture2D> upload_, uploaded_;

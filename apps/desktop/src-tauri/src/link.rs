@@ -1265,7 +1265,7 @@ impl State {
     }
 
     /// While the webcam or OBS forces H.264, at most 1080p (ADR-0035, D):
-    /// the webcam offers no more, and H.264 in 4K60 is too slow to encode.
+    /// Discord and Teams show no more, and H.264 in 4K60 is too slow to encode.
     fn effective(&self) -> cam::Effective {
         let mut request = self.cam.request;
         if !self.h264_readers.is_empty() {
