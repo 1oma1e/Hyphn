@@ -12,17 +12,31 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 // itself. A new setting comes with its text here.
 const TIPS = {
   // Cam › Réglages
-  profile: 'Règle d’un coup la résolution et les images par seconde. Appel : 1080p30, net et léger pour Discord ou Teams. Stream : 4K60 pour OBS. Cours : 720p30, le plus sobre.',
+  profile: 'Règle tout d’un coup. Max : 4K60, rien n’est baissé sauf si l’iPhone devient très chaud (conseillé). Équilibré : 1080p60, baisse si l’iPhone chauffe. Économie : 720p30, ménage la batterie. Appel : 1080p30 pour Discord ou Teams. Stream : 4K60 pour OBS. Cours : 720p30. Personnalisé : tu as changé un réglage à la main.',
+  mode: 'Simple : les profils et 4 réglages de l’image. Avancé : tout, y compris le flux et l’écran d’attente.',
+  adjclose: 'Cache le panneau pour voir l’image entière. Les réglages restent appliqués.',
+  rauto: 'L’iPhone règle tout seul, selon la scène. Le conseil pour la plupart des cas.',
+  reset: 'Remet ce réglage comme au départ.',
+  greset: 'Remet tous les réglages de ce groupe comme au départ.',
+  allreset: 'Remet tous les réglages de la caméra comme au départ : profil Max, tout en Auto.',
+  power: 'Ce que Hyphn fait quand l’iPhone chauffe ou que sa batterie est faible. Max : rien, sauf s’il devient très chaud (iOS couperait la caméra). Équilibré : 30 images/s et −30 % de débit quand il chauffe. Économie : en plus, 1080p30 sous 15 % ou en mode économie d’iOS.',
+  exp: 'Clarté de l’image. Auto : l’iPhone suit la lumière, et tu peux corriger plus clair ou plus sombre. Manuel : tu fixes la sensibilité (ISO) et le temps de pose, l’image ne bouge plus quand la lumière change.',
+  iso: 'Sensibilité du capteur, en exposition manuelle. Plus haut = plus clair mais plus de grain. 100 à 400 en plein jour, 800 et plus dans une pièce sombre.',
+  shutter: 'Temps de pose de chaque image, en exposition manuelle. Plus long = plus clair mais flou quand ça bouge. 1/100 ou 1/50 s évite le scintillement des lampes en France (courant à 50 Hz). Jamais plus long qu’une image.',
+  tint: 'Corrige une teinte verte (−) ou rose (+), avec la balance des blancs manuelle. Utile sous des néons. 0 pour la plupart des pièces.',
+  zoom: 'Zoom en plus de l’objectif choisi (0,5×, 1×, 2×, 5×). 1,0× = rien en plus. Au-delà de 2×, l’image devient moins nette : prends plutôt l’objectif suivant.',
+  poi: 'Clique sur l’image pour que la netteté et la clarté suivent ce point, par exemple un objet montré à la caméra. Auto : le centre de l’image.',
+  hdr: 'Garde des détails dans les zones très claires et très sombres (fenêtre derrière toi). Coupé par défaut : il chauffe plus l’iPhone. Pas possible dans tous les formats.',
+  g_image: 'Ce que fait la caméra de l’iPhone : clarté, netteté, couleurs, zoom.',
+  g_flux: 'Ce que l’iPhone envoie au PC : taille, fluidité, compression.',
+  g_wait: 'Ce que Discord et OBS voient pendant la pause.',
   res: 'Taille de l’image envoyée par l’iPhone. Plus grand = plus net, mais plus de débit, de chaleur et de retard (mesuré : ~80 ms en 720p30, ~130 ms en 4K60, par câble). Discord et Teams n’affichent pas plus que du 1080p.',
   fps: 'Images par seconde. 60 rend les gestes fluides ; 30 suffit pour un appel et chauffe moins. 24 et 25 donnent un rendu cinéma. 120 seulement en 1080p ou moins.',
   codec: 'Façon de compresser l’image. HEVC : deux fois plus léger que le H.264 à qualité égale, et le plus rapide (conseillé). H.264 : pour un PC sans décodeur HEVC. Quand une app ouvre la webcam Hyphn, tout passe en H.264 limité à 1080p, en attendant mieux.',
   rate: 'Données envoyées par seconde. Auto choisit selon la résolution, et donne 1,5× plus par câble. Plus haut = image plus fine, mais trop haut pour le Wi-Fi donne des saccades (80 Mb/s en Wi-Fi en donnait).',
-  autoq: 'Si l’iPhone chauffe, Hyphn passe à 30 images/s et baisse le débit de 30 %, puis à 1080p30 s’il devient très chaud. Coupé : la qualité reste, mais iOS peut couper la caméra en surchauffe.',
-  ev: 'Rend l’image plus claire (+) ou plus sombre (−). +1 EV double la lumière. Utile à contre-jour, devant une fenêtre.',
-  afA: 'L’iPhone fait la netteté tout seul sur ce qui est devant lui. Coupe-le pour bloquer la netteté à une distance, par exemple pour montrer un objet sans que l’image « pompe ».',
-  focus: 'Distance de netteté quand la mise au point auto est coupée : 0 % = tout près, 100 % = au loin.',
-  wbA: 'L’iPhone règle les couleurs selon la lumière de la pièce. Coupe-le pour garder les mêmes couleurs tout le temps.',
-  wb: 'Couleur de la lumière à corriger, en kelvins. 2500 K pour une lampe jaune (l’image est refroidie), 5600 K pour la lumière du jour, 8000 K pour une lumière très bleue.',
+  ev: 'En exposition auto : rend l’image plus claire (+) ou plus sombre (−). +1 EV double la lumière. Utile à contre-jour, devant une fenêtre.',
+  focus: 'Netteté. Auto : l’iPhone fait la netteté tout seul sur ce qui est devant lui. Manuel : bloquée à une distance, 0 % = tout près, 100 % = au loin ; l’image ne « pompe » plus quand tu montres un objet.',
+  wb: 'Couleurs. Auto : l’iPhone suit la lumière de la pièce. Manuel : la couleur de la lumière en kelvins, et les couleurs ne bougent plus. 2500 K pour une lampe jaune, 5600 K pour la lumière du jour, 8000 K pour une lumière très bleue.',
   stab: 'Réduit les tremblements si l’iPhone est tenu en main. Off : aucun retard ajouté, le mieux sur un pied. Standard : léger. Cinéma : très stable, mais recadre l’image et ajoute du retard.',
   torch: 'Allume la lampe de l’iPhone (caméra arrière seulement). Elle chauffe et use la batterie.',
   msg: 'Texte que Discord et OBS voient quand la caméra est en pause. 60 caractères au plus.',
@@ -36,12 +50,12 @@ const TIPS = {
   flipcam: 'Passe de la caméra arrière (la meilleure) à la caméra avant, et inversement.',
   peek: 'Montre ou cache l’aperçu sur le PC pendant la pause. Discord ne le voit jamais.',
   info: 'Infos du flux : débit, images par seconde et temps de chaque étape.',
-  set: 'Réglages de la caméra : qualité, image, écran d’attente.',
+  set: 'Réglages de la caméra, par-dessus l’image en direct : profils, image, flux, écran d’attente.',
   // Cam › en-tête de l’image
   hudq: 'Qualité envoyée en ce moment par l’iPhone.',
   hudused: 'Une app (Discord, OBS…) affiche la webcam Hyphn. Elle impose le H.264, limité à 1080p.',
   battery: 'Batterie de l’iPhone. L’éclair : il est en charge.',
-  heat: 'Chaleur de l’iPhone selon iOS : Normale, Tiède, Chaude, Critique. Chaude ou plus : Hyphn baisse la qualité si « Baisser la qualité » est actif.',
+  heat: 'Chaleur de l’iPhone selon iOS : Normale, Tiède, Chaude, Critique. Chaude : Hyphn baisse la qualité en profil Équilibré ou Économie. Très chaude : 1080p30 dans tous les profils.',
   ping: 'Aller-retour d’un message vers l’iPhone, par câble ou Wi-Fi. Ce n’est pas le retard de l’image (voir Infos du flux, Total).',
   // Cam › Infos du flux
   i_sent: 'Taille et images par seconde que l’iPhone envoie vraiment. Peut être plus bas que demandé si l’iPhone chauffe ou si la webcam impose le H.264.',
@@ -609,12 +623,31 @@ const RES = [2160, 1440, 1080, 720, 480];
 const RES_L = ['4K', '1440p', '1080p', '720p', '480p'];
 const FPS = [24, 25, 30, 60, 120];
 const RATE = [0, 8, 20, 40, 80];
-const PROFILES = [['Appel', 2, 2], ['Stream', 0, 3], ['Cours', 3, 2]];
+// One list (ADR-0032): [name, res index, fps index, power]. Index 6 = Personnalisé.
+const PROFILES = [['Max', 0, 3, 'max'], ['Équilibré', 2, 3, 'balanced'], ['Économie', 3, 2, 'eco'],
+  ['Appel', 2, 2, 'balanced'], ['Stream', 0, 3, 'balanced'], ['Cours', 3, 2, 'balanced']];
+const CUSTOM = 6;
+const POWER = [['max', 'Max'], ['balanced', 'Équilibré'], ['eco', 'Économie']];
 const CAM_DEFAULTS = {
-  res: 0, fps: 3, codec: 0, rate: 0, autoq: true,
+  res: 0, fps: 3, codec: 0, rate: 0, power: 'max',
   ev: 0, focus: 50, wb: 5600, afA: true, wbA: true, torch: false, stab: 0,
-  msg: 'Je reviens bientôt', multi: true, wst: 0, prof: 1, lens: 1, front: false, mirror: false, turn: 0,
+  aeA: true, iso: 200, shutter: 10000, tint: 0, zoom: 100, hdr: false, poi: null,
+  msg: 'Je reviens bientôt', multi: true, wst: 0, prof: 0, lens: 1, front: false, mirror: false, turn: 0, adv: false,
 };
+// Stops offered by the stepped sliders, cut to what the iPhone allows.
+const ISO_STOPS = [20, 25, 32, 40, 50, 64, 80, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 2000, 2500, 3200, 4000, 5000, 6400, 8000, 10000, 12800];
+const SHUTTER_DEN = [8000, 6400, 5000, 4000, 3200, 2500, 2000, 1600, 1250, 1000, 800, 640, 500, 400, 320, 250, 200, 160, 125, 100, 60, 50, 30, 25, 24];
+// What each Reset puts back, and the groups of the panel.
+const RESETS = {
+  exp: ['aeA', 'ev', 'iso', 'shutter'], focus: ['afA', 'focus'], wb: ['wbA', 'wb', 'tint'], zoom: ['zoom'], poi: ['poi'],
+  stab: ['stab'], hdr: ['hdr'], torch: ['torch'], res: ['res'], fps: ['fps'], codec: ['codec'], rate: ['rate'], power: ['power'],
+  msg: ['msg'], multi: ['multi'], wst: ['wst'],
+};
+const GROUPS = { image: ['exp', 'focus', 'wb', 'zoom', 'poi', 'stab', 'hdr', 'torch'], flux: ['res', 'fps', 'codec', 'rate', 'power'], wait: ['msg', 'multi', 'wst'] };
+// Reset keys whose « Auto » button means something, and the setting it turns on.
+const AUTOS = { exp: ['aeA', true], focus: ['afA', true], wb: ['wbA', true], rate: ['rate', 0], poi: ['poi', null] };
+// Settings that make the iPhone camera work again (sent at once).
+const SENT = ['res', 'fps', 'rate', 'codec', 'stab', 'power', 'aeA', 'ev', 'iso', 'shutter', 'afA', 'focus', 'wbA', 'wb', 'tint', 'zoom', 'hdr', 'poi', 'torch'];
 // [lang, text], 2.6 s each (same list and order in apps/desktop-vcam/src/feed.cpp).
 const LANGS = [
   ['fr', 'Je reviens bientôt'], ['en', 'Be right back'], ['es', 'Vuelvo enseguida'], ['de', 'Bin gleich zurück'],
@@ -840,11 +873,14 @@ const Cam = {
   mount(root) {
     this.cs = Object.assign({}, CAM_DEFAULTS, settings.cam || {});
     if (this.cs.wst > 1) this.cs.wst = 0;
+    // Saved before the power profiles (ADR-0032): its quality is kept, as « Personnalisé ».
+    if (settings.cam && Object.keys(settings.cam).length && !('power' in settings.cam)) Object.assign(this.cs, { power: 'max', prof: CUSTOM });
+    // The point is chosen on the live picture, never kept from one time to the next.
+    this.cs.poi = null;
     // The iPhone's own lens wins over the one saved here.
     const ph = S && S.cam.phone;
     if (ph) Object.assign(this.cs, { front: ph.front, lens: ph.lens });
     this.panel = '';
-    this.tab = 0;
     this.spark = [];
     this.overlayKey = '';
     this.dockKey = '';
@@ -856,15 +892,19 @@ const Cam = {
             <canvas class="scene vid" id="c-scene" role="img" aria-label="Image de la caméra de l’iPhone"></canvas>
             <span class="ptag">Aperçu · vous seul</span>
             <button class="pclose" type="button" aria-label="Cacher l’aperçu" title="Cacher l’aperçu" data-act="peek">${I.close}</button>
+            <span class="poi" id="c-poi" aria-hidden="true"></span>
           </div>
           <div id="c-wait"></div>
           <div class="hud" style="left:18px;top:18px" id="c-hudl"></div>
           <div class="hud" style="right:18px;top:18px" id="c-hudr"></div>
           <div id="c-notice"></div>
           <div class="dock" role="toolbar" aria-label="Commandes de la caméra" id="c-dock"></div>
+          <aside class="adj" id="c-adj" aria-label="Réglages de la caméra"></aside>
         </div>
       </main>`;
     Video.start($('#c-scene'));
+    // Panel open: a click on the live picture picks the focus and exposure point.
+    $('#c-vbox').addEventListener('click', (e) => this.pickPoint(e));
     this.paintDock();
     this.push();
     // While paused, the iPhone sends a small preview only while this page is
@@ -880,6 +920,8 @@ const Cam = {
   unmount() {
     // The camera keeps going: Discord or OBS may be using the Windows webcam.
     document.removeEventListener('visibilitychange', this.onVis);
+    // The panel lives in the picture; the next visit starts with it closed.
+    this.panel = '';
     invoke('cam_preview', { on: false });
     Video.stop();
   },
@@ -901,9 +943,10 @@ const Cam = {
     const c = this.cs;
     invoke('cam_set', {
       quality: {
-        height: RES[c.res], fps: FPS[c.fps], bitrate_mbps: RATE[c.rate], adapt: c.autoq,
+        height: RES[c.res], fps: FPS[c.fps], bitrate_mbps: RATE[c.rate], power: c.power,
         codec: c.codec === 1 || !Video.hevc ? 'h264' : 'hevc',
         ev: c.ev, focus: c.afA ? null : c.focus, wb: c.wbA ? null : c.wb, torch: c.torch, stab: c.stab,
+        exposure: c.aeA ? null : [c.iso, c.shutter], tint: c.tint, zoom: c.zoom, hdr: c.hdr, poi: c.poi,
       },
     });
   },
@@ -978,9 +1021,12 @@ const Cam = {
         <span class="chip"${tipAttr('ping')}>${onCable() ? I.cable : I.wifi}<span class="mono">${conn ? (S.latency_ms == null ? '—' : S.latency_ms + ' ms') : 'hors ligne'}</span></span>`;
     }
     const e = S.cam.effective;
+    const why = { battery: 'Batterie faible', low_power: 'Mode économie d’iOS' }[e.reason];
     $('#c-notice').innerHTML = !conn ? '' : e.alert
       ? '<div class="notice hot">iPhone très chaud : 1080p30 pour garder le flux</div>'
-      : e.lowered ? '<div class="notice">iPhone chaud : 30 images/s pour garder le flux</div>' : '';
+      : e.lowered && e.reason === 'hot' ? '<div class="notice">iPhone chaud : 30 images/s pour garder le flux</div>'
+        : e.lowered && why ? `<div class="notice">${why} : 1080p30 (profil Économie)</div>`
+          : e.reason === 'hot' ? '<div class="notice">iPhone chaud · qualité gardée par ton profil</div>' : '';
   },
   update() {
     // The iPhone can switch lens or camera itself: the PC follows.
@@ -1002,6 +1048,10 @@ const Cam = {
     }
     this.paintWait();
     this.paintHud();
+    const caps = this.caps();
+    const capsKey = JSON.stringify([caps, !!(S.cam.phone), this.cs.front, this.connected()]);
+    if (this.panel === 'set' && capsKey !== this.capsKey) this.paintAdj();
+    this.capsKey = capsKey;
     this.spark.push(S.cam.stats.bitrate_mbps);
     Video.takeSteps();
     if (this.spark.length > 40) this.spark.shift();
@@ -1041,10 +1091,11 @@ const Cam = {
   openPanel(name) {
     this.panel = this.panel === name ? '' : name;
     this.paintDock();
-    if (!this.panel) {
-      layer.innerHTML = '';
-      return;
-    }
+    // The settings sit on the live picture (spec `Cam - Reglages avances`, E1).
+    $('#c-pv').classList.toggle('adj-on', this.panel === 'set');
+    if (this.panel !== 'set') $('#c-adj').innerHTML = '';
+    if (this.panel !== 'info') layer.innerHTML = '';
+    if (!this.panel) return;
     if (this.panel === 'info') {
       layer.innerHTML = `<button class="scrim" type="button" aria-label="Fermer les infos" data-act="close"></button>
         <div class="modal" role="dialog" aria-label="Infos du flux">
@@ -1056,59 +1107,170 @@ const Cam = {
         </div>`;
       this.paintInfo();
     } else {
-      layer.innerHTML = `<button class="scrim" type="button" aria-label="Fermer les réglages" data-act="close"></button>
-        <aside class="drawer" aria-label="Réglages de la caméra">
-          <div class="dh">
-            <div style="font-size:20px;font-weight:600;letter-spacing:-.03em">Réglages de la caméra</div>
-            <button class="ib" type="button" aria-label="Fermer" data-act="close">${I.close}</button>
-          </div>
-          <div id="c-drawer"></div>
-        </aside>`;
-      this.paintDrawer();
+      this.paintAdj();
+      this.placePoint();
     }
   },
-  paintDrawer() {
+  // Abilities of the iPhone camera in use; null = unknown (older app or no iPhone).
+  caps: () => (S && S.cam.phone && S.cam.phone.caps) || null,
+  // Why a setting cannot be used now (E7), '' = it can.
+  why(k) {
+    const k2 = this.caps();
+    const old = S && S.cam.phone && !k2;
+    if (old && ['iso', 'shutter', 'tint', 'zoom', 'hdr', 'poi'].includes(k)) return 'Mets à jour l’app iPhone pour ce réglage.';
+    if (!k2) return '';
+    return {
+      exp: k2.exposure ? '' : 'Cette caméra ne permet pas l’exposition manuelle.',
+      focus: k2.focus ? '' : 'Cette caméra ne permet pas la mise au point manuelle.',
+      wb: k2.wb ? '' : 'Cette caméra ne permet pas la balance des blancs manuelle.',
+      zoom: k2.zoom_max_pct > 100 ? '' : 'Pas de zoom en plus sur cet objectif.',
+      hdr: k2.hdr ? '' : 'Pas de HDR dans ce format : essaie une autre résolution ou 30 images/s.',
+      poi: k2.poi ? '' : 'Cette caméra ne suit pas un point choisi.',
+      torch: k2.torch ? '' : 'Pas de lampe sur cette caméra (caméra avant).',
+    }[k] || '';
+  },
+  isoStops() {
+    const k = this.caps();
+    const list = k ? ISO_STOPS.filter((v) => v >= k.iso[0] && v <= k.iso[1]) : ISO_STOPS.filter((v) => v <= 3200);
+    return list.length ? list : ISO_STOPS;
+  },
+  // Exposure times in µs, short to long; never longer than one frame.
+  shutterStops() {
+    const k = this.caps();
+    const frame = 1e6 / FPS[this.cs.fps];
+    const lo = k ? k.shutter_us[0] : 0, hi = k ? Math.min(k.shutter_us[1], frame) : frame;
+    const list = SHUTTER_DEN.map((d) => Math.round(1e6 / d)).filter((us) => us >= lo && us <= hi + 1);
+    return list.length ? list : [Math.round(frame)];
+  },
+  near: (list, v) => list.reduce((b, x, i) => (Math.abs(x - v) < Math.abs(list[b] - v) ? i : b), 0),
+  // Shown next to each setting name.
+  valueOf(k) {
     const c = this.cs;
+    const sh = (us) => '1/' + Math.round(1e6 / us) + ' s';
+    return {
+      exp: c.aeA ? (c.ev ? 'auto ' + (c.ev > 0 ? '+' : '') + n1(c.ev) + ' EV' : 'auto') : `ISO ${c.iso} · ${sh(c.shutter)}`,
+      focus: c.afA ? 'auto' : c.focus + ' %',
+      wb: c.wbA ? 'auto' : `${c.wb} K${c.tint ? ' · teinte ' + (c.tint > 0 ? '+' : '') + c.tint : ''}`,
+      zoom: n1(c.zoom / 100) + '×',
+      poi: c.poi ? 'point choisi' : 'centre',
+      rate: c.rate ? RATE[c.rate] + ' Mb/s' : 'auto',
+      ev: (c.ev > 0 ? '+' : '') + n1(c.ev) + ' EV',
+      iso: 'ISO ' + c.iso,
+      shutter: sh(c.shutter),
+      wbK: c.wb + ' K',
+      tint: (c.tint > 0 ? '+' : '') + c.tint,
+      focusP: c.focus + ' %',
+    }[k] ?? '';
+  },
+  // The panel on the live picture (spec `Cam - Reglages avances`).
+  paintAdj() {
+    const el = $('#c-adj');
+    if (!el || this.panel !== 'set') return;
+    const c = this.cs;
+    const scroll = $('.abody', el) ? $('.abody', el).scrollTop : 0;
     const chips = (list, k) => `<div class="chips">${list.map((n, i) => `<button type="button" class="cp${c[k] === i ? ' on' : ''}" data-act="set" data-k="${k}" data-v="${i}">${esc(n)}</button>`).join('')}</div>`;
-    const tog = (k, label) => `<button class="tg" type="button" data-act="toggle" data-k="${k}" aria-pressed="${c[k]}"><span>${esc(label)}${tip(k)}</span><span class="sw${c[k] ? ' on' : ''}"></span></button>`;
-    const slider = (k, label, min, max, step, fmt, off) => {
-      const p = ((c[k] - min) / (max - min) * 100).toFixed(1);
-      return `<label class="sl${off ? ' off' : ''}"><span class="r"><span>${esc(label)}${tip(k)}</span><span class="val" id="v-${k}">${fmt(c[k])}</span></span>
-        <input type="range" min="${min}" max="${max}" step="${step}" value="${c[k]}" data-input="slide" data-change="slid" data-k="${k}" ${off ? 'disabled' : ''} style="background:linear-gradient(90deg,var(--co) ${p}%,color-mix(in srgb,var(--tx) 12%,transparent) ${p}%)"></label>`;
+    const tog = (k, label, off) => `<button class="tg" type="button" data-act="toggle" data-k="${k}" aria-pressed="${!!c[k]}" ${off ? 'disabled' : ''}><span>${esc(label)}</span><span class="sw${c[k] ? ' on' : ''}"></span></button>`;
+    // A slider; `steps` (a list) makes it pick among those values.
+    const range = (k, label, min, max, step, off, steps) => {
+      const v = steps ? this.near(steps, c[k]) : c[k];
+      const hi = steps ? steps.length - 1 : max, lo = steps ? 0 : min;
+      const p = hi > lo ? ((v - lo) / (hi - lo) * 100).toFixed(1) : 0;
+      const vk = { wb: 'wbK', focus: 'focusP' }[k] || k;
+      return `<label class="sl${off ? ' off' : ''}"><span class="r"><span>${esc(label)}${tip(k)}</span><span class="val" id="v-${k}">${this.valueOf(vk)}</span></span>
+        <input type="range" min="${lo}" max="${hi}" step="${steps ? 1 : step}" value="${v}" data-input="slide" data-change="slid" data-k="${k}"${steps ? ` data-steps="${k}"` : ''} ${off ? 'disabled' : ''} style="--p:${p}%"></label>`;
     };
-    this.fmt = {
-      ev: (v) => (v > 0 ? '+' : '') + Number(v).toFixed(1) + ' EV',
-      wb: (v) => (c.wbA ? 'auto' : v + ' K'),
-      focus: (v) => (c.afA ? 'auto' : v + ' %'),
+    // One setting: name, value, Auto, Reset, then its controls.
+    const row = (k, label, body, tipKey = k) => {
+      const why = this.why(k);
+      const auto = AUTOS[k];
+      const isAuto = auto && c[auto[0]] === auto[1];
+      return `<div class="ar${why && !auto ? ' off' : ''}">
+        <div class="ah"><span class="an">${esc(label)}${tip(tipKey)}</span><span class="av">${esc(this.valueOf(k))}</span>
+          ${auto ? `<button type="button" class="ab${isAuto ? ' on' : ''}" data-act="auto" data-k="${k}" aria-pressed="${!!isAuto}"${tipAttr('rauto')}>Auto</button>` : ''}
+          <button type="button" class="rb" data-act="reset" data-k="${k}" aria-label="Remettre ${esc(label)}"${tipAttr('reset')}>${I.refresh}</button>
+        </div>
+        ${body}
+        ${why ? `<div class="why">${esc(why)}</div>` : ''}
+      </div>`;
     };
-    const F = this.fmt;
-    let body = '';
-    if (this.tab === 0) {
-      body = `
-        <div class="grp"><span class="gl">Résolution${tip('res')}</span>${chips(RES_L, 'res')}</div>
-        <div class="grp"><span class="gl">Images par seconde${tip('fps')}</span>${chips(FPS.map(String), 'fps')}</div>
-        <div class="grp"><span class="gl">Codec${tip('codec')}</span>${chips(['HEVC', 'H.264'], 'codec')}</div>
-        <div class="grp"><span class="gl">Débit (Mb/s)${tip('rate')}</span>${chips(['Auto', '8', '20', '40', '80'], 'rate')}</div>
-        <div class="grp">${tog('autoq', 'Baisser la qualité si l’iPhone chauffe')}</div>`;
-    } else if (this.tab === 1) {
-      body = slider('ev', 'Exposition', -2, 2, 0.1, F.ev)
-        + `<div class="grp">${tog('afA', 'Mise au point auto')}</div>` + slider('focus', 'Mise au point', 0, 100, 1, F.focus, c.afA)
-        + `<div class="grp">${tog('wbA', 'Balance des blancs auto')}</div>` + slider('wb', 'Balance des blancs', 2500, 8000, 100, F.wb, c.wbA)
-        + `<div class="grp"><span class="gl">Stabilisation${tip('stab')}</span>${chips(['Off', 'Standard', 'Cinéma'], 'stab')}</div>
-        <div class="grp">${tog('torch', 'Lampe de l’iPhone')}</div>`;
-    } else {
-      body = `<label class="grp"><span class="gl">Message${tip('msg')}</span><input class="txt" type="text" maxlength="60" value="${esc(c.msg)}" data-change="msg"></label>
-        <div class="grp">${tog('multi', 'Dans toutes les langues')}</div>
-        <div class="grp"><span class="gl">Style${tip('wst')}</span>${chips(['Animé', 'Minimal'], 'wst')}</div>
-        <div class="wprev">${waitScreen(c, '')}</div>`;
-    }
-    const el = $('#c-drawer');
-    if (!el) return;
-    el.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0';
+    const group = (g, title, rows) => `<section class="ag">
+        <div class="agh"><span class="gl">${title}${tip('g_' + g)}</span><button type="button" class="rb" data-act="greset" data-v="${g}" aria-label="Remettre le groupe ${esc(title)}"${tipAttr('greset')}>${I.refresh}</button></div>
+        ${rows}</section>`;
+    const manualOff = (k) => !!this.why(k);
+    const zoomMax = this.caps() ? Math.max(100, this.caps().zoom_max_pct) : 500;
+    const exp = row('exp', 'Exposition', c.aeA
+      ? range('ev', 'Correction', -2, 2, 0.1)
+      : range('iso', 'Sensibilité', 0, 0, 1, false, this.isoStops()) + range('shutter', 'Temps de pose', 0, 0, 1, false, this.shutterStops()));
+    const focus = row('focus', 'Mise au point', c.afA ? '' : range('focus', 'Distance', 0, 100, 1));
+    const wb = row('wb', 'Balance des blancs', c.wbA ? '' : range('wb', 'Température', 2500, 8000, 100) + range('tint', 'Teinte', -150, 150, 5, manualOff('tint')));
+    const zoom = row('zoom', 'Zoom fin', range('zoom', 'En plus de l’objectif', 100, zoomMax, 10, manualOff('zoom')));
+    const image = exp + focus + wb + zoom + (c.adv
+      ? row('poi', 'Point de netteté', `<div class="hint">${manualOff('poi') ? '' : 'Clique sur l’image pour choisir le point.'}</div>`)
+        + row('stab', 'Stabilisation', chips(['Off', 'Standard', 'Cinéma'], 'stab'))
+        + row('hdr', 'HDR', tog('hdr', c.hdr ? 'Activé' : 'Coupé', manualOff('hdr')))
+        + row('torch', 'Lampe', tog('torch', c.torch ? 'Allumée' : 'Éteinte', manualOff('torch')))
+      : '');
+    const flux = row('res', 'Résolution', chips(RES_L, 'res'))
+      + row('fps', 'Images par seconde', chips(FPS.map(String), 'fps'))
+      + row('codec', 'Codec', chips(['HEVC', 'H.264'], 'codec'))
+      + row('rate', 'Débit (Mb/s)', chips(['Auto', '8', '20', '40', '80'], 'rate'))
+      + row('power', 'Protection de l’iPhone', `<div class="chips">${POWER.map(([v, n]) => `<button type="button" class="cp${c.power === v ? ' on' : ''}" data-act="power" data-v="${v}">${n}</button>`).join('')}</div>`);
+    const wait = row('msg', 'Message', `<input class="txt" type="text" maxlength="60" value="${esc(c.msg)}" data-change="msg" aria-label="Message d’attente">`)
+      + row('multi', 'Toutes les langues', tog('multi', c.multi ? 'Oui' : 'Non'))
+      + row('wst', 'Style', chips(['Animé', 'Minimal'], 'wst'))
+      + `<div class="wprev">${waitScreen(c, '')}</div>`;
     el.innerHTML = `
-      <div style="padding:0 22px 14px"><div class="chips">${PROFILES.map(([n], i) => `<button type="button" class="cp${c.prof === i ? ' on' : ''}" data-act="profile" data-v="${i}">${n}</button>`).join('')}${tip('profile')}</div></div>
-      <div class="tabs" role="tablist">${['Qualité', 'Caméra', 'Écran d’attente'].map((n, i) => `<button type="button" role="tab" aria-selected="${i === this.tab}" class="${i === this.tab ? 'on' : ''}" data-act="tab" data-v="${i}">${n}</button>`).join('')}</div>
-      <div class="dbody">${body}</div>`;
+      <div class="ahd">
+        <div class="seg" role="group" aria-label="Mode"${tipAttr('mode')}>${['Simple', 'Avancé'].map((n, i) => `<button type="button" class="${!!i === !!c.adv ? 'on' : ''}" data-act="mode" data-v="${i}" aria-pressed="${!!i === !!c.adv}">${n}</button>`).join('')}</div>
+        <button class="ib" type="button" aria-label="Cacher les réglages" data-act="close"${tipAttr('adjclose')}>${I.close}</button>
+      </div>
+      <div class="abody">
+        <div class="agp"><span class="gl">Profil${tip('profile')}</span><div class="chips">${PROFILES.map(([n], i) => `<button type="button" class="cp${c.prof === i ? ' on' : ''}" data-act="profile" data-v="${i}">${n}</button>`).join('')}${c.prof === CUSTOM ? '<span class="cp on static">Personnalisé</span>' : ''}</div></div>
+        ${group('image', 'Image', image)}
+        ${c.adv ? group('flux', 'Flux', flux) + group('wait', 'Écran d’attente', wait) : ''}
+        <button type="button" class="allr" data-act="allreset"${tipAttr('allreset')}>${I.refresh}Tout remettre</button>
+      </div>`;
+    if ($('.abody', el)) $('.abody', el).scrollTop = scroll;
+  },
+  // Res, fps, power, rate and codec as one of the profiles, or « Personnalisé ».
+  matchProfile() {
+    const c = this.cs;
+    const i = PROFILES.findIndex(([, r, f, p]) => r === c.res && f === c.fps && p === c.power);
+    c.prof = i >= 0 && c.rate === 0 && c.codec === 0 ? i : CUSTOM;
+  },
+  // The point as sent: 0..1000 on the picture, letterbox left out.
+  pickPoint(e) {
+    if (this.panel !== 'set' || this.why('poi') || $('#c-vbox').classList.contains('peek')) return;
+    const r = this.pictureRect();
+    if (!r) return;
+    const x = Math.round((e.clientX - r.left) / r.width * 1000), y = Math.round((e.clientY - r.top) / r.height * 1000);
+    if (x < 0 || y < 0 || x > 1000 || y > 1000) return;
+    this.cs.poi = [x, y];
+    this.placePoint(true);
+    this.changed(true, false);
+  },
+  // Where the picture is drawn in the canvas (object-fit: contain).
+  pictureRect() {
+    const cv = $('#c-scene');
+    if (!cv || !cv.width || !cv.height) return null;
+    const b = cv.getBoundingClientRect();
+    const s = Math.min(b.width / cv.width, b.height / cv.height);
+    const w = cv.width * s, h = cv.height * s;
+    return { left: b.left + (b.width - w) / 2, top: b.top + (b.height - h) / 2, width: w, height: h };
+  },
+  placePoint(pulse) {
+    const dot = $('#c-poi'), r = this.pictureRect(), p = this.cs.poi;
+    if (!dot) return;
+    dot.classList.toggle('on', !!(p && r));
+    if (!p || !r) return;
+    const box = $('#c-vbox').getBoundingClientRect();
+    dot.style.left = (r.left - box.left + p[0] / 1000 * r.width) + 'px';
+    dot.style.top = (r.top - box.top + p[1] / 1000 * r.height) + 'px';
+    if (pulse) {
+      dot.classList.remove('pulse');
+      void dot.offsetWidth; // restarts the animation
+      dot.classList.add('pulse');
+    }
   },
   // `wait`: the change touches the waiting screen (message, style…); mirror,
   // turn and lens never do, so it stays as it is.
@@ -1117,13 +1279,15 @@ const Cam = {
       this.overlayKey = '';
       this.paintWait();
     }
-    if (this.panel === 'set') {
-      const scroll = $('.dbody') ? $('.dbody').scrollTop : 0;
-      this.paintDrawer();
-      if ($('.dbody')) $('.dbody').scrollTop = scroll;
-    }
+    if (this.panel === 'set') this.paintAdj();
     if (send) this.push();
     this.save();
+  },
+  resetKeys(keys) {
+    for (const k of keys) for (const f of RESETS[k] || []) this.cs[f] = CAM_DEFAULTS[f];
+    if (keys.includes('poi')) this.placePoint();
+    this.matchProfile();
+    this.changed(true, keys.some((k) => GROUPS.wait.includes(k)));
   },
   acts: {
     pause: () => {
@@ -1139,25 +1303,48 @@ const Cam = {
         Cam.paintDock();
         Cam.pushLens();
       }
-      Cam.changed(['res', 'fps', 'rate', 'codec', 'stab'].includes(k));
+      if (['res', 'fps', 'rate', 'codec'].includes(k)) Cam.matchProfile();
+      Cam.changed(SENT.includes(k));
     },
     toggle: (el) => {
       const k = el.dataset.k;
       Cam.cs[k] = !Cam.cs[k];
-      Cam.changed(['autoq', 'afA', 'wbA', 'torch'].includes(k));
+      Cam.changed(SENT.includes(k));
     },
     profile: (el) => {
       const i = Number(el.dataset.v);
-      const [, res, fps] = PROFILES[i];
-      Object.assign(Cam.cs, { prof: i, res, fps });
+      const [, res, fps, power] = PROFILES[i];
+      // A profile sets the whole stream: rate and codec back to their Auto.
+      Object.assign(Cam.cs, { prof: i, res, fps, power, rate: 0, codec: 0 });
       Cam.changed(true);
     },
-    tab: (el) => {
-      Cam.tab = Number(el.dataset.v);
-      Cam.paintDrawer();
+    power: (el) => {
+      Cam.cs.power = el.dataset.v;
+      Cam.matchProfile();
+      Cam.changed(true);
     },
+    mode: (el) => {
+      Cam.cs.adv = el.dataset.v === '1';
+      Cam.changed(false, false);
+    },
+    // « Auto » next to a setting: on, or off to set it by hand from here.
+    auto: (el) => {
+      const k = el.dataset.k;
+      const [key, on] = AUTOS[k];
+      if (Cam.cs[key] === on) {
+        if (k === 'rate' || k === 'poi' || Cam.why(k)) return;
+        Cam.cs[key] = !on;
+      } else {
+        Cam.cs[key] = on;
+      }
+      if (k === 'rate') Cam.matchProfile();
+      if (k === 'poi') Cam.placePoint();
+      Cam.changed(true, false);
+    },
+    reset: (el) => Cam.resetKeys([el.dataset.k]),
+    greset: (el) => Cam.resetKeys(GROUPS[el.dataset.v]),
+    allreset: () => Cam.resetKeys(Object.keys(RESETS)),
     panel: (el) => Cam.openPanel(el.dataset.v),
-    close: () => Cam.openPanel(Cam.panel),
     peek: () => {
       Cam.cs.peek = !Cam.peekOn();
       Cam.dockKey = '';
@@ -1185,11 +1372,14 @@ const Cam = {
     },
     slide: (el) => {
       const k = el.dataset.k;
-      Cam.cs[k] = Number(el.value);
+      const steps = { iso: () => Cam.isoStops(), shutter: () => Cam.shutterStops() }[el.dataset.steps];
+      Cam.cs[k] = steps ? steps()[Number(el.value)] : Number(el.value);
       const min = Number(el.min), max = Number(el.max);
-      const p = ((Cam.cs[k] - min) / (max - min) * 100).toFixed(1);
-      el.style.background = `linear-gradient(90deg,var(--co) ${p}%,color-mix(in srgb,var(--tx) 12%,transparent) ${p}%)`;
-      $('#v-' + k).textContent = Cam.fmt[k](Cam.cs[k]);
+      el.style.setProperty('--p', ((Number(el.value) - min) / (max - min || 1) * 100).toFixed(1) + '%');
+      $('#v-' + k).textContent = Cam.valueOf({ wb: 'wbK', focus: 'focusP' }[k] || k);
+      // The value next to the setting name follows too.
+      const av = el.closest('.ar') && $('.av', el.closest('.ar'));
+      if (av) av.textContent = Cam.valueOf({ ev: 'exp', iso: 'exp', shutter: 'exp', tint: 'wb' }[k] || k);
       // Sent while sliding (throttled), so the iPhone follows the finger.
       clearTimeout(Cam.slideT);
       Cam.slideT = setTimeout(() => Cam.push(), 120);
@@ -1198,6 +1388,7 @@ const Cam = {
       Cam.push();
       Cam.save();
     },
+    close: () => Cam.openPanel(Cam.panel),
     msg: (el) => {
       Cam.cs.msg = el.value.trim() || CAM_DEFAULTS.msg;
       Cam.changed(false);

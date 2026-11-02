@@ -36,11 +36,11 @@ Source unique des règles du projet. Les règles **sans exception** sont aussi i
 2. Bonjour actif seulement quand l'app est ouverte ; connexion de contrôle (infos de l'iPhone comprises) seulement quand l'app est au premier plan ; sockets de données (Cam, Drop) fermées après 30 s d'inactivité ([[ADR-0015 Lien permanent et connexion au premier plan]]).
 3. Encodage et décodage **matériels** uniquement ; jamais de traitement d'image sur le CPU.
 4. Envois groupés : gros blocs plutôt que milliers de petits messages.
-5. Mode économie d'iOS respecté : qualité réduite automatiquement.
+5. Mode économie d'iOS : qualité réduite automatiquement **dans le profil Économie** ; en Max et Équilibré, simple signal sur le PC ([[ADR-0032 Profils de puissance au lieu de la protection batterie]]).
 6. Budget mesuré en phase 1 (% de batterie par heure et température, par mode) ; chaque version comparée au budget.
-7. Sous 15 % sans charge : alerte sur le PC et qualité réduite.
+7. Sous 15 % sans charge : alerte sur le PC dans tous les profils ; qualité réduite seulement en Économie.
 8. Pendant un stream : aperçu plein écran sur l'iPhone, écran noir en un geste et automatique après 30 s sans toucher (par défaut), luminosité au minimum en écran noir, HDR coupé par défaut ([[ADR-0018 Cam image seule et demarrage en pause]]).
-9. Adaptation thermique : nominal/fair = réglages demandés ; serious = 60 → 30 fps et débit −30 % ; critical = 1080p30 + alerte sur le PC.
+9. Adaptation thermique : nominal/fair = réglages demandés ; serious = 60 → 30 fps et débit −30 % en Équilibré et Économie, signal seulement en Max ; critical = 1080p30 + alerte sur le PC, **dans tous les profils** (iOS couperait la caméra sinon).
 
 ## iOS
 - Build et installation seulement par xtool sur le serveur ; rien ne suppose un Mac.

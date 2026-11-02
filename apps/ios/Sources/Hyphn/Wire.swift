@@ -56,6 +56,37 @@ struct CamControl: Equatable {
     var turn: UInt32 = 0
     /// Paused, PC Cam page on screen: send a small preview for the PC window (ADR-0027).
     var preview = false
+    // Advanced settings (spec `Cam - Reglages avances`, E3).
+    /// false = auto exposure (with exposureBiasTenths).
+    var exposureManual = false
+    var iso: UInt32 = 0
+    /// Exposure time when manual, µs.
+    var shutterUs: UInt32 = 0
+    /// -150 (green) .. 150 (magenta), with a manual white balance.
+    var wbTint: Int32 = 0
+    /// Fine zoom on top of the lens: 100 = none.
+    var zoomPercent: UInt32 = 100
+    /// Video HDR (off by default, RULES Énergie 8).
+    var hdr = false
+    /// Focus and exposure follow (poiX, poiY), 0..1000 on the picture as sent.
+    var poi = false
+    var poiX: UInt32 = 500
+    var poiY: UInt32 = 500
+}
+
+/// What the camera in use can do (CamState 11..22): the PC greys out the rest.
+struct CamCaps {
+    var isoMin: UInt32 = 0
+    var isoMax: UInt32 = 0
+    var shutterMinUs: UInt32 = 0
+    var shutterMaxUs: UInt32 = 0
+    var zoomMaxPercent: UInt32 = 100
+    var exposure = false
+    var focus = false
+    var wb = false
+    var hdr = false
+    var poi = false
+    var torch = false
 }
 
 struct CamState {
@@ -70,6 +101,7 @@ struct CamState {
     var lensCount: UInt32 = 4
     /// Evan touched a button on the iPhone: the PC follows (see hyphn.proto).
     var byUser = false
+    var caps: CamCaps?
 }
 
 struct VideoFrame {
@@ -289,6 +321,11 @@ extension Msg {
             b.bool(1, c.open); b.bool(2, c.live); b.uint(3, UInt64(c.width)); b.uint(4, UInt64(c.height))
             b.uint(5, UInt64(c.fps)); b.uint(6, UInt64(c.codec.rawValue)); b.bool(7, c.front); b.uint(8, UInt64(c.lens))
             b.uint(9, UInt64(c.lensCount)); b.bool(10, c.byUser)
+            if let k = c.caps {
+                b.bool(11, true); b.uint(12, UInt64(k.isoMin)); b.uint(13, UInt64(k.isoMax))
+                b.uint(14, UInt64(k.shutterMinUs)); b.uint(15, UInt64(k.shutterMaxUs)); b.uint(16, UInt64(k.zoomMaxPercent))
+                b.bool(17, k.exposure); b.bool(18, k.focus); b.bool(19, k.wb); b.bool(20, k.hdr); b.bool(21, k.poi); b.bool(22, k.torch)
+            }
         case let .camQuality(height, fps):
             field = 13
             b.uint(1, UInt64(height)); b.uint(2, UInt64(fps))
@@ -401,7 +438,7 @@ extension Msg {
                 // Every field starts at its proto3 default (0 / false), not at CamControl's.
                 var c = CamControl(live: false, height: 0, fps: 0, bitrateKbps: 0, codec: .unknown, front: false, lens: 0,
                                    exposureBiasTenths: 0, focusManual: false, focus: 0, wbManual: false, wbKelvin: 0,
-                                   torch: false, stabilization: 0)
+                                   torch: false, stabilization: 0, zoomPercent: 0, poiX: 0, poiY: 0)
                 while let (f, w) = try m.field() {
                     guard w == 0 else { try m.skip(w); continue }
                     let v = try m.varint()
@@ -424,6 +461,15 @@ extension Msg {
                     case 15: c.mirror = v != 0
                     case 16: c.turn = UInt32(truncatingIfNeeded: v) % 4
                     case 17: c.preview = v != 0
+                    case 18: c.exposureManual = v != 0
+                    case 19: c.iso = UInt32(truncatingIfNeeded: v)
+                    case 20: c.shutterUs = UInt32(truncatingIfNeeded: v)
+                    case 21: c.wbTint = Int32(truncatingIfNeeded: Int64(bitPattern: (v >> 1) ^ (0 &- (v & 1))))
+                    case 22: c.zoomPercent = UInt32(truncatingIfNeeded: v)
+                    case 23: c.hdr = v != 0
+                    case 24: c.poi = v != 0
+                    case 25: c.poiX = UInt32(truncatingIfNeeded: v)
+                    case 26: c.poiY = UInt32(truncatingIfNeeded: v)
                     default: break
                     }
                 }

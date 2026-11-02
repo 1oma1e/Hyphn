@@ -246,6 +246,24 @@ pub struct CamControl {
     pub turn: u32,
     #[prost(bool, tag = "17")]
     pub preview: bool,
+    #[prost(bool, tag = "18")]
+    pub exposure_manual: bool,
+    #[prost(uint32, tag = "19")]
+    pub iso: u32,
+    #[prost(uint32, tag = "20")]
+    pub shutter_us: u32,
+    #[prost(sint32, tag = "21")]
+    pub wb_tint: i32,
+    #[prost(uint32, tag = "22")]
+    pub zoom_percent: u32,
+    #[prost(bool, tag = "23")]
+    pub hdr: bool,
+    #[prost(bool, tag = "24")]
+    pub poi: bool,
+    #[prost(uint32, tag = "25")]
+    pub poi_x: u32,
+    #[prost(uint32, tag = "26")]
+    pub poi_y: u32,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -270,6 +288,30 @@ pub struct CamState {
     pub lens_count: u32,
     #[prost(bool, tag = "10")]
     pub by_user: bool,
+    #[prost(bool, tag = "11")]
+    pub caps: bool,
+    #[prost(uint32, tag = "12")]
+    pub iso_min: u32,
+    #[prost(uint32, tag = "13")]
+    pub iso_max: u32,
+    #[prost(uint32, tag = "14")]
+    pub shutter_min_us: u32,
+    #[prost(uint32, tag = "15")]
+    pub shutter_max_us: u32,
+    #[prost(uint32, tag = "16")]
+    pub zoom_max_percent: u32,
+    #[prost(bool, tag = "17")]
+    pub manual_exposure_ok: bool,
+    #[prost(bool, tag = "18")]
+    pub manual_focus_ok: bool,
+    #[prost(bool, tag = "19")]
+    pub manual_wb_ok: bool,
+    #[prost(bool, tag = "20")]
+    pub hdr_ok: bool,
+    #[prost(bool, tag = "21")]
+    pub poi_ok: bool,
+    #[prost(bool, tag = "22")]
+    pub torch_ok: bool,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]

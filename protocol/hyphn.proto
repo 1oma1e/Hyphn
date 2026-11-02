@@ -220,6 +220,16 @@ message CamControl {
   bool mirror = 15;       // picture flipped left-right on the iPhone (never the waiting screen)
   uint32 turn = 16;       // quarter turns clockwise on top of the level picture, 0..3 (never the waiting screen)
   bool preview = 17;      // paused, PC Cam page on screen: send a small preview (480p15) for the PC window only (ADR-0027)
+  // Advanced settings (spec `Cam - Reglages avances`, E3). Older iPhones ignore them.
+  bool exposure_manual = 18; // false = auto exposure (with exposure_bias_tenths)
+  uint32 iso = 19;        // when manual, clamped by the iPhone to its range
+  uint32 shutter_us = 20; // exposure time when manual, µs; never longer than one frame
+  sint32 wb_tint = 21;    // -150 (green) .. 150 (magenta), when wb_manual
+  uint32 zoom_percent = 22; // fine zoom on top of the lens: 100 = none, 200 = 2x more
+  bool hdr = 23;          // video HDR (off by default, RULES Énergie 8)
+  bool poi = 24;          // focus and exposure follow the point below, not the centre
+  uint32 poi_x = 25;      // 0..1000 across the picture as sent (after turn and mirror)
+  uint32 poi_y = 26;      // 0..1000 down the picture as sent
 }
 
 message CamState {
@@ -236,6 +246,19 @@ message CamState {
   // flip). The PC follows these; the other reports are just information, so
   // a late report never undoes what the PC asked.
   bool by_user = 10;
+  // What this camera can do (spec `Cam - Reglages avances`, E7): the PC greys out the rest.
+  bool caps = 11;         // false = older app: fields 12..20 unknown
+  uint32 iso_min = 12;
+  uint32 iso_max = 13;
+  uint32 shutter_min_us = 14;
+  uint32 shutter_max_us = 15; // already limited to one frame at the current fps
+  uint32 zoom_max_percent = 16; // fine zoom reachable on top of the current lens
+  bool manual_exposure_ok = 17;
+  bool manual_focus_ok = 18;
+  bool manual_wb_ok = 19;
+  bool hdr_ok = 20;
+  bool poi_ok = 21;
+  bool torch_ok = 22;
 }
 
 // Evan picked a quality on the iPhone; the PC keeps it and answers CamControl.

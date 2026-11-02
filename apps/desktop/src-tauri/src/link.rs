@@ -24,7 +24,7 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use tokio::time::timeout;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 
-use crate::cam::{self, Effective, Quality, Thermal};
+use crate::cam::{self, Effective, Load, Power, Quality, Thermal};
 use crate::identity::{self, Fingerprint, Identity};
 use crate::pairing::{self, PairError, PairOffer, PairingSession, PROTOCOL_VERSION};
 use crate::proto::{self, envelope::Msg, read_msg, refused::Reason, write_msg, Codec, Envelope};
@@ -104,7 +104,8 @@ pub struct DropProgress {
 pub struct CamWanted {
     pub live: bool,
     pub request: Quality,
-    pub adapt: bool,
+    /// Power profile (ADR-0032): how much the quality gives way to the iPhone.
+    pub power: Power,
     pub codec: Codec,
     pub front: bool,
     pub lens: u32,
@@ -130,6 +131,15 @@ pub struct Tune {
     pub torch: bool,
     /// 0 off, 1 standard, 2 cinematic.
     pub stab: u32,
+    /// None = auto exposure; Some((ISO, exposure time in µs)).
+    pub manual_exposure: Option<(u32, u32)>,
+    /// -150..150, with a manual white balance.
+    pub tint: i32,
+    /// Fine zoom on top of the lens, 100 = none.
+    pub zoom_pct: u32,
+    pub hdr: bool,
+    /// Focus and exposure point, 0..1000 on the picture as sent; None = centre.
+    pub poi: Option<(u32, u32)>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -157,6 +167,22 @@ pub struct PhoneCam {
     pub front: bool,
     pub lens: u32,
     pub lens_count: u32,
+    /// What this camera can do; None = older iPhone app (everything allowed).
+    pub caps: Option<PhoneCaps>,
+}
+
+/// Ranges and abilities of the iPhone camera in use (spec `Cam - Reglages avances`, E7).
+#[derive(Debug, Clone, Serialize)]
+pub struct PhoneCaps {
+    pub iso: (u32, u32),
+    pub shutter_us: (u32, u32),
+    pub zoom_max_pct: u32,
+    pub exposure: bool,
+    pub focus: bool,
+    pub wb: bool,
+    pub hdr: bool,
+    pub poi: bool,
+    pub torch: bool,
 }
 
 /// Video readers whose name starts with this are Hyphn windows: the only ones
@@ -424,6 +450,17 @@ impl Hub {
                 front: c.front,
                 lens: c.lens,
                 lens_count: c.lens_count,
+                caps: c.caps.then(|| PhoneCaps {
+                    iso: (c.iso_min, c.iso_max),
+                    shutter_us: (c.shutter_min_us, c.shutter_max_us),
+                    zoom_max_pct: c.zoom_max_percent,
+                    exposure: c.manual_exposure_ok,
+                    focus: c.manual_focus_ok,
+                    wb: c.manual_wb_ok,
+                    hdr: c.hdr_ok,
+                    poi: c.poi_ok,
+                    torch: c.torch_ok,
+                }),
             }),
             live: st.cam.live && s.is_some(),
             effective: st.effective(),
@@ -1257,10 +1294,14 @@ impl State {
         self.session.as_ref().is_some_and(|s| matches!(s.via, Via::Cable(_)))
     }
 
-    fn thermal(&self) -> Thermal {
+    fn load(&self) -> Load {
         match (&self.session, &self.last_status) {
-            (Some(_), Some(s)) => s.thermal.unwrap_or(Thermal::Nominal),
-            _ => Thermal::Nominal,
+            (Some(_), Some(s)) => Load {
+                thermal: s.thermal.unwrap_or(Thermal::Nominal),
+                low_power: s.low_power == Some(true),
+                low_battery: s.battery.is_some_and(|b| b < 15) && s.charge == Some("unplugged"),
+            },
+            _ => Load::default(),
         }
     }
 
@@ -1271,11 +1312,12 @@ impl State {
         if !self.h264_readers.is_empty() {
             request.height = request.height.min(1080);
         }
-        cam::effective(request, self.thermal(), self.cam.adapt, self.on_cable())
+        cam::effective(request, self.load(), self.cam.power, self.on_cable())
     }
 
     fn control(&self) -> proto::CamControl {
         let eff = self.effective();
+        let t = &self.cam.tune;
         proto::CamControl {
             live: self.cam.live,
             height: eff.quality.height,
@@ -1294,6 +1336,15 @@ impl State {
             mirror: self.cam.mirror,
             turn: self.cam.turn % 4,
             preview: self.cam.preview && !self.cam.live,
+            exposure_manual: t.manual_exposure.is_some(),
+            iso: t.manual_exposure.map_or(0, |e| e.0),
+            shutter_us: t.manual_exposure.map_or(0, |e| e.1),
+            wb_tint: t.tint.clamp(-150, 150),
+            zoom_percent: t.zoom_pct.clamp(100, 1000),
+            hdr: t.hdr,
+            poi: t.poi.is_some(),
+            poi_x: t.poi.map_or(500, |p| p.0.min(1000)),
+            poi_y: t.poi.map_or(500, |p| p.1.min(1000)),
         }
     }
 }
@@ -1336,7 +1387,7 @@ mod tests {
             CamWanted {
                 live: false,
                 request: Quality { height: 1080, fps: 30, bitrate_mbps: 0 },
-                adapt: true,
+                power: Power::Balanced,
                 codec: Codec::Hevc,
                 front: false,
                 lens: 1,
@@ -1703,6 +1754,29 @@ mod tests {
         accept_on_pc(&r, true).await;
         assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if !a.ok && a.reason.starts_with("Il manque")));
         wait_until(|| r.hub.view().drop.state == "failed").await;
+    }
+
+    #[tokio::test]
+    async fn advanced_settings_reach_the_iphone() {
+        let r = rig().await;
+        let phone = Identity::generate("phone").unwrap();
+        let mut ctl = pair(&r, &phone).await;
+        assert!(matches!(recv(&mut ctl).await, Some(Msg::CamControl(c)) if !c.exposure_manual && c.zoom_percent == 100 && !c.poi));
+        r.hub.update_cam(|c| {
+            c.tune.manual_exposure = Some((400, 10_000));
+            c.tune.wb = Some(4000);
+            c.tune.tint = 999;
+            c.tune.zoom_pct = 250;
+            c.tune.hdr = true;
+            c.tune.poi = Some((250, 300));
+        });
+        let c = match recv(&mut ctl).await {
+            Some(Msg::CamControl(c)) => c,
+            other => panic!("{other:?}"),
+        };
+        assert!(c.exposure_manual && c.iso == 400 && c.shutter_us == 10_000);
+        assert!(c.wb_manual && c.wb_kelvin == 4000 && c.wb_tint == 150, "tint kept in -150..150");
+        assert!(c.zoom_percent == 250 && c.hdr && c.poi && (c.poi_x, c.poi_y) == (250, 300));
     }
 
     #[tokio::test]

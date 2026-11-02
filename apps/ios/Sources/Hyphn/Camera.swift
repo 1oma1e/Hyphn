@@ -50,7 +50,30 @@ final class Camera: NSObject, ObservableObject {
 
     var state: CamState {
         CamState(open: isOpen, live: live, width: UInt32(size.width), height: UInt32(size.height), fps: fps,
-                 codec: control.codec, front: front, lens: lens, lensCount: 4)
+                 codec: control.codec, front: front, lens: lens, lensCount: 4, caps: caps)
+    }
+
+    private var device: AVCaptureDevice? { (session.inputs.first as? AVCaptureDeviceInput)?.device }
+
+    /// What the camera in use can do, for the PC panel (spec `Cam - Reglages avances`, E7).
+    private var caps: CamCaps? {
+        guard let dev = device else { return nil }
+        let f = dev.activeFormat
+        let us = { (t: CMTime) -> UInt32 in UInt32(max(1, min(Double(UInt32.max), t.seconds * 1_000_000))) }
+        // Never longer than one frame: the frame rate would drop.
+        let longest = min(f.maxExposureDuration, dev.activeVideoMaxFrameDuration)
+        let lensZoom = zoomOf(lens, dev)
+        let room = dev.maxAvailableVideoZoomFactor / max(lensZoom, 1)
+        return CamCaps(
+            isoMin: UInt32(f.minISO), isoMax: UInt32(f.maxISO),
+            shutterMinUs: us(f.minExposureDuration), shutterMaxUs: us(longest),
+            zoomMaxPercent: UInt32(max(100, min(500, room * 100))),
+            exposure: dev.isExposureModeSupported(.custom),
+            focus: dev.isLockingFocusWithCustomLensPositionSupported,
+            wb: dev.isLockingWhiteBalanceWithCustomDeviceGainsSupported,
+            hdr: f.isVideoHDRSupported,
+            poi: dev.isFocusPointOfInterestSupported || dev.isExposurePointOfInterestSupported,
+            torch: dev.hasTorch)
     }
 
     // MARK: Open / close (the Cam tab)
@@ -106,7 +129,7 @@ final class Camera: NSObject, ObservableObject {
     // MARK: Settings from the PC, and from the buttons here
 
     func apply(_ c: CamControl) {
-        let relens = c.lens != control.lens
+        let relens = c.lens != control.lens || c.zoomPercent != control.zoomPercent
         let retune = !Self.sameTune(c, control)
         let remirror = c.mirror != control.mirror || c.turn != control.turn
         control = c
@@ -172,6 +195,24 @@ final class Camera: NSObject, ObservableObject {
     private static func sameTune(_ a: CamControl, _ b: CamControl) -> Bool {
         a.exposureBiasTenths == b.exposureBiasTenths && a.focusManual == b.focusManual && a.focus == b.focus
             && a.wbManual == b.wbManual && a.wbKelvin == b.wbKelvin && a.torch == b.torch && a.stabilization == b.stabilization
+            && a.exposureManual == b.exposureManual && a.iso == b.iso && a.shutterUs == b.shutterUs && a.wbTint == b.wbTint
+            && a.hdr == b.hdr && a.poi == b.poi && a.poiX == b.poiX && a.poiY == b.poiY
+    }
+
+    /// A point of the picture as sent (after the turn and the mirror, 0..1000)
+    /// in the sensor's own frame, the one `focusPointOfInterest` uses: landscape,
+    /// (0,0) top left. Undoes the mirror, then the rotation (clockwise).
+    private func sensorPoint(x: UInt32, y: UInt32) -> CGPoint {
+        var px = Double(min(x, 1000)) / 1000
+        let py = Double(min(y, 1000)) / 1000
+        if control.mirror { px = 1 - px }
+        let angle = Int(output.connection(with: .video)?.videoRotationAngle ?? 0) % 360
+        switch angle {
+        case 90: return CGPoint(x: py, y: 1 - px)
+        case 180: return CGPoint(x: 1 - px, y: 1 - py)
+        case 270: return CGPoint(x: 1 - py, y: px)
+        default: return CGPoint(x: px, y: py)
+        }
     }
 
     /// Exposure, focus, white balance and torch on the device, stabilization
@@ -184,18 +225,37 @@ final class Camera: NSObject, ObservableObject {
             let supported = (session.inputs.first as? AVCaptureDeviceInput)?.device.activeFormat.isVideoStabilizationModeSupported(mode) ?? false
             conn.preferredVideoStabilizationMode = supported ? mode : .off
         }
-        guard let dev = (session.inputs.first as? AVCaptureDeviceInput)?.device,
-              (try? dev.lockForConfiguration()) != nil else { return }
+        guard let dev = device, (try? dev.lockForConfiguration()) != nil else { return }
         defer { dev.unlockForConfiguration() }
-        let bias = Float(c.exposureBiasTenths) / 10
-        dev.setExposureTargetBias(max(dev.minExposureTargetBias, min(dev.maxExposureTargetBias, bias)), completionHandler: nil)
+        // Focus and exposure point: before the modes, which start from it.
+        let point = c.poi ? sensorPoint(x: c.poiX, y: c.poiY) : CGPoint(x: 0.5, y: 0.5)
+        if dev.isFocusPointOfInterestSupported { dev.focusPointOfInterest = point }
+        if dev.isExposurePointOfInterestSupported { dev.exposurePointOfInterest = point }
+        let f = dev.activeFormat
+        if c.exposureManual, dev.isExposureModeSupported(.custom) {
+            let longest = min(f.maxExposureDuration, dev.activeVideoMaxFrameDuration)
+            var t = CMTime(value: CMTimeValue(max(c.shutterUs, 1)), timescale: 1_000_000)
+            t = CMTimeMaximum(f.minExposureDuration, CMTimeMinimum(longest, t))
+            let iso = max(f.minISO, min(f.maxISO, Float(c.iso)))
+            dev.setExposureModeCustom(duration: t, iso: iso, completionHandler: nil)
+        } else {
+            if dev.isExposureModeSupported(.continuousAutoExposure) { dev.exposureMode = .continuousAutoExposure }
+            let bias = Float(c.exposureBiasTenths) / 10
+            dev.setExposureTargetBias(max(dev.minExposureTargetBias, min(dev.maxExposureTargetBias, bias)), completionHandler: nil)
+        }
+        // HDR off unless asked (RULES Énergie 8).
+        if f.isVideoHDRSupported {
+            dev.automaticallyAdjustsVideoHDREnabled = false
+            dev.isVideoHDREnabled = c.hdr
+        }
         if c.focusManual, dev.isLockingFocusWithCustomLensPositionSupported {
             dev.setFocusModeLocked(lensPosition: Float(min(c.focus, 100)) / 100, completionHandler: nil)
         } else if dev.isFocusModeSupported(.continuousAutoFocus) {
             dev.focusMode = .continuousAutoFocus
         }
         if c.wbManual, dev.isLockingWhiteBalanceWithCustomDeviceGainsSupported {
-            let t = AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(temperature: Float(c.wbKelvin), tint: 0)
+            let t = AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(temperature: Float(c.wbKelvin),
+                                                                         tint: Float(max(-150, min(150, c.wbTint))))
             var g = dev.deviceWhiteBalanceGains(for: t)
             let top = dev.maxWhiteBalanceGain
             g.redGain = max(1, min(top, g.redGain))
@@ -380,17 +440,24 @@ final class Camera: NSObject, ObservableObject {
 
     /// 0,5× / 1× / 2× / 5×. On a multi-camera device, 1× is the wide lens,
     /// found at the first switch-over factor; without an ultra-wide, 0,5× stays 1×.
+    /// The fine zoom of the PC panel (zoomPercent) multiplies the lens zoom.
     private func setZoom(_ i: UInt32) {
         lens = i
-        guard let dev = (session.inputs.first as? AVCaptureDeviceInput)?.device else { return }
-        let factor = Self.lensFactors[Int(min(i, 3))]
-        let hasUltraWide = dev.constituentDevices.contains { $0.deviceType == .builtInUltraWideCamera }
-        let base = hasUltraWide ? (dev.virtualDeviceSwitchOverVideoZoomFactors.first.map { CGFloat(truncating: $0) } ?? 2) : 1
-        let zoom = max(dev.minAvailableVideoZoomFactor, min(dev.maxAvailableVideoZoomFactor, factor * base))
+        guard let dev = device else { return }
+        let fine = CGFloat(max(100, min(500, control.zoomPercent))) / 100
+        let zoom = max(dev.minAvailableVideoZoomFactor, min(dev.maxAvailableVideoZoomFactor, zoomOf(i, dev) * fine))
         if (try? dev.lockForConfiguration()) != nil {
             dev.videoZoomFactor = zoom
             dev.unlockForConfiguration()
         }
+    }
+
+    /// Device zoom factor of a lens button, without the fine zoom.
+    private func zoomOf(_ i: UInt32, _ dev: AVCaptureDevice) -> CGFloat {
+        let factor = Self.lensFactors[Int(min(i, 3))]
+        let hasUltraWide = dev.constituentDevices.contains { $0.deviceType == .builtInUltraWideCamera }
+        let base = hasUltraWide ? (dev.virtualDeviceSwitchOverVideoZoomFactors.first.map { CGFloat(truncating: $0) } ?? 2) : 1
+        return factor * base
     }
 }
 

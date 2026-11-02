@@ -1,7 +1,7 @@
 ---
 type: decision
 date: 2026-11-02
-statut: propose
+statut: accepte
 ---
 # ADR-0034 Où appliquer les filtres de la Cam
 
@@ -16,11 +16,15 @@ Les filtres et effets ([[Cam - Filtres et effets]]) doivent se voir dans Discord
 | C. Mixte : couleurs et lumière sur l'iPhone, effets lourds sur le PC | Profite des deux | Deux chemins à tenir |
 
 ## Décision
-Proposé : **A pour la v1** (filtres de base, flou d'arrière-plan avec le détourage de Vision). C'est un seul endroit, et ça marche déjà jusqu'à Discord. On revoit pour les effets visage après une mesure de chaleur et de latence. Android (phase 7) poserait la question à nouveau : à noter.
+**B : tout sur le PC** (choix d'Evan, 2026-11-02). L'iPhone en fait le moins possible : il filme, encode et envoie. Filtres, détourage du fond et suivi du visage se calculent sur la carte graphique du PC, à partir de l'image reçue de l'iPhone.
+
+Pourquoi c'est devenu simple : depuis [[ADR-0035 Webcam sans forcer le H.264]], l'app PC décode déjà une seule fois pour la fenêtre **et** la webcam. Les effets se placent juste après ce décodage : un seul rendu, vu dans la fenêtre, Discord et OBS. L'iPhone ne chauffe pas plus, et Android (phase 7) profitera des mêmes effets.
 
 ## Conséquences
-- Le filtre passe dans `CamControl` (protocole), et l'iPhone l'applique entre la caméra et VideoToolbox.
-- Les mesures de [[Cam - Latence et fluidite]] doivent inclure le coût du filtre.
-- Bon choix si le flou d'arrière-plan en 1080p60 n'ajoute pas plus d'une image de latence ni de saccade.
+- Chaîne : décodage → effets (GPU) → fenêtre et images NV12 de la webcam. Les effets ne passent pas par le protocole.
+- Détourage et points du visage : modèles ML sur le PC (carte graphique), à choisir dans [[Cam - Filtres et effets]] après recherche de l'existant.
+- Les réglages de la caméra elle-même (exposition, mise au point, balance des blancs…) restent sur l'iPhone : seul le capteur peut les faire. Le PC envoie la commande ([[Cam - Reglages avances]]).
+- Les mesures de [[Cam - Latence et fluidite]] incluent le coût des effets ; bon choix si le flou en 1080p60 n'ajoute pas plus d'une image de latence ni de saccade.
+- Ce que perd B : ARKit (caméra TrueDepth) pour les masques. Les effets visage viendront d'un modèle sur le PC.
 
 Liens : [[Decisions - Index]]

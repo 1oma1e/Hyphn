@@ -21,7 +21,7 @@ Mis à jour : 2026-11-02 (session « latence et fluidité de la Cam »). Réécr
 
 ## Pas fait
 - Specs en brouillon à valider : [[Cam - Reglages avances]], [[Cam - Filtres et effets]], [[Cam - Ecrans d'attente]] ; dans [[Cam - Latence et fluidite]] : E3 (débit qui suit le lien), E4 (encodeur iPhone faible latence), E5, E6.
-- ADR à trancher : [[ADR-0032 Profils de puissance au lieu de la protection batterie]], [[ADR-0033 Traduction locale du message d'attente]], [[ADR-0034 Ou appliquer les filtres de la Cam]].
+- ADR à trancher : [[ADR-0033 Traduction locale du message d'attente]]. Tranchés : [[ADR-0034 Ou appliquer les filtres de la Cam]] (tout sur le PC), [[ADR-0032 Profils de puissance au lieu de la protection batterie]] (Max par défaut, une liste de profils).
 - Mesure en Wi-Fi ; but chiffré de latence (à fixer par Evan).
 - Porte phase 1 : iPhone visible en moins de 3 s après le scan. Batterie par câble ([[ADR-0006 Sante batterie par cable]]) ; notification Windows de batterie faible.
 - Notes texte de `docs/maquettes/` en retard sur l'app. `CLAUDE.md` (Commandes) ne cite pas `tools/build-native.ps1` : à ajouter par Evan.
@@ -44,7 +44,7 @@ Mis à jour : 2026-11-02 (session « latence et fluidité de la Cam »). Réécr
 ## Prochaine étape
 Session « réglages avancés et effets de la Cam » (demande d'Evan) :
 1. Valider [[Cam - Reglages avances]] et trancher [[ADR-0032 Profils de puissance au lieu de la protection batterie]] ; maquette du panneau par-dessus l'image (aperçu en direct, Auto et Reset sur chaque réglage, un maximum de réglages de l'iPhone, info-bulle sur chacun).
-2. Trancher [[ADR-0034 Ou appliquer les filtres de la Cam]], valider [[Cam - Filtres et effets]] : filtres caméra, flou ou remplacement du fond (comme Teams et Discord), puis effets façon Snapchat.
+2. Valider [[Cam - Filtres et effets]] : filtres caméra, flou ou remplacement du fond (comme Teams et Discord), puis effets façon Snapchat.
 3. Code dans cet ordre : réglages, filtres, fond, effets visage.
 
 Commande pour commencer : `/session-start Réglages avancés et effets de la Cam : panneau en direct, Auto/Reset, filtres, flou du fond, effets Snapchat`.

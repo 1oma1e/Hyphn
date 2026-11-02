@@ -13,11 +13,11 @@ Un vrai outil pour régler le rendu de la caméra comme on veut. Les réglages s
 - Réglages sur l'iPhone : l'iPhone reste minimal, tout se règle sur le PC.
 
 ## Parcours
-Maquette à faire en début de session : panneau semi-transparent sur le côté de l'image, ou tiroir en bas, l'image restant visible et à jour. Aujourd'hui, les réglages sont à côté de l'image et la cachent en partie (capture d'Evan du 2026-11-02).
+Panneau semi-transparent **sur le côté droit** de l'image, liste qui défile ; l'image reste visible et à jour (choix d'Evan, 2026-11-02). Aujourd'hui, les réglages sont à côté de l'image et la cachent en partie (capture d'Evan du 2026-11-02). Maquette : [[PC - Cam]].
 
 ## Exigences (à valider)
-- **E1 — Réglages sur l'image.** Ouvrir les réglages ne cache pas plus d'un tiers de l'image ; un bouton masque le panneau pour voir l'image entière.
-- **E2 — Profils en haut** : Max, Équilibré, Économie, Personnalisé ([[ADR-0032 Profils de puissance au lieu de la protection batterie]]), plus les profils d'usage déjà là (Appel, Stream, Cours).
+- **E1 — Réglages sur l'image.** Colonne à droite qui ne cache pas plus d'un tiers de l'image ; un bouton masque le panneau pour voir l'image entière.
+- **E2 — Profils en haut, une seule liste** : Max (par défaut), Équilibré, Économie, Appel, Stream, Cours, Personnalisé ([[ADR-0032 Profils de puissance au lieu de la protection batterie]]). Un réglage changé à la main passe en Personnalisé.
 - **E3 — Image** (liste à confirmer par ce que l'iPhone expose, `AVCaptureDevice`) : exposition (EV, temps de pose, ISO), mise au point (auto, manuelle, distance), balance des blancs (auto, température, teinte), zoom fin, stabilisation, HDR vidéo, espace de couleur, verrouillage auto-exposition et auto-focus sur un point cliqué dans l'image.
 - **E4 — Flux** : résolution, images/s, codec, débit (plafond), intervalle d'image clé, profil HEVC, format 16:9 / 9:16 / 4:3.
 - **E5 — Auto et Reset** pour chaque réglage et pour chaque groupe ; « Tout remettre » en bas.

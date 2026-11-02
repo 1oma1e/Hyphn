@@ -276,7 +276,7 @@ button { font-family: inherit; }
 .sl { display: flex; flex-direction: column; gap: 6px; }
 .sl .r { display: flex; justify-content: space-between; font-size: 13px; }
 .sl .val { font: 500 12px "Geist Mono", monospace; color: var(--tx2); }
-.sl input { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 99px; cursor: pointer; background: color-mix(in srgb, var(--tx) 12%, transparent); }
+.sl input { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 99px; cursor: pointer; background: linear-gradient(90deg, var(--co) var(--p, 0%), color-mix(in srgb, var(--tx) 12%, transparent) var(--p, 0%)); }
 .sl input::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
 .gpu { font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; padding: 3px 8px; border-radius: 99px; background: color-mix(in srgb, var(--cy) 14%, transparent); color: var(--cy); }
 .txt { min-height: 46px; border-radius: 12px; border: 1px solid var(--ln2); background: var(--field); color: var(--tx); font: 500 15px Geist, system-ui, sans-serif; padding: 0 14px; width: 100%; }
@@ -657,3 +657,56 @@ button { font-family: inherit; }
 .bubble::after { content: ''; position: absolute; left: calc(var(--ax, 50%) - 5px); bottom: -6px; width: 10px; height: 10px; background: var(--solid); border-right: 1px solid var(--ln2); border-bottom: 1px solid var(--ln2); transform: rotate(45deg); }
 .bubble.below::after { bottom: auto; top: -6px; transform: rotate(225deg); }
 @media (prefers-reduced-motion: reduce) { .bubble { transition: none; } }
+
+/* Cam settings on the live picture (spec `Cam - Reglages avances`, E1): a
+   column on the right, at most a third of the picture; always dark, like the
+   dock, whatever the app theme. */
+.adj { position: absolute; z-index: 8; top: 14px; right: 14px; bottom: 14px; width: clamp(280px, 31%, 390px); display: none; flex-direction: column; border-radius: 20px; background: rgba(10,13,18,.74); backdrop-filter: blur(22px) saturate(1.2); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 24px 70px rgba(0,0,0,.5);
+  --tx: #F1F3F6; --tx2: #AEB6C2; --tx3: #868F9D; --ln: rgba(255,255,255,.08); --ln2: rgba(255,255,255,.15); --p1: rgba(255,255,255,.05); --p2: rgba(255,255,255,.05); --field: rgba(255,255,255,.06); --on-tx: #05070A; --co: #FF7A66; --li: #B9F25A; --ink: #05070A; color: var(--tx); }
+.pv.adj-on .adj { display: flex; bottom: 88px; animation: adjin .45s cubic-bezier(.2,.9,.3,1); }
+@keyframes adjin { from { opacity: 0; transform: translateX(40px); } }
+.pv.adj-on #c-hudr { right: calc(min(max(280px, 31%), 390px) + 30px); }
+.pv.adj-on .vbox.peek { right: calc(min(max(280px, 31%), 390px) + 30px); }
+.pv.adj-on .notice { left: calc((100% - min(max(280px, 31%), 390px) - 14px) / 2); }
+#c-hudr, .notice { transition: right .45s cubic-bezier(.2,.9,.3,1), left .45s cubic-bezier(.2,.9,.3,1); }
+.pv.adj-on .vbox:not(.peek) { cursor: crosshair; }
+.ahd { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 12px 8px 14px; }
+.ahd .ib { width: 36px; height: 36px; border-radius: 11px; }
+.ahd .seg button { min-height: 30px; }
+.abody { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 14px 16px; display: flex; flex-direction: column; gap: 14px; scrollbar-width: thin; }
+.agp { display: flex; flex-direction: column; gap: 8px; }
+.agp .cp { min-height: 32px; padding: 0 10px; font-size: 12.5px; }
+.cp.static { cursor: default; }
+.ag { display: flex; flex-direction: column; gap: 4px; padding-top: 10px; border-top: 1px solid var(--ln); }
+.agh { display: flex; align-items: center; justify-content: space-between; }
+.ar { display: flex; flex-direction: column; gap: 8px; padding: 9px 0; transition: opacity .2s; }
+.ar + .ar { border-top: 1px solid rgba(255,255,255,.05); }
+.ar.off { opacity: .5; }
+.ah { display: flex; align-items: center; gap: 6px; min-height: 30px; }
+.an { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 500; display: flex; align-items: center; }
+.av { font: 500 11.5px "Geist Mono", monospace; color: var(--tx2); white-space: nowrap; }
+.ab { height: 26px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--ln2); background: transparent; color: var(--tx2); font: 600 11px Geist, system-ui, sans-serif; letter-spacing: .02em; cursor: pointer; transition: all .2s; }
+.ab:hover { color: var(--tx); }
+.ab.on { background: color-mix(in srgb, var(--li) 18%, transparent); border-color: var(--li); color: var(--li); }
+.rb { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 8px; border: 0; background: transparent; color: var(--tx3); cursor: pointer; transition: color .2s, transform .35s cubic-bezier(.2,.9,.3,1.3); }
+.rb:hover { color: var(--tx); }
+.rb:active { transform: rotate(-180deg); }
+.rb svg { width: 15px; height: 15px; }
+.ar .chips { gap: 5px; }
+.ar .cp { min-height: 30px; padding: 0 10px; font-size: 12.5px; }
+.ar .tg { min-height: 34px; font-size: 13px; color: var(--tx2); }
+.ar .sl .r { font-size: 12px; color: var(--tx2); }
+.ar .txt { min-height: 38px; font-size: 13.5px; }
+.why, .hint { font-size: 11.5px; color: var(--tx3); line-height: 1.35; }
+.why { color: #FFD08A; }
+.allr { align-self: center; display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px; margin-top: 4px; border-radius: 11px; border: 1px solid var(--ln2); background: transparent; color: var(--tx2); font: 500 12.5px Geist, system-ui, sans-serif; cursor: pointer; }
+.allr:hover { color: var(--tx); border-color: var(--co); }
+.allr svg { width: 14px; height: 14px; }
+.adj .wprev { margin-top: 4px; }
+/* Focus and exposure point picked on the picture. */
+.poi { position: absolute; z-index: 3; width: 54px; height: 54px; margin: -27px 0 0 -27px; border: 1.5px solid #FFD08A; border-radius: 12px; box-shadow: 0 0 0 1px rgba(0,0,0,.35); pointer-events: none; opacity: 0; transition: opacity .3s, left .25s, top .25s; }
+.poi::after { content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: #FFD08A; }
+.pv.adj-on .poi.on { opacity: 1; }
+.poi.pulse { animation: poipulse .5s cubic-bezier(.2,.9,.3,1.3); }
+@keyframes poipulse { from { transform: scale(1.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .pv.adj-on .adj, .poi.pulse { animation: none; } }

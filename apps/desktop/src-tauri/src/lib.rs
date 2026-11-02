@@ -32,7 +32,7 @@ use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
-use cam::{Effective, Quality};
+use cam::{Effective, Power, Quality};
 use identity::Identity;
 use link::{CamStats, CamWanted, Hub, PhoneCam, UiEvent};
 use proto::Codec;
@@ -370,7 +370,8 @@ struct CamRequest {
     height: u32,
     fps: u32,
     bitrate_mbps: u32,
-    adapt: bool,
+    /// "max", "balanced" or "eco" (ADR-0032).
+    power: Power,
     /// "hevc" or "h264": what the window can decode.
     codec: String,
     #[serde(default)]
@@ -385,10 +386,39 @@ struct CamRequest {
     /// 0 off (default: less delay, no crop), 1 standard, 2 cinematic.
     #[serde(default)]
     stab: u32,
+    /// None = auto exposure; [ISO, exposure time in µs].
+    #[serde(default)]
+    exposure: Option<(u32, u32)>,
+    #[serde(default)]
+    tint: i32,
+    #[serde(default = "no_zoom")]
+    zoom: u32,
+    #[serde(default)]
+    hdr: bool,
+    /// [x, y] 0..1000 on the picture; None = centre.
+    #[serde(default)]
+    poi: Option<(u32, u32)>,
 }
 
-fn tune_of(ev: f64, focus: Option<u32>, wb: Option<u32>, torch: bool, stab: u32) -> link::Tune {
-    link::Tune { ev_tenths: (ev * 10.0).round() as i32, focus, wb, torch, stab }
+fn no_zoom() -> u32 {
+    100
+}
+
+impl CamRequest {
+    fn tune(&self) -> link::Tune {
+        link::Tune {
+            ev_tenths: (self.ev * 10.0).round() as i32,
+            focus: self.focus,
+            wb: self.wb,
+            torch: self.torch,
+            stab: self.stab,
+            manual_exposure: self.exposure,
+            tint: self.tint,
+            zoom_pct: self.zoom,
+            hdr: self.hdr,
+            poi: self.poi,
+        }
+    }
 }
 
 #[tauri::command]
@@ -396,9 +426,9 @@ fn cam_set(quality: CamRequest, h: State<'_, Hyphn>) {
     // « live » belongs to Rust: the window never overwrites it with an old value.
     h.hub.update_cam(|c| {
         c.request = Quality { height: quality.height, fps: quality.fps, bitrate_mbps: quality.bitrate_mbps };
-        c.adapt = quality.adapt;
+        c.power = quality.power;
         c.codec = if quality.codec == "h264" { Codec::H264 } else { Codec::Hevc };
-        c.tune = tune_of(quality.ev, quality.focus, quality.wb, quality.torch, quality.stab);
+        c.tune = quality.tune();
     });
 }
 
@@ -642,7 +672,7 @@ fn saved_cam(settings: &Settings) -> CamWanted {
     CamWanted {
         live: false, // ADR-0018: Cam always starts paused
         request: Quality { height: pick("res", &RES, 0), fps: pick("fps", &FPS, 3), bitrate_mbps: pick("rate", &RATE, 0) },
-        adapt: c.get("autoq").and_then(|v| v.as_bool()).unwrap_or(true),
+        power: c.get("power").and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default(),
         codec: if c.get("codec").and_then(|v| v.as_u64()) == Some(1) { Codec::H264 } else { Codec::Hevc },
         front: c.get("front").and_then(|v| v.as_bool()).unwrap_or(false),
         lens: c.get("lens").and_then(|v| v.as_u64()).unwrap_or(1) as u32,
@@ -651,13 +681,19 @@ fn saved_cam(settings: &Settings) -> CamWanted {
         tune: {
             let flag = |k: &str, d: bool| c.get(k).and_then(|v| v.as_bool()).unwrap_or(d);
             let num = |k: &str, d: u64| c.get(k).and_then(|v| v.as_u64()).unwrap_or(d) as u32;
-            tune_of(
-                c.get("ev").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                (!flag("afA", true)).then(|| num("focus", 50)),
-                (!flag("wbA", true)).then(|| num("wb", 5600)),
-                flag("torch", false),
-                num("stab", 0),
-            )
+            link::Tune {
+                ev_tenths: (c.get("ev").and_then(|v| v.as_f64()).unwrap_or(0.0) * 10.0).round() as i32,
+                focus: (!flag("afA", true)).then(|| num("focus", 50)),
+                wb: (!flag("wbA", true)).then(|| num("wb", 5600)),
+                torch: flag("torch", false),
+                stab: num("stab", 0),
+                manual_exposure: (!flag("aeA", true)).then(|| (num("iso", 200), num("shutter", 16_667))),
+                tint: c.get("tint").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
+                zoom_pct: num("zoom", 100),
+                hdr: flag("hdr", false),
+                // The point is chosen on the live picture: never kept from one start to the next.
+                poi: None,
+            }
         },
         // Until the Cam page is on screen.
         preview: false,

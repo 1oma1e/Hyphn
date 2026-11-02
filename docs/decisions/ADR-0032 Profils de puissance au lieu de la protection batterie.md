@@ -1,7 +1,7 @@
 ---
 type: decision
 date: 2026-11-02
-statut: propose
+statut: accepte
 ---
 # ADR-0032 Profils de puissance au lieu de la protection batterie
 
@@ -16,10 +16,12 @@ statut: propose
 | C. Tout enlever, sans profils | Simple | Rien pour les petits téléphones ou les mauvais réseaux |
 
 ## Décision
-Proposé : **B**. Profil **Max** par défaut. Seule la règle « critique » reste toujours active, parce qu'iOS coupe la caméra de toute façon : baisse en 1080p30 plus une alerte. Chaque protection devient un interrupteur du profil, ce qui demande un ADR qui corrige [[RULES]] (Énergie 5, 7, 9) une fois validé. Le débit suit le réseau mesuré dans tous les profils : sans ça, saccades ([[Latence et debit Cam]]).
+**B** (choix d'Evan, 2026-11-02). Profil **Max** par défaut. Seule la règle « critique » reste toujours active, parce qu'iOS coupe la caméra de toute façon : baisse en 1080p30 plus une alerte. Chaque protection devient un interrupteur du profil. Le débit suit le réseau mesuré dans tous les profils : sans ça, saccades ([[Latence et debit Cam]]).
+
+Profils de puissance et d'usage en **une seule liste** (choix d'Evan) : Max, Équilibré, Économie, Appel, Stream, Cours, Personnalisé. Appel, Stream et Cours fixent la qualité ; leurs protections sont celles d'Équilibré.
 
 ## Conséquences
-- RULES Énergie 5, 7, 9 deviennent « par défaut dans Économie ».
+- [[RULES]] Énergie 5, 7, 9 corrigées par cet ADR : réduction automatique en Économie, signal ou alerte ailleurs, « critique » partout.
 - Énergie 3 (traitement d'image sur la carte graphique seulement) reste : il garde la latence basse.
 - Réglages Cam du PC : un choix de profil en haut. Le profil applique résolution, images/s, débit et protections ; un réglage changé à la main passe en « Personnalisé ».
 - Phase 6 : la porte « budgets Énergie tenus » se mesure sur le profil Économie.

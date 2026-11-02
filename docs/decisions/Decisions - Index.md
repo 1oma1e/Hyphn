@@ -35,9 +35,9 @@ Une décision par fichier, numérotée. Modèle : `_modele.md`. Statuts : `propo
 | [[ADR-0029 Drop guide avec anti-doublon des la v1]] | Drop : parcours guidé (dossier la première fois, « Laisser Hyphn choisir »), PC qui ouvre Drop sur l’iPhone, albums, fichiers, tout le nouveau et anti-doublon dès la v1 | accepte (2026-11-01) |
 | [[ADR-0030 Drop commence sur l'iPhone et le PC confirme]] | Drop part de l'iPhone (choix puis confirmation), le PC confirme dans une fenêtre (dossier et rangement la première fois) ; plus de « Commencer » sur le PC | accepte (2026-11-01) |
 | [[ADR-0031 Liaison par cable USB]] | iPhone branché : liaison par usbmux (iTunes / Apple Devices, crate `idevice`), sans QR, prioritaire sur le Wi-Fi ; retour au Wi-Fi débranché | accepte (2026-11-01) |
-| [[ADR-0032 Profils de puissance au lieu de la protection batterie]] | Profils Max (par défaut), Équilibré, Économie, Personnalisé ; les protections batterie deviennent des réglages, sauf « critique » | propose |
+| [[ADR-0032 Profils de puissance au lieu de la protection batterie]] | Une liste de profils (Max par défaut, Équilibré, Économie, Appel, Stream, Cours, Personnalisé) ; protections batterie réglables sauf « critique » | accepte |
 | [[ADR-0033 Traduction locale du message d'attente]] | Message d'attente traduit sur le PC sans cloud (Bergamot), phrases prêtes traduites à la main | propose |
-| [[ADR-0034 Ou appliquer les filtres de la Cam]] | Filtres v1 sur l'iPhone avant l'encodage (Core Image, Vision), revu pour les effets visage | propose |
+| [[ADR-0034 Ou appliquer les filtres de la Cam]] | Tous les filtres et effets sur la carte graphique du PC, après le décodage ; l'iPhone filme seulement | accepte |
 | [[ADR-0035 Webcam sans forcer le H.264]] | H.264 plafonné à 1080p pendant un appel (D), puis l'app décode pour la webcam : HEVC partout (A) | accepte |
 
 Liens : [[00-Accueil]]
