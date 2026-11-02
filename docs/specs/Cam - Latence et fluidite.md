@@ -15,9 +15,16 @@ Une image fluide et nette qui suit la voix (lèvres synchronisées), au maximum 
 ## Parcours
 Pas d'écran nouveau, sauf « Infos du flux » plus détaillé et le choix de profil ([[Cam - Reglages avances]]).
 
-## Exigences (à valider)
-- **E1 — Mesure d'abord.** Latence verre à verre mesurée et notée avant et après chaque changement, en Wi-Fi et en câble ([[Latence et debit Cam]], « Mesures »).
-- **E2 — Temps par étape.** « Infos du flux » montre : capture → envoi (iPhone), réseau, attente et décodage (PC), en ms, plus les images sautées et les images clés forcées par minute.
+## Exigences
+E1 et E2 validées par Evan le 2026-11-02 ; les autres restent à valider.
+- **E1 — Mesure d'abord.** Latence verre à verre mesurée et notée avant et après chaque changement, en Wi-Fi et en câble ([[Latence et debit Cam]], « Mesures »), avec `tools/latency-chrono.html`.
+- **E2 — Temps par étape.** « Infos du flux » montre, en ms (moyenne sur la dernière seconde) :
+  - **Encodage** (iPhone) : de la capture à la sortie de l'encodeur ;
+  - **Envoi et lien** : de la sortie de l'encodeur à l'arrivée sur le PC, file d'attente de l'iPhone comprise. Les horloges de l'iPhone et du PC sont recalées par le ping (l'iPhone met son heure dans la réponse) ;
+  - **File iPhone** : ce qui attend encore dans l'app iPhone, converti en ms au débit actuel ;
+  - **Décodage** et **Affichage** (fenêtre du PC) : de l'arrivée dans la fenêtre à l'image décodée, puis à l'image dessinée ;
+  - le total approché, les images sautées et les images clés reçues par minute.
+  Le chiffre « Latence » devient « Aller-retour » : c'est le ping du lien, pas le retard de l'image. Avec une app iPhone plus ancienne, les temps de l'iPhone affichent « inconnu ».
 - **E3 — Débit qui suit le lien.** Dans tous les profils, le débit monte jusqu'à ce que le lien sature, puis se cale juste en dessous. Un débit choisi à la main est un plafond, pas une consigne fixe.
 - **E4 — Pas de pic d'image clé.** Mode faible latence de VideoToolbox, ou rafraîchissement progressif, si l'iPhone le permet (à vérifier). Plus d'image clé forcée après chaque image sautée quand ce n'est pas nécessaire.
 - **E5 — Profil Max par défaut** : 4K60 ou 1080p60 selon le lien mesuré, débit le plus haut que le lien tient.

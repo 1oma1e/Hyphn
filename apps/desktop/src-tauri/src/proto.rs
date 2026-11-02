@@ -197,6 +197,9 @@ pub struct Ping {
 pub struct Pong {
     #[prost(uint64, tag = "1")]
     pub id: u64,
+    /// iPhone host clock when answering, µs (0 = older app).
+    #[prost(int64, tag = "2")]
+    pub phone_us: i64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, prost::Enumeration)]
@@ -295,6 +298,12 @@ pub struct VideoFrame {
     /// `Bytes`: decoded without a copy out of the received buffer.
     #[prost(bytes = "bytes", tag = "6")]
     pub data: bytes::Bytes,
+    /// Out of the encoder, iPhone clock µs (0 = older app).
+    #[prost(int64, tag = "7")]
+    pub encoded_us: i64,
+    /// Bytes still waiting in the iPhone app before this frame.
+    #[prost(uint32, tag = "8")]
+    pub queued_bytes: u32,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -475,7 +484,7 @@ mod tests {
     /// Bytes the Swift codec must produce for the same message (Wire.swift).
     #[test]
     fn known_encoding() {
-        let m: Envelope = Msg::Pong(Pong { id: 300 }).into();
+        let m: Envelope = Msg::Pong(Pong { id: 300, ..Default::default() }).into();
         // field 10, length-delimited: tag 0x52, len 3, then field 1 varint 300 = 08 AC 02.
         assert_eq!(prost::Message::encode_to_vec(&m), vec![0x52, 3, 0x08, 0xAC, 0x02]);
         let s: Envelope = Msg::DeviceStatus(DeviceStatus { battery_percent: -1, ..Default::default() }).into();

@@ -79,6 +79,10 @@ struct VideoFrame {
     var width: UInt32
     var height: UInt32
     var data: Data
+    /// Out of the encoder, same clock as `ptsUs` (spec E2: time per step).
+    var encodedUs: Int64 = 0
+    /// Bytes still waiting to leave before this frame.
+    var queuedBytes: UInt32 = 0
 }
 
 /// What a Drop send holds, with thumbnails for the PC (hyphn.proto `DropPlan`).
@@ -278,7 +282,8 @@ extension Msg {
             b.uint(4, UInt64(s.thermal.rawValue)); b.uint(5, s.storageFree); b.uint(6, s.storageTotal); b.int(7, s.measuredAtMs)
         case let .pong(id):
             field = 10
-            b.uint(1, id)
+            // The iPhone clock when answering: the PC lines up the two clocks.
+            b.uint(1, id); b.int(2, hostNowUs())
         case let .camState(c):
             field = 12
             b.bool(1, c.open); b.bool(2, c.live); b.uint(3, UInt64(c.width)); b.uint(4, UInt64(c.height))
@@ -293,6 +298,7 @@ extension Msg {
             field = 15
             b.int(1, f.ptsUs); b.bool(2, f.keyframe); b.uint(3, UInt64(f.codec.rawValue))
             b.uint(4, UInt64(f.width)); b.uint(5, UInt64(f.height)); b.bytes(6, f.data)
+            b.int(7, f.encodedUs); b.uint(8, UInt64(f.queuedBytes))
         case .forget:
             field = 16
         case .dropHello:
@@ -346,6 +352,7 @@ extension Msg {
         var head = ProtoWriter()
         head.int(1, f.ptsUs); head.bool(2, f.keyframe); head.uint(3, UInt64(f.codec.rawValue))
         head.uint(4, UInt64(f.width)); head.uint(5, UInt64(f.height))
+        head.int(7, f.encodedUs); head.uint(8, UInt64(f.queuedBytes))
         head.tag(6, 2); head.varint(UInt64(f.data.count))
         let inner = head.data.count + f.data.count
         var env = ProtoWriter()

@@ -517,7 +517,12 @@ const Video = {
   ws: null,
   gen: 0,
   pending: null,
+  pendingAt: 0,
   raf: 0,
+  // Time per step in this window (spec E2): arrival → decoded → drawn.
+  arrived: new Map(),
+  dec_ms: [0, 0],
+  draw_ms: [0, 0],
   async detect() {
     try {
       const r = await VideoDecoder.isConfigSupported({ codec: CODEC_STR[1], hardwareAcceleration: 'prefer-hardware' });
@@ -570,8 +575,18 @@ const Video = {
     this.h = h;
     this.dec = new VideoDecoder({
       output: (frame) => {
+        const now = performance.now();
+        for (const [ts, at] of this.arrived) {
+          this.arrived.delete(ts);
+          if (ts === frame.timestamp) {
+            this.dec_ms[0] += now - at;
+            this.dec_ms[1]++;
+            break;
+          }
+        }
         if (this.pending) this.pending.close();
         this.pending = frame;
+        this.pendingAt = now;
         if (!this.raf) this.raf = requestAnimationFrame(() => this.paint());
       },
       error: (e) => {
@@ -618,6 +633,8 @@ const Video = {
       }
       this.ctx.drawImage(f, 0, 0, w, h);
       this.lastFrame = performance.now();
+      this.draw_ms[0] += this.lastFrame - this.pendingAt;
+      this.draw_ms[1]++;
     }
     f.close();
   },
@@ -640,6 +657,8 @@ const Video = {
       return this.key();
     }
     this.waitKey = false;
+    this.arrived.set(pts, performance.now());
+    if (this.arrived.size > 120) this.arrived.delete(this.arrived.keys().next().value);
     try {
       this.dec.decode(new EncodedVideoChunk({ type: key ? 'key' : 'delta', timestamp: pts, data: u8.subarray(18) }));
     } catch (e) {
@@ -647,6 +666,14 @@ const Video = {
       this.key();
     }
   },
+  // Averages since the last call (once a second), null = no frame.
+  takeSteps() {
+    const avg = (a) => (a[1] ? a[0] / a[1] : null);
+    this.steps = { decode: avg(this.dec_ms), draw: avg(this.draw_ms) };
+    this.dec_ms = [0, 0];
+    this.draw_ms = [0, 0];
+  },
+  steps: { decode: null, draw: null },
   // A picture arrived in the last 1.5 s.
   fresh: () => performance.now() - Video.lastFrame < 1500,
 };
@@ -853,6 +880,7 @@ const Cam = {
     this.paintWait();
     this.paintHud();
     this.spark.push(S.cam.stats.bitrate_mbps);
+    Video.takeSteps();
     if (this.spark.length > 40) this.spark.shift();
     if (this.panel === 'info') this.paintInfo();
   },
@@ -862,15 +890,27 @@ const Cam = {
     const bars = Array.from({ length: 40 }, (_, i) => this.spark[i - (40 - this.spark.length)] ?? 0)
       .map((v) => `<i style="height:${Math.max(4, Math.round(v / max * 90))}%"></i>`).join('');
     const cell = (k, v) => `<div class="icell"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+    // Time per step (spec E2): iPhone, link, then this window.
+    const sp = st.steps || {};
+    const ms = (v) => (v == null ? 'inconnu' : Math.round(v) + ' ms');
+    const steps = [['Encodage', sp.encode_ms], ['Envoi et lien', sp.link_ms], ['Décodage', Video.steps.decode], ['Affichage', Video.steps.draw]];
+    const known = steps.every(([, v]) => v != null);
+    const total = steps.reduce((a, [, v]) => a + (v || 0), 0);
     const body = `
       <div class="spark" aria-hidden="true">${bars}</div>
       <div class="ig">
         ${cell('Image envoyée', ph && ph.height ? `${ph.width}×${ph.height} · ${ph.fps}` : `${resName(q.height)} · ${q.fps}`)}
         ${cell('Débit', `${n1(st.bitrate_mbps)} Mb/s`)}
         ${cell('Images par seconde', n1(st.fps))}
-        ${cell(onCable() ? 'Latence (câble)' : 'Latence Wi-Fi', S.latency_ms == null ? 'inconnu' : S.latency_ms + ' ms')}
+        ${cell(onCable() ? 'Aller-retour (câble)' : 'Aller-retour Wi-Fi', S.latency_ms == null ? 'inconnu' : S.latency_ms + ' ms')}
         ${cell('Images sautées', String(st.dropped + Video.drops))}
         ${cell('iPhone', `${p.battery ?? '—'} % · ${p.thermal ? HEAT[p.thermal] : 'inconnu'}`)}
+        ${cell('Images clés / min', String(sp.keys_per_min ?? 0))}
+        ${cell('File iPhone', ms(sp.queue_ms))}
+      </div>
+      <div class="ig steps">
+        ${steps.map(([k, v]) => cell(k, ms(v))).join('')}
+        ${cell('Total ≈', known ? ms(total) : 'inconnu')}
       </div>`;
     const el = $('#c-info');
     if (el) el.innerHTML = body;

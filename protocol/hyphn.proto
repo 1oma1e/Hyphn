@@ -192,6 +192,7 @@ message Ping {
 
 message Pong {
   uint64 id = 1;
+  int64 phone_us = 2;     // iPhone host clock when answering: lines up the two clocks
 }
 
 enum Codec {
@@ -252,6 +253,8 @@ message VideoFrame {
   uint32 width = 4;
   uint32 height = 5;
   bytes data = 6;         // Annex-B; parameter sets (VPS/SPS/PPS) before each keyframe
+  int64 encoded_us = 7;   // out of the encoder, iPhone clock (same as pts_us)
+  uint32 queued_bytes = 8; // bytes still waiting to leave the iPhone app before this frame
 }
 
 message Forget {}

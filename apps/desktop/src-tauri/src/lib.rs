@@ -12,6 +12,7 @@ mod pairing;
 mod proto;
 mod status;
 mod store;
+mod timing;
 mod tls;
 mod vcam;
 mod video;

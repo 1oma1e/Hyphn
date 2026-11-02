@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Hyphn latency chrono</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #fff; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center;
+         font-family: Consolas, "Courier New", monospace; }
+  #t { font-size: 14vw; font-weight: bold; letter-spacing: 0.02em; }
+  #hz { font-size: 2vw; color: #888; margin-top: 2vh; }
+</style>
+</head>
+<body>
+<div id="t">00.000</div>
+<div id="hz"></div>
+<script>
+  // Glass-to-glass measurement: film this page with the iPhone, put the Hyphn
+  // window next to it, take a screenshot; latency = this clock - clock in Hyphn.
+  const t = document.getElementById("t");
+  const hz = document.getElementById("hz");
+  let last = 0, frames = 0, since = performance.now();
+  function tick(now) {
+    const ms = Date.now() % 100000;
+    t.textContent = (ms / 1000).toFixed(3).padStart(6, "0");
+    frames++;
+    if (now - since >= 1000) {
+      hz.textContent = "écran : " + Math.round(frames * 1000 / (now - since)) + " Hz";
+      frames = 0; since = now;
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+</script>
+</body>
+</html>

@@ -236,6 +236,7 @@ final class Camera: NSObject, ObservableObject {
             mediaCloser?.cancel()
             mediaCloser = nil
             if pump.connection == nil { openMedia() }
+            pump.captureClock = session.synchronizationClock
             pump.start()
             statsTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.sentMbps = self?.pump.takeMbps() ?? 0 }
@@ -419,6 +420,15 @@ final class FramePump: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     /// backlog, or skipping would ask for another keyframe, again and again.
     private var lastKeyBytes = 0
     private var _connection: PinnedConnection?
+    private var _captureClock: CMClock?
+
+    /// The clock of the capture timestamps (AVCaptureSession
+    /// `synchronizationClock`): they are turned into host time, the clock of
+    /// the ping answers, so the PC can time each step (spec E2).
+    var captureClock: CMClock? {
+        get { lock.withLock { _captureClock } }
+        set { lock.withLock { _captureClock = newValue } }
+    }
 
     var connection: PinnedConnection? {
         get { lock.withLock { _connection } }
@@ -597,13 +607,17 @@ final class FramePump: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             out.append(Data(bytes: raw + i, count: n))
             i += n
         }
-        let pts = CMSampleBufferGetPresentationTimeStamp(sbuf)
+        var pts = CMSampleBufferGetPresentationTimeStamp(sbuf)
+        if let clock = captureClock {
+            pts = CMSyncConvertTime(pts, from: clock, to: CMClockGetHostTimeClock())
+        }
         let us = Int64(CMTimeGetSeconds(pts) * 1_000_000)
         lock.withLock {
             sentBytes += out.count
             if key { lastKeyBytes = out.count }
         }
-        conn.send(.videoFrame(VideoFrame(ptsUs: us, keyframe: key, codec: codec, width: UInt32(width), height: UInt32(height), data: out)))
+        conn.send(.videoFrame(VideoFrame(ptsUs: us, keyframe: key, codec: codec, width: UInt32(width), height: UInt32(height), data: out,
+                                         encodedUs: hostNowUs(), queuedBytes: UInt32(clamping: conn.pendingBytes))))
     }
 
     private static func parameterSets(_ fd: CMFormatDescription, codec: Codec) -> [Data] {
@@ -624,4 +638,10 @@ final class FramePump: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         } while index < count
         return sets
     }
+}
+
+/// Now on the host clock, in µs: the clock of the capture timestamps
+/// (spec `Cam - Latence et fluidite`, E2).
+func hostNowUs() -> Int64 {
+    Int64(CMTimeGetSeconds(CMClockGetTime(CMClockGetHostTimeClock())) * 1_000_000)
 }

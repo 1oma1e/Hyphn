@@ -137,6 +137,10 @@ pub struct CamStats {
     pub fps: f32,
     pub bitrate_mbps: f32,
     pub dropped: u32,
+    /// Time per step (spec `Cam - Latence et fluidite`, E2).
+    pub steps: crate::timing::StepView,
+    #[serde(skip)]
+    timing: crate::timing::Steps,
     #[serde(skip)]
     frames: u32,
     #[serde(skip)]
@@ -209,6 +213,8 @@ struct Session {
     via: Via,
     tx: UnboundedSender<Envelope>,
     rtt_ms: Option<u32>,
+    /// iPhone clock against the PC's, for the time per step.
+    clock: crate::timing::ClockSync,
     cam: Option<proto::CamState>,
     last_key_request: Option<Instant>,
     /// Ends this session at once (« Reconnecter », or a newer connection).
@@ -292,6 +298,10 @@ pub struct Hub {
 
 fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+}
+
+fn now_us() -> i64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_micros() as i64).unwrap_or(0)
 }
 
 fn now_unix() -> u64 {
@@ -531,6 +541,7 @@ impl Hub {
         let s = &mut st.stats;
         s.fps = s.frames as f32;
         s.bitrate_mbps = s.bytes as f32 * 8.0 / 1e6;
+        s.steps = s.timing.tick(s.bitrate_mbps);
         s.frames = 0;
         s.bytes = 0;
         let d = &mut st.drop;
@@ -846,6 +857,7 @@ impl Hub {
                 via,
                 tx: tx.clone(),
                 rtt_ms: None,
+                clock: Default::default(),
                 cam: None,
                 last_key_request: None,
                 kick: kick.clone(),
@@ -903,6 +915,7 @@ impl Hub {
                     }
                     if let Some(s) = self.lock().session.as_mut().filter(|s| s.id == id) {
                         s.rtt_ms = Some(rtt);
+                        s.clock.add(p.id as i64 * 1000, now_us(), p.phone_us);
                     }
                 }
                 Some(Msg::CamState(c)) => {
@@ -984,8 +997,11 @@ impl Hub {
         // A media connection that goes quiet (Wi-Fi lost) is closed too.
         while let Ok(Ok(Some(m))) = timeout(SILENCE_LIMIT, read_msg(&mut io)).await {
             let Some(Msg::VideoFrame(f)) = m.msg else { continue };
+            let arrival = now_us();
             let sinks: Vec<VideoSink> = {
                 let mut st = self.lock();
+                let offset = st.session.as_ref().and_then(|s| s.clock.offset_us());
+                st.stats.timing.frame(&f, arrival, offset);
                 st.stats.frames += 1;
                 st.stats.bytes += f.data.len() as u64;
                 // Paused: only the preview for the window (ADR-0027); the
@@ -1493,6 +1509,7 @@ mod tests {
             width: 1920,
             height: 1080,
             data: vec![0, 0, 0, 1, 0x40, 0x01].into(),
+            ..Default::default()
         };
         send(&mut media, Msg::VideoFrame(frame.clone())).await;
         wait_until(|| !got.lock().unwrap().is_empty()).await;

@@ -32,6 +32,33 @@ Point de départ de la session « latence, fluidité, qualité ». Ce qui est **
 - Rafraîchissement progressif (« intra refresh ») au lieu d'images clés entières : pas de pic, donc pas de saccade. À chercher dans VideoToolbox.
 - Câble : plus de débit et pas d'interférences Wi-Fi. Débit réel de usbmux sur l'iPhone 16 (USB-C) **non mesuré**.
 
+## Mesures
+Chiffres réels, avec la date et la version. Le chiffre « Latence » d'« Infos du flux » est l'**aller-retour du lien de contrôle** (ping), pas le retard de l'image.
+
+| Date | Lien | Réglage | Mesuré | Remarque |
+|---|---|---|---|---|
+| 2026-11-02 | câble | 1080p60 HEVC, plafond 80 Mb/s | 45,6 Mb/s réels, 61 i/s, aller-retour 1 ms, 2 images sautées | l'encodeur reste sous le plafond sur une scène calme |
+| 2026-11-02 | câble | 4K60 HEVC, plafond 80 Mb/s | 80,3 Mb/s, 60 i/s, aller-retour 3 ms, 2 images sautées | le câble tient 80 Mb/s ; un pic d'aller-retour à 73 ms vu une fois |
+| — | Wi-Fi | — | à faire | — |
+| 2026-11-02 | câble, verre à verre | 540p60, webcam non utilisée | **~85 ms** (79, 87) | 1 capture |
+| 2026-11-02 | câble, verre à verre | 4K60, webcam non utilisée | **~150 ms** (148, 150, 150) | 1 capture |
+| 2026-11-02 | câble, verre à verre | 4K60, « Webcam utilisée » | **~350 ms** (316 à 383) | 6 captures, écarts réguliers |
+| 2026-11-02 | câble, verre à verre | 1080p60 à 81 Mb/s, Discord caméra allumée | **~313 ms** | 1 capture |
+| 2026-11-02 | câble, verre à verre | 4K60 à 80 Mb/s (50 i/s reçues), Discord caméra allumée | **~379 ms** | 1 capture |
+| 2026-11-02 | câble, verre à verre | 4K60, Discord caméra coupée juste avant | **~388 ms** (387, 388) | codec réel inconnu (H.264 encore ?) |
+| — | Wi-Fi, verre à verre | — | à faire | — |
+
+Méthode verre à verre : `tools/latency-chrono.html` à côté de la fenêtre Hyphn, l'iPhone filme les deux, capture d'écran (écran à 240 Hz). L'image se répète en tunnel : l'écart entre deux étages voisins est aussi une latence, ce qui donne plusieurs chiffres par capture. Lecture à ±10 ms (chiffres flous ou en miroir). C'est la latence **de la fenêtre** Hyphn, pas celle vue dans Discord.
+
+À comprendre : avec la webcam utilisée par une autre app, la fenêtre passe de ~150 à ~350 ms en 4K60. Hypothèse : deux décodages 4K60 en même temps sur le PC (fenêtre + DLL), ou l'envoi vers le tube de la webcam qui retarde l'envoi vers la fenêtre. **Non vérifié.**
+
+Trouvé dans le code et `vcam.log` (2026-11-02) :
+- La DLL de la webcam tourne dans le service Frame Server (compte Local Service). Elle cherche un décodeur HEVC avec `MFTEnumEx` et n'en trouve pas (`HEVC decoder no` à chaque démarrage). Cause probable : le décodeur HEVC de Windows vient du Store (« HEVC Video Extensions »), installé pour l'utilisateur, invisible pour un service. **Non vérifié** dans la doc Microsoft.
+- Elle répond donc « pas de HEVC », et l'app demande à l'iPhone de passer **tout le flux en H.264**, fenêtre comprise (`set_reader_needs_h264`). Le journal montre `decoder h264 3840x2160` pendant les mesures.
+- L'envoi vers le tube ne bloque pas la fenêtre (`try_send`, file de 3 images).
+- Réglages de l'encodeur iPhone identiques en H.264 et en HEVC. Côté fenêtre, `avc1.640033` annonce le niveau 5.1, alors que la 4K60 demande le niveau 5.2 : piste à vérifier.
+- Test qui tranche : 4K60 en **H.264 choisi à la main**, webcam non utilisée. Vers 350 ms, c'est le H.264 ; vers 150 ms, c'est la webcam elle-même.
+
 ## Mesures à faire en premier
 1. **Verre à verre** : filmer un chronomètre à 1 ms affiché sur le PC, et photographier ensemble le chronomètre et son image dans Hyphn. À faire en Wi-Fi et en câble, en 1080p30, 1080p60 et 4K30.
 2. **Par étape** : l'iPhone met l'heure de capture dans chaque image (déjà `pts`). Le PC note l'heure d'arrivée et la sortie du décodeur. On affiche ces temps dans « Infos du flux ».

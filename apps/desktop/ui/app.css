@@ -287,6 +287,8 @@ button { font-family: inherit; }
 .icell .k { font-size: 12px; color: var(--tx3); }
 .icell .v { font: 600 18px "Geist Mono", monospace; margin-top: 4px; letter-spacing: -.02em; }
 .icell .h { font-size: 12px; color: var(--tx2); margin-top: 2px; }
+.ig.steps { grid-template-columns: repeat(5, minmax(0,1fr)); }
+.ig.steps .v { font-size: 15px; }
 .spark { display: flex; align-items: flex-end; gap: 3px; height: 54px; margin-top: 14px; }
 .spark i { flex: 1; border-radius: 2px 2px 0 0; background: linear-gradient(180deg, var(--co), color-mix(in srgb, var(--co) 20%, transparent)); transition: height .6s; }
 
