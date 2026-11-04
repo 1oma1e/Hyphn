@@ -40,5 +40,7 @@ Une décision par fichier, numérotée. Modèle : `_modele.md`. Statuts : `propo
 | [[ADR-0034 Ou appliquer les filtres de la Cam]] | Tous les filtres et effets sur la carte graphique du PC, après le décodage ; l'iPhone filme seulement | accepte |
 | [[ADR-0035 Webcam sans forcer le H.264]] | H.264 plafonné à 1080p pendant un appel (D), puis l'app décode pour la webcam : HEVC partout (A) | accepte |
 | [[ADR-0036 Objectif exact au lieu de la camera combinee]] | L'iPhone ouvre l'objectif exact du bouton (0,5× / 1× / 2× / 5×) : réglages manuels possibles, courte coupure en changeant d'objectif | accepte (2026-11-02) |
+| [[ADR-0037 Filtres Snap avec accord explicite]] | Filtres Snap (Camera Kit) seulement après un accord explicite, une clé, et quand on s'en sert ; avertissement toujours visible ; kit hors dépôt | remplace (par ADR-0038) |
+| [[ADR-0038 Retrait des filtres Snap]] | Snap retiré en entier (peu de filtres, filigrane, données vers Snap) ; plus d'effets faits en local | accepte (2026-11-04) |
 
 Liens : [[00-Accueil]]
