@@ -47,6 +47,7 @@ Idées à ajouter petit à petit. **Aucune n'est validée** : Evan choisit, puis
 | Sortie NDI ou SRT pour d'autres logiciels | ★ | M | Idée prise à NDI HX Camera |
 | Cadrage automatique (suivi du visage) | ★★ | L | Dans la maquette V2 (Effets), calculé par la carte graphique du PC, jamais sur l'iPhone |
 | ~~Effets (flou d'arrière-plan, lumière du visage, filtres) appliqués **jusqu'à la webcam Windows**~~ : devenu la spec [[Cam - Filtres et effets]] ([[ADR-0034 Ou appliquer les filtres de la Cam]]) | ★★ | L | Retirés de l'app le 2026-10-31 : ils ne changeaient que l'aperçu du PC, pas l'image de Discord |
+| Recherche et favoris dans le panneau Effets (taper « chat », épingler ses 5 préférés en haut) | ★★ | S | Plus de 100 emojis et 50 filtres : la liste devient longue |
 | « Afficher » tout seul quand une app (Discord, OBS) ouvre la webcam Hyphn | ★★ | S | Zéro clic avant un appel ; aujourd'hui la webcam démarre en pause ([[ADR-0018 Cam image seule et demarrage en pause]]) |
 
 ## Phase 6 — Finition

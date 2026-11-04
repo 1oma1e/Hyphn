@@ -5,6 +5,7 @@
 // Windows webcam gets exactly that picture (vcam::fx in Rust). The masks are
 // made of Microsoft's Fluent Emoji 3D (MIT, vendor/fluent); the backgrounds
 // are free photos (CC0 or public domain, vendor/backgrounds/CREDITS.txt).
+// The film looks and their colour tables are in fxlook.js.
 'use strict';
 
 // [id, name, canvas filter, overlay [color, blend, strength], vignette]
@@ -25,47 +26,124 @@ const FX_FILTERS = [
 // Masks: [id, name, tile picture, parts]. A part: [picture, anchor, size,
 // dx, dy, motion], sizes and offsets in eye gaps, turned with the head.
 // Anchors: eyes, eyeR, eyeL, top (forehead), face, mouth, nose, cheekR, cheekL.
-// Motions: orbit (round the head), fall (from above), open (mouth open only), bob.
-const FX_MASKS = [
-  ['none', 'Aucun', null, []],
-  ['soleil', 'Lunettes de soleil', 'sunglasses', [['sunglasses', 'eyes', 2.6, 0, 0.1]]],
-  ['lunettes', 'Lunettes', 'glasses', [['glasses', 'eyes', 2.6, 0, 0.1]]],
-  ['couronne', 'Couronne', 'crown', [['crown', 'top', 2.2, 0, -0.75, 'bob']]],
-  ['chapeau', 'Haut-de-forme', 'top_hat', [['top_hat', 'top', 2.6, 0, -1.05]]],
-  ['casquette', 'Casquette', 'billed_cap', [['billed_cap', 'top', 3, 0, -0.6]]],
-  ['diplome', 'Diplômé', 'graduation_cap', [['graduation_cap', 'top', 2.8, 0, -0.75]]],
-  ['fleurs', 'Fleurs', 'cherry_blossom', [-1.15, -0.7, -0.25, 0.25, 0.7, 1.15].map((x, i) =>
-    [['cherry_blossom', 'hibiscus', 'blossom'][i % 3], 'top', 0.85, x, -0.35 - 0.3 * Math.cos(x / 1.2), 'bob'])],
-  ['papillons', 'Papillons', 'butterfly', [0, 1, 2].map((i) => ['butterfly', 'orbit', 0.8, i, 3])],
-  ['coeurs', 'Cœurs', 'sparkling_heart', [['red_heart', 'eyeR', 1.1, 0, 0, 'bob'], ['red_heart', 'eyeL', 1.1, 0, 0, 'bob'],
-    ...[0, 1, 2, 3, 4].map((i) => ['sparkling_heart', 'orbit', 0.55, i, 5])]],
-  ['etoiles', 'Étoiles', 'glowing_star', [0, 1, 2, 3].map((i) => [i % 2 ? 'sparkles' : 'glowing_star', 'orbit', 0.65, i, 4])],
-  ['feu', 'Tête en feu', 'fire', [['fire', 'top', 3, 0, -1, 'bob']]],
-  ['arcenciel', 'Arc-en-ciel', 'rainbow', [['rainbow', 'mouth', 2.6, 0, 1.1, 'open']]],
-  ['fete', 'Fête', 'party_popper', [['party_popper', 'top', 1.3, -1.5, -0.4, 'bob'], ['confetti_ball', 'top', 1.3, 1.5, -0.4, 'bob'],
-    ...[0, 1, 2, 3, 4, 5].map((i) => ['sparkles', 'fall', 0.5, i, 6])]],
-  ['neige', 'Neige', 'snowflake', [0, 1, 2, 3, 4, 5, 6, 7].map((i) => ['snowflake', 'fall', 0.45, i, 8])],
-  ['musique', 'Musique', 'musical_notes', [0, 1, 2].map((i) => ['musical_notes', 'orbit', 0.75, i, 3])],
-  ['bisou', 'Bisous', 'kiss_mark', [['kiss_mark', 'cheekR', 0.8, 0, 0], ['kiss_mark', 'cheekL', 0.8, 0, 0]]],
-  ['chien', 'Chien', 'dog_face', [['dog_face', 'face', 4.1, 0, 0.05]]],
-  ['chat', 'Chat', 'cat_face', [['cat_face', 'face', 4.1, 0, 0.05]]],
-  ['panda', 'Panda', 'panda', [['panda', 'face', 4.1, 0, 0.05]]],
-  ['renard', 'Renard', 'fox', [['fox', 'face', 4.1, 0, 0.05]]],
-  ['tigre', 'Tigre', 'tiger_face', [['tiger_face', 'face', 4.1, 0, 0.05]]],
-  ['licorne', 'Licorne', 'unicorn', [['unicorn', 'face', 4.3, 0, 0]]],
-  ['robot', 'Robot', 'robot', [['robot', 'face', 4.1, 0, 0.05]]],
-  ['alien', 'Extraterrestre', 'alien', [['alien', 'face', 4.1, 0, 0.05]]],
-  ['clown', 'Clown', 'clown_face', [['clown_face', 'face', 4.1, 0, 0.05]]],
-  ['squelette', 'Squelette', 'skull', [['skull', 'face', 4.1, 0, 0.05]]],
-  ['fantome', 'Fantômes', 'ghost', [0, 1].map((i) => ['ghost', 'orbit', 1, i, 2])],
+// Motions: orbit (round the head), fall (from above), rise (from below),
+// open (mouth open only), bob.
+const fxHead = (id, name, pic, size = 4.1) => [id, name, pic, [[pic, 'face', size, 0, 0.05]]];
+// n pictures round the head, or falling, or rising: [picture, how, size, index, count].
+const fxMany = (pics, n, size, how = 'orbit') => Array.from({ length: n }, (_, i) => [pics[i % pics.length], how, size, i, n]);
+const fxAbove = (pic, size, dx, dy) => [[pic, 'top', size, dx, dy, 'bob']];
+// [group name, masks]; the panel shows one heading per group.
+const FX_MASK_GROUPS = [
+  ['Lunettes et chapeaux', [
+    ['soleil', 'Lunettes de soleil', 'sunglasses', [['sunglasses', 'eyes', 2.6, 0, 0.1]]],
+    ['lunettes', 'Lunettes', 'glasses', [['glasses', 'eyes', 2.6, 0, 0.1]]],
+    ['masque', 'Masque de plongée', 'goggles', [['goggles', 'eyes', 2.8, 0, 0.1]]],
+    ['yeuxetoiles', 'Yeux étoiles', 'glowing_star', [['glowing_star', 'eyeR', 1.2, 0, 0, 'bob'], ['glowing_star', 'eyeL', 1.2, 0, 0, 'bob']]],
+    ['spirales', 'Tête qui tourne', 'dizzy', [['dizzy', 'eyeR', 1.1, 0, 0], ['dizzy', 'eyeL', 1.1, 0, 0], ...fxMany(['dizzy'], 3, 0.6)]],
+    ['couronne', 'Couronne', 'crown', [['crown', 'top', 2.2, 0, -0.75, 'bob']]],
+    ['chapeau', 'Haut-de-forme', 'top_hat', [['top_hat', 'top', 2.6, 0, -1.05]]],
+    ['casquette', 'Casquette', 'billed_cap', [['billed_cap', 'top', 3, 0, -0.6]]],
+    ['diplome', 'Diplômé', 'graduation_cap', [['graduation_cap', 'top', 2.8, 0, -0.75]]],
+    ['militaire', 'Casque militaire', 'military_helmet', [['military_helmet', 'top', 3.8, 0, -0.5]]],
+    ['noeud', 'Nœud', 'ribbon', [['ribbon', 'top', 1.5, 0.9, -0.35, 'bob']]],
+    ['fleurs', 'Fleurs', 'cherry_blossom', [-1.15, -0.7, -0.25, 0.25, 0.7, 1.15].map((x, i) =>
+      [['cherry_blossom', 'hibiscus', 'blossom'][i % 3], 'top', 0.85, x, -0.35 - 0.3 * Math.cos(x / 1.2), 'bob'])],
+    ['bouquet', 'Couronne de fleurs', 'sunflower', [-1.2, -0.6, 0, 0.6, 1.2].map((x, i) =>
+      [['sunflower', 'tulip', 'rose'][i % 3], 'top', 0.95, x, -0.4 - 0.3 * Math.cos(x / 1.2), 'bob'])],
+  ]],
+  ['Nez et bouche', [
+    ['cochon', 'Nez de cochon', 'pig_nose', [['pig_nose', 'nose', 1.25, 0, 0.05]]],
+    ['nezclown', 'Nez de clown', 'red_circle', [['red_circle', 'nose', 0.8, 0, 0.05]]],
+    ['langue', 'Langue', 'tongue', [['tongue', 'mouth', 1.3, 0, 0.55, 'open']]],
+    ['arcenciel', 'Arc-en-ciel', 'rainbow', [['rainbow', 'mouth', 2.6, 0, 1.1, 'open']]],
+    ['dragon', 'Cracheur de feu', 'fire', [['fire', 'mouth', 2.4, 0, 1.3, 'open']]],
+    ['souffle', 'Bulles', 'bubbles', [['bubbles', 'mouth', 2, 0, 1.1, 'open']]],
+    ['sucette', 'Sucette', 'lollipop', [['lollipop', 'mouth', 1.5, 0.75, 0.2]]],
+    ['bisou', 'Bisous', 'kiss_mark', [['kiss_mark', 'cheekR', 0.8, 0, 0], ['kiss_mark', 'cheekL', 0.8, 0, 0]]],
+  ]],
+  ['Au-dessus de la tête', [
+    ['feu', 'Tête en feu', 'fire', [['fire', 'top', 3, 0, -1, 'bob']]],
+    ['idee', 'Idée', 'light_bulb', fxAbove('light_bulb', 1.4, 0, -1.25)],
+    ['pense', 'Je réfléchis', 'thought_balloon', fxAbove('thought_balloon', 1.8, 1.5, -1.2)],
+    ['dodo', 'Dodo', 'zzz', [...fxAbove('zzz', 1.4, 1.3, -0.9), ['crescent_moon', 'top', 1.2, -1.4, -1, 'bob']]],
+    ['colere', 'En colère', 'anger_symbol', fxAbove('anger_symbol', 1.1, 1.1, -0.45)],
+    ['question', 'Question', 'red_question_mark', fxAbove('red_question_mark', 1.3, 0, -1.25)],
+    ['exclamation', 'Exclamation', 'red_exclamation_mark', fxAbove('red_exclamation_mark', 1.3, 0, -1.25)],
+    ['cent', '100 %', 'hundred_points', fxAbove('hundred_points', 1.6, 0, -1.2)],
+    ['gene', 'Gêné', 'sweat_droplets', fxAbove('sweat_droplets', 1.1, 1.2, -0.3)],
+    ['soleiltete', 'Soleil', 'sun', fxAbove('sun', 2, 0, -1.5)],
+    ['orage', 'Orage', 'cloud_with_lightning', [...fxAbove('cloud_with_lightning', 2.6, 0, -1.7), ...fxMany(['droplet'], 6, 0.4, 'fall')]],
+    ['trophee', 'Trophée', 'trophy', fxAbove('trophy', 1.8, 0, -1.2)],
+  ]],
+  ['Autour de toi', [
+    ['papillons', 'Papillons', 'butterfly', fxMany(['butterfly'], 3, 0.8)],
+    ['coeurs', 'Cœurs', 'sparkling_heart', [['red_heart', 'eyeR', 1.1, 0, 0, 'bob'], ['red_heart', 'eyeL', 1.1, 0, 0, 'bob'],
+      ...fxMany(['sparkling_heart'], 5, 0.55)]],
+    ['etoiles', 'Étoiles', 'glowing_star', fxMany(['glowing_star', 'sparkles'], 4, 0.65)],
+    ['musique', 'Musique', 'musical_notes', fxMany(['musical_notes'], 3, 0.75)],
+    ['fantome', 'Fantômes', 'ghost', fxMany(['ghost'], 2, 1)],
+    ['abeilles', 'Abeilles', 'honeybee', fxMany(['honeybee'], 3, 0.7)],
+    ['coccinelles', 'Coccinelles', 'lady_beetle', fxMany(['lady_beetle'], 3, 0.6)],
+    ['chauvesouris', 'Chauves-souris', 'bat', fxMany(['bat'], 3, 0.85)],
+    ['poissons', 'Poissons', 'tropical_fish', fxMany(['tropical_fish'], 3, 0.8)],
+    ['espace', 'Espace', 'ringed_planet', fxMany(['ringed_planet', 'rocket', 'shooting_star'], 3, 0.9)],
+    ['eclairs', 'Éclairs', 'high_voltage', fxMany(['high_voltage'], 4, 0.7)],
+  ]],
+  ['Pluies et fêtes', [
+    ['fete', 'Fête', 'party_popper', [['party_popper', 'top', 1.3, -1.5, -0.4, 'bob'], ['confetti_ball', 'top', 1.3, 1.5, -0.4, 'bob'],
+      ...fxMany(['sparkles'], 6, 0.5, 'fall')]],
+    ['anniversaire', 'Anniversaire', 'birthday_cake', [...fxAbove('birthday_cake', 1.8, 0, -1.25), ...fxMany(['balloon'], 5, 0.8, 'rise')]],
+    ['noel', 'Noël', 'christmas_tree', [['christmas_tree', 'top', 1.4, -1.7, -0.2, 'bob'], ['wrapped_gift', 'top', 1.1, 1.7, -0.1, 'bob'],
+      ...fxMany(['snowflake'], 6, 0.4, 'fall')]],
+    ['halloween', 'Halloween', 'jack-o-lantern', [...fxMany(['jack-o-lantern'], 2, 1), ...fxMany(['bat'], 4, 0.6, 'fall')]],
+    ['neige', 'Neige', 'snowflake', fxMany(['snowflake'], 8, 0.45, 'fall')],
+    ['pluie', 'Pluie', 'droplet', fxMany(['droplet'], 10, 0.35, 'fall')],
+    ['argent', 'Pluie d’argent', 'money_with_wings', fxMany(['money_with_wings'], 6, 0.7, 'fall')],
+    ['diamants', 'Diamants', 'gem_stone', fxMany(['gem_stone'], 6, 0.55, 'fall')],
+    ['chance', 'Trèfles', 'four_leaf_clover', fxMany(['four_leaf_clover'], 6, 0.55, 'fall')],
+    ['automne', 'Automne', 'maple_leaf', fxMany(['maple_leaf', 'fallen_leaf'], 7, 0.6, 'fall')],
+    ['etoilesfilantes', 'Étoiles filantes', 'shooting_star', fxMany(['shooting_star'], 5, 0.7, 'fall')],
+    ['feuxartifice', 'Feux d’artifice', 'fireworks', fxMany(['fireworks'], 4, 1.1, 'fall')],
+    ['cadeaux', 'Cadeaux', 'wrapped_gift', fxMany(['wrapped_gift'], 5, 0.65, 'fall')],
+    ['pizza', 'Pizza', 'pizza', fxMany(['pizza'], 5, 0.7, 'fall')],
+    ['donuts', 'Donuts', 'doughnut', fxMany(['doughnut'], 5, 0.65, 'fall')],
+    ['ballons', 'Ballons', 'balloon', fxMany(['balloon'], 6, 0.8, 'rise')],
+    ['bulles', 'Bulles qui montent', 'bubbles', fxMany(['bubbles'], 7, 0.55, 'rise')],
+  ]],
+  ['Têtes d’animaux', [
+    fxHead('chien', 'Chien', 'dog_face'), fxHead('chat', 'Chat', 'cat_face'), fxHead('panda', 'Panda', 'panda'),
+    fxHead('renard', 'Renard', 'fox'), fxHead('tigre', 'Tigre', 'tiger_face'), fxHead('licorne', 'Licorne', 'unicorn', 4.3),
+    fxHead('singe', 'Singe', 'monkey_face'), fxHead('lion', 'Lion', 'lion'), fxHead('ours', 'Ours', 'bear'),
+    fxHead('koala', 'Koala', 'koala'), fxHead('grenouille', 'Grenouille', 'frog'), fxHead('porc', 'Cochon', 'pig_face'),
+    fxHead('souris', 'Souris', 'mouse_face'), fxHead('lapin', 'Lapin', 'rabbit_face'), fxHead('vache', 'Vache', 'cow_face'),
+    fxHead('hamster', 'Hamster', 'hamster'), fxHead('loup', 'Loup', 'wolf'), fxHead('cheval', 'Cheval', 'horse_face'),
+    fxHead('dragonh', 'Dragon', 'dragon_face'), fxHead('hibou', 'Hibou', 'owl'), fxHead('pingouin', 'Pingouin', 'penguin', 4.4),
+  ]],
+  ['Têtes de smileys', [
+    fxHead('cool', 'Cool', 'smiling_face_with_sunglasses'), fxHead('star', 'Des étoiles plein les yeux', 'star-struck'),
+    fxHead('mdr', 'Mort de rire', 'face_with_tears_of_joy'), fxHead('amoureux', 'Amoureux', 'smiling_face_with_heart-eyes'),
+    fxHead('intello', 'Intello', 'nerd_face'), fxHead('fetard', 'Fêtard', 'partying_face', 4.4), fxHead('fou', 'Fou', 'zany_face'),
+    fxHead('cowboy', 'Cow-boy', 'cowboy_hat_face', 4.6), fxHead('explose', 'Tête qui explose', 'exploding_head', 4.4),
+    fxHead('chaud', 'Trop chaud', 'hot_face'), fxHead('gele', 'Gelé', 'cold_face'), fxHead('riche', 'Riche', 'money-mouth_face'),
+    fxHead('peur', 'Peur', 'face_screaming_in_fear'), fxHead('ange', 'Ange', 'smiling_face_with_halo', 4.4),
+    fxHead('diable', 'Diable', 'smiling_face_with_horns', 4.4), fxHead('lune', 'Lune', 'new_moon_face'), fxHead('soleilface', 'Soleil', 'sun_with_face', 4.6),
+  ]],
+  ['Monstres', [
+    fxHead('robot', 'Robot', 'robot'), fxHead('alien', 'Extraterrestre', 'alien'), fxHead('envahisseur', 'Envahisseur', 'alien_monster'),
+    fxHead('clown', 'Clown', 'clown_face'), fxHead('squelette', 'Squelette', 'skull'), fxHead('citrouille', 'Citrouille', 'jack-o-lantern'),
+    fxHead('ogre', 'Ogre', 'ogre'), fxHead('lutin', 'Lutin', 'goblin'), fxHead('caca', 'Caca', 'pile_of_poo', 4.3),
+  ]],
   // 3D, the way MindAR does it (fx3d.js): [.., [], [{ model, at (face point), width, off, rot }]].
-  ['lunettes3d', 'Lunettes 3D', 'models3d/glasses/thumbnail.png', [], [{ model: 'glasses', at: 168, width: 2.15, off: [0.3, -0.12, 0.2] }]],
-  ['clown3d', 'Chapeau de clown 3D', 'models3d/hat/thumbnail.png', [], [{ model: 'hat', at: 10, width: 3.1, off: [0, 0.6, -0.3] }]],
-  ['boucles3d', 'Boucles d’oreilles 3D', 'models3d/earring/thumbnail.png', [], [
-    { model: 'earring', at: 177, width: 0.3, off: [0, -0.25, 0] }, { model: 'earring', at: 401, width: 0.3, off: [0, -0.25, 0] }]],
-  ['fete3d', 'Fête 3D', 'models3d/hat/thumbnail.png', [], [
-    { model: 'hat', at: 10, width: 3.1, off: [0, 0.6, -0.3] }, { model: 'glasses', at: 168, width: 2.15, off: [0.3, -0.12, 0.2] }]],
+  ['En 3D', [
+    ['lunettes3d', 'Lunettes 3D', 'models3d/glasses/thumbnail.png', [], [{ model: 'glasses', at: 168, width: 2.15, off: [0.3, -0.12, 0.2] }]],
+    ['clown3d', 'Chapeau de clown 3D', 'models3d/hat/thumbnail.png', [], [{ model: 'hat', at: 10, width: 3.1, off: [0, 0.6, -0.3] }]],
+    ['boucles3d', 'Boucles d’oreilles 3D', 'models3d/earring/thumbnail.png', [], [
+      { model: 'earring', at: 177, width: 0.3, off: [0, -0.25, 0] }, { model: 'earring', at: 401, width: 0.3, off: [0, -0.25, 0] }]],
+    ['fete3d', 'Fête 3D', 'models3d/hat/thumbnail.png', [], [
+      { model: 'hat', at: 10, width: 3.1, off: [0, 0.6, -0.3] }, { model: 'glasses', at: 168, width: 2.15, off: [0.3, -0.12, 0.2] }]],
+  ]],
 ];
+const FX_MASKS = [['none', 'Aucun', null, []], ...FX_MASK_GROUPS.flatMap(([, list]) => list)];
 const FX_PHOTOS = [['salon', 'Salon'], ['bureau', 'Bureau'], ['bibliotheque', 'Bibliothèque'], ['cuisine', 'Cuisine'], ['lecture', 'Salle de lecture'],
   ['plage', 'Plage'], ['montagne', 'Montagne'], ['aurore', 'Aurore boréale'], ['ville', 'Ville la nuit'], ['espace', 'Espace']];
 const FX_BG = [['none', 'Normal'], ['blur', 'Flou'], ['strong', 'Très flou'], ...FX_PHOTOS, ['image', 'Ton image']];
@@ -247,8 +325,13 @@ const Effects = {
     o.globalAlpha = 1;
     o.filter = 'none';
     const f = FX_FILTERS.find(([id]) => id === c.filter) || FX_FILTERS[0];
+    const look = f[0] === 'none' && FX_LOOKS.find(([id]) => id === c.filter);
     const amount = Math.max(0, Math.min(100, c.amount)) / 100;
-    if (f[0] === 'none') {
+    if (look) {
+      // A film look: its colour table on the graphics card (fxlook.js).
+      o.drawImage(Looks.main.apply(base, W, H, look, amount) || base, 0, 0);
+      this.vignette(o, W, H, look[3] * amount);
+    } else if (f[0] === 'none') {
       o.drawImage(base, 0, 0);
     } else {
       if (amount < 1) o.drawImage(base, 0, 0);
@@ -263,15 +346,8 @@ const Effects = {
         o.fillRect(0, 0, W, H);
         o.globalCompositeOperation = 'source-over';
       }
-      if (f[4]) {
-        const v = o.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.hypot(W, H) * 0.6);
-        v.addColorStop(0, 'rgba(0,0,0,0)');
-        v.addColorStop(1, `rgba(0,0,0,${(f[4] * amount).toFixed(2)})`);
-        o.globalAlpha = 1;
-        o.fillStyle = v;
-        o.fillRect(0, 0, W, H);
-      }
       o.globalAlpha = 1;
+      this.vignette(o, W, H, f[4] * amount);
     }
     // 5. The mask on top, following the face.
     if (this.pts && c.mask !== 'none') {
@@ -281,6 +357,16 @@ const Effects = {
     // 6. The same picture for Discord, OBS… (one at a time, never a queue).
     if (this.toWebcam()) this.send(out, W, H, frame.timestamp);
     return out;
+  },
+  // Darker corners, as with an old lens.
+  vignette(o, W, H, strength) {
+    if (!(strength > 0)) return;
+    const v = o.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.hypot(W, H) * 0.6);
+    v.addColorStop(0, 'rgba(0,0,0,0)');
+    v.addColorStop(1, `rgba(0,0,0,${strength.toFixed(2)})`);
+    o.globalAlpha = 1;
+    o.fillStyle = v;
+    o.fillRect(0, 0, W, H);
   },
   drawBackground(g, frame, W, H) {
     const bg = this.cfg.bg;
@@ -382,8 +468,8 @@ const Effects = {
       const im = this.img(fxPicture(name));
       if (!im.complete || !im.naturalWidth) continue;
       let dx = dx0, dy = dy0, sz = size, alpha = 1, at = anchors[anchor] || anchors.face;
-      if (anchor === 'orbit' || anchor === 'fall') {
-        // dx0 = index, dy0 = count: spread evenly round the head, or falling.
+      if (anchor === 'orbit' || anchor === 'fall' || anchor === 'rise') {
+        // dx0 = index, dy0 = count: spread evenly round the head, falling or rising.
         const k = dx0 / dy0;
         at = anchors.face;
         if (anchor === 'orbit') {
@@ -395,7 +481,7 @@ const Effects = {
         } else {
           const fall = (t * 0.35 + k) % 1;
           dx = (k - 0.5) * 4.6 + Math.sin(t * 2 + dx0) * 0.2;
-          dy = -2.6 + fall * 5.2;
+          dy = anchor === 'rise' ? 2.6 - fall * 5.2 : -2.6 + fall * 5.2;
           alpha = Math.min(1, Math.min(fall, 1 - fall) * 6);
         }
       }

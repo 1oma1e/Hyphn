@@ -882,6 +882,7 @@ html.cam-full.idle .pv { cursor: none; }
 .ecard b { font-size: 12.5px; font-weight: 600; text-align: center; }
 .ecard:hover { transform: translateY(-2px); }
 .ecard.on { border-color: var(--co); background: color-mix(in srgb, var(--co) 14%, transparent); }
+.esub { margin: 16px 2px 8px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--tx3); }
 .upd.ok { background: rgba(185,242,90,.1); border-color: rgba(185,242,90,.35); color: #DDF8A8; }
 
 /* Words wrap nicely everywhere. */

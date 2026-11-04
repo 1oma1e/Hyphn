@@ -49,9 +49,9 @@ const TIPS = {
   cat_wait: ['Pause', 'Ce que voient Discord et OBS quand la caméra est en pause.'],
   // Cam › Effets (spec `Cam - Filtres et effets`)
   fx: ['Effets', 'Filtres de couleur, emojis sur le visage, fond flou ou remplacé, retouche. Ce que tu vois ici, Discord et Teams le voient aussi.'],
-  fx_filter: ['Filtre', 'Change les couleurs de toute l’image, comme sur Instagram.', 'Clique sur une vignette : elle montre déjà ton image avec le filtre.'],
+  fx_filter: ['Filtre', 'Change les couleurs de toute l’image : filtres façon Instagram, puis looks de cinéma, de pellicule, de saison, en noir et blanc ou plus fous. Calculés par la carte graphique du PC.', 'Clique sur une vignette : elle montre déjà ton image avec le filtre.'],
   fx_amount: ['Force du filtre', 'À gauche, le filtre est léger ; à droite, il est complet.'],
-  fx_mask: ['Emojis', 'Des emojis qui suivent ton visage, comme sur Snapchat ou Messenger : les Fluent Emoji 3D de Microsoft.', 'Ouvre grand la bouche avec Arc-en-ciel.'],
+  fx_mask: ['Emojis', 'Plus de 100 emojis qui suivent ton visage, comme sur Snapchat ou Messenger : les Fluent Emoji 3D de Microsoft, rangés par famille.', 'Ouvre grand la bouche avec Arc-en-ciel, Langue, Cracheur de feu ou Bulles.'],
   fx_bg: ['Fond', 'Floute ce qu’il y a derrière toi, ou le remplace par un décor (vraies photos libres de droits) ou ta propre image. Ton visage et ton corps restent nets.', 'Une image à toi : « Ton image », puis choisis un fichier.'],
   fx_smooth: ['Peau lisse', 'Adoucit la peau du visage. Les yeux et la bouche restent nets.', 'Vers 30 % : naturel.'],
   fx_light: ['Lumière douce', 'Éclaire un peu le visage, comme une lampe devant toi.'],
@@ -1612,9 +1612,9 @@ const Cam = {
         .map(([id, n, ic]) => `<button type="button" data-act="jump" data-v="${id}">${I[ic]}<span>${n}</span></button>`).join('')}</nav>
       <div class="abody">
         ${webcam}${status}
-        ${sec('fxfilter', 'Filtres', 'palette', 'fx_filter', `<div class="fgrid">${FX_FILTERS.map(([id, n]) => `<button type="button" class="fcard${f.filter === id ? ' on' : ''}" data-act="fx" data-k="filter" data-v="${id}" aria-pressed="${f.filter === id}"><canvas width="160" height="90" data-thumb="${id}"></canvas><b>${esc(n)}</b></button>`).join('')}</div>
+        ${sec('fxfilter', 'Filtres', 'palette', 'fx_filter', `${[['', FX_FILTERS], ...FX_LOOK_GROUPS].map(([g, list]) => `${g ? `<h4 class="esub">${esc(g)}</h4>` : ''}<div class="fgrid">${list.map(([id, n]) => `<button type="button" class="fcard${f.filter === id ? ' on' : ''}" data-act="fx" data-k="filter" data-v="${id}" aria-pressed="${f.filter === id}"><canvas width="160" height="90" data-thumb="${id}"></canvas><b>${esc(n)}</b></button>`).join('')}</div>`).join('')}
           ${f.filter !== 'none' ? range('amount', 'Force du filtre', ['Léger', 'Complet']) : ''}`)}
-        ${sec('fxmask', 'Emojis', 'smile', 'fx_mask', `<div class="egrid">${FX_MASKS.map(([id, n, pic]) => `<button type="button" class="ecard${f.mask === id ? ' on' : ''}" data-act="fx" data-k="mask" data-v="${id}" aria-pressed="${f.mask === id}">${pic ? `<img src="${fxPicture(pic)}" alt="" loading="lazy">` : '<i aria-hidden="true">🚫</i>'}<b>${esc(n)}</b></button>`).join('')}</div>`)}
+        ${sec('fxmask', 'Emojis', 'smile', 'fx_mask', [['', [FX_MASKS[0]]], ...FX_MASK_GROUPS].map(([g, list]) => `${g ? `<h4 class="esub">${esc(g)}</h4>` : ''}<div class="egrid">${list.map(([id, n, pic]) => `<button type="button" class="ecard${f.mask === id ? ' on' : ''}" data-act="fx" data-k="mask" data-v="${id}" aria-pressed="${f.mask === id}">${pic ? `<img src="${fxPicture(pic)}" alt="" loading="lazy">` : '<i aria-hidden="true">🚫</i>'}<b>${esc(n)}</b></button>`).join('')}</div>`).join(''))}
         ${sec('fxbg', 'Fond', 'layers', 'fx_bg', `<div class="egrid">${FX_BG.map(([id, n]) => `<button type="button" class="ecard${BG_ICON[id] ? '' : ' photo'}${f.bg === id ? ' on' : ''}" data-act="${id === 'image' ? 'fxpick' : 'fx'}" data-k="bg" data-v="${id}" aria-pressed="${f.bg === id}">${BG_ICON[id] ? `<i aria-hidden="true">${BG_ICON[id]}</i>` : `<img src="vendor/backgrounds/${id}.jpg" alt="" loading="lazy">`}<b>${esc(n)}</b></button>`).join('')}</div>
           <input type="file" accept="image/*" id="fx-file" hidden data-change="fxfile">`)}
         ${sec('fxtouch', 'Retouche', 'spark', 'fx_smooth', range('smooth', 'Peau lisse', ['Naturel', 'Très lisse']) + range('light', 'Lumière douce', ['Aucune', 'Forte']))}
@@ -1633,12 +1633,17 @@ const Cam = {
     const src = raw && raw.width ? raw : $('#c-scene');
     if (!src || !src.width || this.panel !== 'fx') return;
     for (const cv of document.querySelectorAll('#c-adj canvas[data-thumb]')) {
-      const f = FX_FILTERS.find(([id]) => id === cv.dataset.thumb);
+      const look = FX_LOOKS.find(([id]) => id === cv.dataset.thumb);
+      const f = FX_FILTERS.find(([id]) => id === cv.dataset.thumb) || FX_FILTERS[0];
       const g = cv.getContext('2d');
       const s = Math.max(cv.width / src.width, cv.height / src.height);
       g.filter = f[2];
       g.drawImage(src, (cv.width - src.width * s) / 2, (cv.height - src.height * s) / 2, src.width * s, src.height * s);
       g.filter = 'none';
+      if (look) {
+        const out = Looks.thumbs.apply(cv, cv.width, cv.height, look, 1);
+        if (out) g.drawImage(out, 0, 0);
+      }
       if (f[3]) {
         g.globalCompositeOperation = f[3][1];
         g.globalAlpha = f[3][2];
