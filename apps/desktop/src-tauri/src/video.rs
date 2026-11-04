@@ -67,13 +67,9 @@ async fn serve(hub: Arc<Hub>, tcp: TcpStream, path: String) {
             },
             m = inbox.next() => match m {
                 Some(Ok(Message::Text(t))) if t == "key" => hub.request_key(),
-                // A picture drawn with the camera effects, for the webcam (ADR-0034):
-                // "HFX1", width, height (u32 LE), 0 RGBA / 1 BGRA, then the pixels.
-                Some(Ok(Message::Binary(b))) if b.len() > 13 && &b[..4] == b"HFX1" => {
-                    let w = u32::from_le_bytes(b[4..8].try_into().unwrap());
-                    let h = u32::from_le_bytes(b[8..12].try_into().unwrap());
-                    crate::vcam::fx::push(w, h, b[12] == 1, &b[13..]);
-                }
+                // A picture drawn with the camera effects, for the webcam (ADR-0034),
+                // converted away from this loop so the video to the window never waits.
+                Some(Ok(Message::Binary(b))) if b.len() > 13 && &b[..4] == b"HFX1" => crate::vcam::fx::offer(b),
                 Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
                 _ => {}
             },

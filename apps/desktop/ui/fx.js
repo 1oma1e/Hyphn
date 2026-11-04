@@ -417,7 +417,9 @@ const Effects = {
   },
   // The finished picture to the webcam: one in flight at most.
   async send(canvas, W, H, ts) {
-    if (this.sending) return;
+    // The last picture still on its way: this one is skipped, else they pile
+    // up in the socket and the webcam falls further and further behind.
+    if (this.sending || (Video.ws && Video.ws.bufferedAmount > 0)) return;
     this.sending = true;
     try {
       const buf = new Uint8Array(13 + W * H * 4);

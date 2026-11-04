@@ -67,3 +67,8 @@ strip = true
 # a little optimisation keeps it fast with `npm run dev` too.
 [profile.dev.package.hyphn-desktop]
 opt-level = 1
+
+# Unmasks every byte of the effects pictures (several MB each): unoptimized,
+# it alone is slower than the camera in dev.
+[profile.dev.package.tungstenite]
+opt-level = 3

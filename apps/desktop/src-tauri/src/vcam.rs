@@ -88,7 +88,7 @@ pub fn raw_message(w: u32, h: u32) -> Vec<u8> {
 /// Discord sees exactly what the window shows.
 pub mod fx {
     use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::{Arc, Mutex, OnceLock};
+    use std::sync::{Arc, Condvar, Mutex, OnceLock};
     use std::time::Instant;
 
     use tokio::sync::mpsc;
@@ -126,6 +126,40 @@ pub mod fx {
     pub fn active() -> bool {
         let last = LAST.load(Ordering::Relaxed);
         last != 0 && now_ms().saturating_sub(last) < FRESH_MS
+    }
+
+    /// The newest "HFX1" message not yet converted (an older one is dropped).
+    static NEWEST: Mutex<Option<Vec<u8>>> = Mutex::new(None);
+    static WAKE: Condvar = Condvar::new();
+    static WORKER: OnceLock<()> = OnceLock::new();
+
+    /// A picture from the window, as received: converted on a thread of its
+    /// own, so the socket keeps reading and only the newest picture is kept.
+    pub fn offer(msg: Vec<u8>) {
+        WORKER.get_or_init(|| {
+            std::thread::Builder::new()
+                .name("vcam-fx".into())
+                .spawn(|| loop {
+                    let msg = {
+                        let mut slot = NEWEST.lock().unwrap();
+                        loop {
+                            if let Some(m) = slot.take() {
+                                break m;
+                            }
+                            slot = WAKE.wait(slot).unwrap();
+                        }
+                    };
+                    // "HFX1", width, height (u32 LE), 0 RGBA / 1 BGRA, then the pixels.
+                    if msg.len() > 13 && &msg[..4] == b"HFX1" {
+                        let w = u32::from_le_bytes(msg[4..8].try_into().unwrap());
+                        let h = u32::from_le_bytes(msg[8..12].try_into().unwrap());
+                        push(w, h, msg[12] == 1, &msg[13..]);
+                    }
+                })
+                .expect("vcam-fx thread");
+        });
+        *NEWEST.lock().unwrap() = Some(msg);
+        WAKE.notify_one();
     }
 
     /// One picture from the window: `bgra` (else RGBA), 4 bytes a pixel, rows packed.
