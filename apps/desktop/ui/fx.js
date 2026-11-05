@@ -133,17 +133,46 @@ const FX_MASK_GROUPS = [
     fxHead('clown', 'Clown', 'clown_face'), fxHead('squelette', 'Squelette', 'skull'), fxHead('citrouille', 'Citrouille', 'jack-o-lantern'),
     fxHead('ogre', 'Ogre', 'ogre'), fxHead('lutin', 'Lutin', 'goblin'), fxHead('caca', 'Caca', 'pile_of_poo', 4.3),
   ]],
-  // 3D, the way MindAR does it (fx3d.js): [.., [], [{ model, at (face point), width, off, rot }]].
-  ['En 3D', [
-    ['lunettes3d', 'Lunettes 3D', 'models3d/glasses/thumbnail.png', [], [{ model: 'glasses', at: 168, width: 2.15, off: [0.3, -0.12, 0.2] }]],
-    ['clown3d', 'Chapeau de clown 3D', 'models3d/hat/thumbnail.png', [], [{ model: 'hat', at: 10, width: 3.1, off: [0, 0.6, -0.3] }]],
-    ['boucles3d', 'Boucles d’oreilles 3D', 'models3d/earring/thumbnail.png', [], [
+];
+// 3D, the way MindAR does it (fx3d.js): [.., [], [{ model, turn, at (face point), width, off, rot, sit }]].
+// Most models come from Poly Pizza (CC-BY 3.0 or CC0, vendor/models3d/CREDITS.txt).
+const fx3 = (id, name, file, place) => [id, name, `models3d/poly/${file}.webp`, [], [Object.assign({ model: `poly/${file}.glb`, off: [0, 0, 0] }, place)]];
+const HAT = (width = 2.9, dy = -0.35, dz = -0.45, turn) => ({ at: 10, width, off: [0, dy, dz], sit: true, turn });
+const SPECS = (width = 2.3, dy = -0.1, dz = 0.25, turn) => ({ at: 168, width, off: [0, dy, dz], front: true, turn });
+const FX_3D_GROUPS = [
+  ['Chapeaux', [
+    fx3('chapeau3d', 'Haut-de-forme', 'tophat', HAT(2.6)), fx3('cowboy3d', 'Cow-boy', 'cowboy', HAT(3.4)),
+    fx3('pirate3d', 'Pirate', 'pirate', HAT(3)), fx3('magicien3d', 'Magicien', 'wizard', HAT()),
+    fx3('sombrero3d', 'Sombrero', 'sombrero', HAT(4.6)), fx3('diplome3d', 'Diplômé', 'gradcap', HAT(3)),
+    fx3('casquette3d', 'Casquette', 'cap', HAT(2.8)), fx3('helice3d', 'Hélice', 'propeller', HAT(2.7)),
+    fx3('noel3d', 'Père Noël', 'santa', HAT(2.9, -0.5)), fx3('sorciere3d', 'Sorcière', 'witch', HAT(3.1)),
+    fx3('grenouille3d', 'Grenouille', 'frog', HAT()), fx3('bonnetchat3d', 'Bonnet chat', 'catbeanie', HAT()),
+    fx3('bonnetrenard3d', 'Bonnet renard', 'foxhat', HAT(3, -2.3)),
+    ['clown3d', 'Chapeau de clown', 'models3d/hat/thumbnail.png', [], [{ model: 'hat', at: 10, width: 3.1, off: [0, 0.6, -0.3] }]],
+  ]],
+  ['Casques et couronnes', [
+    fx3('couronne3d', 'Couronne', 'crown', HAT(2.2)), fx3('viking3d', 'Viking', 'viking', HAT(3)),
+    fx3('foot3d', 'Football américain', 'football', { at: 168, width: 3.3, off: [0, 0.4, -0.8] }),
+    fx3('chantier3d', 'Casque de chantier', 'hardhat', HAT(2.9)),
+    fx3('aureole3d', 'Auréole', 'halo', HAT(2.2, 0.45, -0.45, [Math.PI / 2 - 0.3, 0, 0])), fx3('cerf3d', 'Bois de cerf', 'antlers', HAT(3.6, 0.1)),
+  ]],
+  ['Lunettes et visage', [
+    fx3('aviateur3d', 'Aviateur', 'aviator', SPECS()),
+    fx3('fete3dl', 'Lunettes de fête', 'partyglasses', SPECS()), fx3('pixel3d', 'Lunettes pixel', 'pixelglasses', SPECS()),
+    fx3('ski3d', 'Masque de ski', 'goggles', SPECS(2.6)), fx3('monocle3d', 'Monocle', 'monocle', { at: 468, width: 0.55, off: [0, -0.75, 0.2] }),
+    ['lunettes3d', 'Thug life', 'models3d/glasses/thumbnail.png', [], [{ model: 'glasses', ...SPECS(2.2) }]],
+    fx3('moustache3d', 'Moustache', 'mustache', { at: 164, width: 1.6, off: [0, 0, 0.3], turn: [Math.PI / 2, 0, 0] }),
+  ]],
+  ['Oreilles et bijoux', [
+    fx3('lapin3d', 'Oreilles de lapin', 'bunny', HAT(2.6, -0.3)), fx3('chat3d', 'Oreilles de chat', 'catears', HAT(2.6, -0.6)),
+    ['boucles3d', 'Boucles d’oreilles', 'models3d/earring/thumbnail.png', [], [
       { model: 'earring', at: 177, width: 0.3, off: [0, -0.25, 0] }, { model: 'earring', at: 401, width: 0.3, off: [0, -0.25, 0] }]],
-    ['fete3d', 'Fête 3D', 'models3d/hat/thumbnail.png', [], [
-      { model: 'hat', at: 10, width: 3.1, off: [0, 0.6, -0.3] }, { model: 'glasses', at: 168, width: 2.15, off: [0.3, -0.12, 0.2] }]],
+    ['fete3d', 'Fête', 'models3d/hat/thumbnail.png', [], [
+      { model: 'hat', at: 10, width: 3.1, off: [0, 0.6, -0.3] }, { model: 'glasses', ...SPECS(2.2) }]],
   ]],
 ];
-const FX_MASKS = [['none', 'Aucun', null, []], ...FX_MASK_GROUPS.flatMap(([, list]) => list)];
+const FX_3D = FX_3D_GROUPS.flatMap(([, list]) => list);
+const FX_MASKS = [['none', 'Aucun', null, []], ...FX_MASK_GROUPS.flatMap(([, list]) => list), ...FX_3D];
 const FX_PHOTOS = [['salon', 'Salon'], ['bureau', 'Bureau'], ['bibliotheque', 'Bibliothèque'], ['cuisine', 'Cuisine'], ['lecture', 'Salle de lecture'],
   ['plage', 'Plage'], ['montagne', 'Montagne'], ['aurore', 'Aurore boréale'], ['ville', 'Ville la nuit'], ['espace', 'Espace']];
 const FX_BG = [['none', 'Normal'], ['blur', 'Flou'], ['strong', 'Très flou'], ...FX_PHOTOS, ['image', 'Ton image']];

@@ -49,9 +49,16 @@ const TIPS = {
   cat_wait: ['Pause', 'Ce que voient Discord et OBS quand la caméra est en pause.'],
   // Cam › Effets (spec `Cam - Filtres et effets`)
   fx: ['Effets', 'Filtres de couleur, emojis sur le visage, fond flou ou remplacé, retouche. Ce que tu vois ici, Discord et Teams le voient aussi.'],
-  fx_filter: ['Filtre', 'Change les couleurs de toute l’image : filtres façon Instagram, puis looks de cinéma, de pellicule, de saison, en noir et blanc ou plus fous. Calculés par la carte graphique du PC.', 'Clique sur une vignette : elle montre déjà ton image avec le filtre.'],
+  fx_filter: ['Filtres', 'Change les couleurs de toute l’image : filtres façon Instagram, puis looks de cinéma, de pellicule, de saison, en noir et blanc ou plus fous. Calculés par la carte graphique du PC.', 'Chaque vignette montre déjà ton image avec le filtre. Reclique dessus pour l’enlever.'],
   fx_amount: ['Force du filtre', 'À gauche, le filtre est léger ; à droite, il est complet.'],
   fx_mask: ['Emojis', 'Plus de 100 emojis qui suivent ton visage, comme sur Snapchat ou Messenger : les Fluent Emoji 3D de Microsoft, rangés par famille.', 'Ouvre grand la bouche avec Arc-en-ciel, Langue, Cracheur de feu ou Bulles.'],
+  fx_3d: ['3D', 'De vrais objets en 3D posés sur ta tête : chapeaux, casques, couronnes, lunettes, oreilles. Ils tournent avec toi, et ta tête cache ce qui passe derrière.', 'Modèles libres (CC0 ou CC-BY), crédités dans Réglages. Un emoji et un objet 3D ne vont pas ensemble : le dernier choisi reste.'],
+  fx_touch: ['Retouche', 'Peau lisse et lumière douce sur le visage, réglables au pourcent près.'],
+  fx_search: ['Chercher', 'Cherche dans tous les filtres, emojis, objets 3D et fonds à la fois. Les accents ne comptent pas.', 'Essaie « chapeau », « chat », « neige » ou « ciné ».'],
+  fx_searchclr: ['Effacer', 'Vide la recherche et revient à l’onglet.'],
+  fx_fav: ['Favori', 'L’étoile met cet effet dans « Favoris », en haut de son onglet. Reclique pour l’enlever.'],
+  fx_group: ['Famille', 'Clique pour ouvrir ou fermer cette famille. Le chiffre dit combien d’effets elle contient ; le nom à côté, celui qui est choisi.'],
+  fx_chip: ['Effet en cours', 'Clique pour retirer seulement cet effet ; les autres restent.'],
   fx_bg: ['Fond', 'Floute ce qu’il y a derrière toi, ou le remplace par un décor (vraies photos libres de droits) ou ta propre image. Ton visage et ton corps restent nets.', 'Une image à toi : « Ton image », puis choisis un fichier.'],
   fx_smooth: ['Peau lisse', 'Adoucit la peau du visage. Les yeux et la bouche restent nets.', 'Vers 30 % : naturel.'],
   fx_light: ['Lumière douce', 'Éclaire un peu le visage, comme une lampe devant toi.'],
@@ -214,6 +221,10 @@ const I = {
   trash: svg('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'),
   expand: svg('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
   shrink: svg('<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>'),
+  search: svg('<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>'),
+  star: svg('<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/>'),
+  chev: svg('<path d="M6 9l6 6 6-6"/>'),
+  cube: svg('<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>'),
 };
 
 // ---------- Formatting ----------
@@ -1138,6 +1149,43 @@ const Translator = {
   },
 };
 
+// The effects panel's tabs: [tab, name, icon, tooltip].
+const FX_TABS = [['filter', 'Filtres', 'palette', 'fx_filter'], ['mask', 'Emojis', 'smile', 'fx_mask'], ['3d', '3D', 'cube', 'fx_3d'],
+  ['bg', 'Fond', 'layers', 'fx_bg'], ['touch', 'Retouche', 'spark', 'fx_touch']];
+// The families of a tab: [name, [[id, name, picture], ...]].
+function fxGroups(t) {
+  if (t === 'filter') return [['Classiques', FX_FILTERS.filter(([id]) => id !== 'none')], ...FX_LOOK_GROUPS];
+  if (t === 'mask') return FX_MASK_GROUPS;
+  if (t === '3d') return FX_3D_GROUPS;
+  if (t === 'bg') return [['Flou', FX_BG.filter(([id]) => id === 'blur' || id === 'strong')], ['Décors', FX_PHOTOS], ['À toi', FX_BG.filter(([id]) => id === 'image')]];
+  return [];
+}
+const fxKey = (t) => (t === 'filter' || t === 'bg' ? t : 'mask');
+const fxChosen = (f, t) => (t === 'touch' ? f.smooth > 0 || f.light > 0 : fxGroups(t).some(([, items]) => items.some(([id]) => id === f[fxKey(t)])));
+// What is on now, as [setting, label] for the chips.
+function fxActive(f) {
+  const name = (list, id) => (list.find(([x]) => x === id) || [])[1];
+  const out = [];
+  if (f.filter !== 'none') out.push(['filter', name([...FX_FILTERS, ...FX_LOOKS], f.filter) || f.filter]);
+  if (f.mask !== 'none') out.push(['mask', name(FX_MASKS, f.mask) || f.mask]);
+  if (f.bg !== 'none') out.push(['bg', name(FX_BG, f.bg) || f.bg]);
+  if (f.smooth > 0) out.push(['smooth', `Peau lisse ${f.smooth} %`]);
+  if (f.light > 0) out.push(['light', `Lumière douce ${f.light} %`]);
+  return out;
+}
+function fxDefaultOpen(f) {
+  const open = new Set();
+  for (const [t] of FX_TABS) {
+    const groups = fxGroups(t);
+    if (!groups.length) continue;
+    const i = groups.findIndex(([, items]) => items.some(([id]) => id === f[fxKey(t)]));
+    open.add(`${t}:${groups[Math.max(0, i)][0]}`).add(t + ':fav').add(t + ':recent');
+  }
+  return open;
+}
+// Lower case, no accents: « Cinéma » is found with « cinema ».
+const fxFold = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[’']/g, ' ').trim();
+
 const Cam = {
   key: () => '',
   mount(root) {
@@ -1440,6 +1488,8 @@ const Cam = {
       this.placePoint();
       this.langsFetch();
     } else if (this.panel === 'fx') {
+      // The families open: the ones holding what is in use, then the first.
+      if (!this.fxOpen) this.fxOpen = fxDefaultOpen(this.cs.fx);
       this.paintFx();
       // The filter previews follow the picture.
       this.thumbT = setInterval(() => this.fxThumbs(), 1500);
@@ -1586,44 +1636,112 @@ const Cam = {
     this.spy();
     this.paintLangs();
   },
-  // The effects panel (spec `Cam - Filtres et effets`): filters with a live
-  // preview each, masks, background, touch-ups.
+  // The effects panel (spec `Cam - Filtres et effets`): a search over
+  // everything, one tab per kind, families that fold, favourites and recent
+  // ones on top, and the effects in use, each removable in one click.
   paintFx() {
     const el = $('#c-adj');
     if (!el || this.panel !== 'fx') return;
     const f = this.cs.fx;
+    const tab = this.fxTab || 'filter';
     const prev = $('.abody', el);
-    const scroll = prev ? prev.scrollTop : 0;
-    const sec = (id, title, icon, tipKey, body) => `<section class="ag" id="cat-${id}" data-cat="${id}">
-        <div class="agh"><span class="gi">${I[icon]}</span><h3>${title}</h3>${tip(tipKey)}</div>${body}</section>`;
+    const scroll = prev && this.fxPainted === tab ? prev.scrollTop : 0;
+    const search = $('.fxsearch input', el);
+    const focused = search && document.activeElement === search;
+    const q = this.fxQuery || '';
+    const used = FX_TABS.filter(([t]) => fxChosen(f, t));
+    const chips = fxActive(f).map(([k, n]) => `<button type="button" class="fxchip" data-act="fxclear" data-k="${k}"${tipAttr('fx_chip')}><span>${esc(n)}</span>${I.close}</button>`).join('');
+    el.innerHTML = `
+      <div class="ahd"><div class="aht">${I.wand}Effets</div>
+        <button class="ib" type="button" aria-label="Fermer les effets" data-act="close"${tipAttr('adjclose')}>${I.close}</button></div>
+      <div class="fxtop">
+        <label class="fxsearch"${tipAttr('fx_search')}>${I.search}<input type="search" placeholder="Chercher : chapeau, ciné, chat…" value="${esc(q)}" data-input="fxsearch" aria-label="Chercher un effet" autocomplete="off" spellcheck="false">
+          <button type="button" class="x${q ? '' : ' off'}" data-act="fxsearchclr" aria-label="Effacer la recherche"${tipAttr('fx_searchclr')}>${I.close}</button></label>
+        <nav class="fxtabs${q ? ' dim' : ''}" role="tablist" aria-label="Sortes d’effets">${FX_TABS.map(([t, n, ic, tk]) => `<button type="button" role="tab" aria-selected="${t === tab}" class="${t === tab ? 'on' : ''}" data-act="fxtab" data-v="${t}"${tipAttr(tk)}>${used.some(([u]) => u === t) ? '<i class="dot" aria-hidden="true"></i>' : ''}${I[ic]}<span>${n}</span></button>`).join('')}</nav>
+        <div class="fxchips">${chips || '<span class="fxnone">Aucun effet : l’image part telle quelle.</span>'}${chips ? `<button type="button" class="clr" data-act="fxoff"${tipAttr('fx_off')}>Tout enlever</button>` : ''}</div>
+      </div>
+      <div class="abody fxbody"></div>
+      <input type="file" accept="image/*" id="fx-file" hidden data-change="fxfile">`;
+    // Enter or Space on a card picks it, as a click does.
+    el.onkeydown = (e) => {
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role="button"][data-act]')) {
+        e.preventDefault();
+        e.target.click();
+      }
+    };
+    this.paintFxBody();
+    $('.abody', el).scrollTop = scroll;
+    this.fxPainted = tab;
+    if (focused) {
+      const s = $('.fxsearch input', el);
+      s.focus();
+      s.setSelectionRange(s.value.length, s.value.length);
+    }
+  },
+  // The list under the tabs: the search results, or the chosen tab.
+  paintFxBody() {
+    const body = $('#c-adj .fxbody');
+    if (!body) return;
+    const f = this.cs.fx;
+    const tab = this.fxTab || 'filter';
+    const q = fxFold(this.fxQuery || '');
+    const fav = new Set(this.cs.fxFav || []);
+    const card = (t, [id, n, pic]) => {
+      const k = fxKey(t);
+      const on = f[k] === id;
+      const star = `<button type="button" class="fav${fav.has(k + ':' + id) ? ' on' : ''}" data-act="fxfav" data-v="${k}:${id}" aria-label="Favori : ${esc(n)}" aria-pressed="${fav.has(k + ':' + id)}"${tipAttr('fx_fav')}>${I.star}</button>`;
+      const attrs = `role="button" tabindex="0" data-act="${id === 'image' ? 'fxpick' : 'fx'}" data-k="${k}" data-v="${id}" aria-pressed="${on}" aria-label="${esc(n)}"`;
+      if (t === 'filter') return `<div class="fcard${on ? ' on' : ''}" ${attrs}><canvas width="160" height="90" data-thumb="${id}"></canvas><b>${esc(n)}</b>${star}</div>`;
+      if (t === 'bg') {
+        const icon = { blur: '💧', strong: '🌫️', image: '🖼️' }[id];
+        return `<div class="ecard${icon ? '' : ' photo'}${on ? ' on' : ''}" ${attrs}>${icon ? `<i aria-hidden="true">${icon}</i>` : `<img src="vendor/backgrounds/${id}.jpg" alt="" loading="lazy">`}<b>${esc(n)}</b>${star}</div>`;
+      }
+      return `<div class="ecard${t === '3d' ? ' m3' : ''}${on ? ' on' : ''}" ${attrs}><img src="${fxPicture(pic)}" alt="" loading="lazy"><b>${esc(n)}</b>${star}</div>`;
+    };
+    const grid = (t, list) => `<div class="${t === 'filter' ? 'fgrid' : 'egrid'}">${list.map((it) => card(t, it)).join('')}</div>`;
+    const acc = (key, title, t, list, lead = '') => {
+      const k = fxKey(t);
+      const pick = list.find(([id]) => f[k] === id);
+      const open = q || this.fxOpen.has(key);
+      return `<section class="acc${open ? ' open' : ''}" data-acc="${esc(key)}">
+          <button type="button" class="acch" data-act="fxacc" data-v="${esc(key)}" aria-expanded="${!!open}"${tipAttr('fx_group')}>
+            <span>${esc(title)}</span>${pick ? `<small>${esc(pick[1])}</small>` : ''}<em>${list.length}</em>${I.chev}</button>
+          <div class="accb"><div><div class="acci">${lead}${grid(t, list)}</div></div></div></section>`;
+    };
     const range = (k, label, ends) => `<div class="sl"><div class="r"><span>${esc(label)}${tip('fx_' + k)}</span><span class="val" id="fv-${k}">${f[k]} %</span></div>
         <input type="range" min="0" max="100" step="1" value="${f[k]}" data-input="fxslide" data-change="fxslid" data-k="${k}" style="--p:${f[k]}%" aria-label="${esc(label)}">
         <div class="ends"><span>${esc(ends[0])}</span><span>${esc(ends[1])}</span></div></div>`;
-    const BG_ICON = { none: '🚫', blur: '💧', strong: '🌫️', image: '🖼️' };
     const status = Effects.error ? `<div class="hint warn">${esc(Effects.error)}</div>`
       : (Effects.needsFace() || f.bg !== 'none') && !Effects.face ? '<div class="hint">Préparation de la détection du visage…</div>' : '';
     const webcam = S && S.vcam && S.vcam.in_use
       ? (S.vcam.fx_size ? `<div class="upd ok">${I.check}<span>Discord, Teams ou OBS voit ces effets.</span>${tip('fx_webcam')}</div>` : `<div class="upd">${I.info}<span>Cette webcam ne reçoit pas encore les effets : installe la nouvelle webcam (Réglages).</span></div>`)
       : '';
-    el.innerHTML = `
-      <div class="ahd"><div class="aht">${I.wand}Effets</div>
-        <button class="ib" type="button" aria-label="Fermer les effets" data-act="close"${tipAttr('adjclose')}>${I.close}</button></div>
-      <nav class="anav" aria-label="Catégories">${[['fxfilter', 'Filtres', 'palette'], ['fxmask', 'Emojis', 'smile'], ['fxbg', 'Fond', 'layers'], ['fxtouch', 'Retouche', 'spark']]
-        .map(([id, n, ic]) => `<button type="button" data-act="jump" data-v="${id}">${I[ic]}<span>${n}</span></button>`).join('')}</nav>
-      <div class="abody">
-        ${webcam}${status}
-        ${sec('fxfilter', 'Filtres', 'palette', 'fx_filter', `${[['', FX_FILTERS], ...FX_LOOK_GROUPS].map(([g, list]) => `${g ? `<h4 class="esub">${esc(g)}</h4>` : ''}<div class="fgrid">${list.map(([id, n]) => `<button type="button" class="fcard${f.filter === id ? ' on' : ''}" data-act="fx" data-k="filter" data-v="${id}" aria-pressed="${f.filter === id}"><canvas width="160" height="90" data-thumb="${id}"></canvas><b>${esc(n)}</b></button>`).join('')}</div>`).join('')}
-          ${f.filter !== 'none' ? range('amount', 'Force du filtre', ['Léger', 'Complet']) : ''}`)}
-        ${sec('fxmask', 'Emojis', 'smile', 'fx_mask', [['', [FX_MASKS[0]]], ...FX_MASK_GROUPS].map(([g, list]) => `${g ? `<h4 class="esub">${esc(g)}</h4>` : ''}<div class="egrid">${list.map(([id, n, pic]) => `<button type="button" class="ecard${f.mask === id ? ' on' : ''}" data-act="fx" data-k="mask" data-v="${id}" aria-pressed="${f.mask === id}">${pic ? `<img src="${fxPicture(pic)}" alt="" loading="lazy">` : '<i aria-hidden="true">🚫</i>'}<b>${esc(n)}</b></button>`).join('')}</div>`).join(''))}
-        ${sec('fxbg', 'Fond', 'layers', 'fx_bg', `<div class="egrid">${FX_BG.map(([id, n]) => `<button type="button" class="ecard${BG_ICON[id] ? '' : ' photo'}${f.bg === id ? ' on' : ''}" data-act="${id === 'image' ? 'fxpick' : 'fx'}" data-k="bg" data-v="${id}" aria-pressed="${f.bg === id}">${BG_ICON[id] ? `<i aria-hidden="true">${BG_ICON[id]}</i>` : `<img src="vendor/backgrounds/${id}.jpg" alt="" loading="lazy">`}<b>${esc(n)}</b></button>`).join('')}</div>
-          <input type="file" accept="image/*" id="fx-file" hidden data-change="fxfile">`)}
-        ${sec('fxtouch', 'Retouche', 'spark', 'fx_smooth', range('smooth', 'Peau lisse', ['Naturel', 'Très lisse']) + range('light', 'Lumière douce', ['Aucune', 'Forte']))}
-        <button type="button" class="allr" data-act="fxoff"${tipAttr('fx_off')}>${I.refresh}Tout enlever</button>
-      </div>`;
-    const body = $('.abody', el);
-    body.scrollTop = scroll;
-    body.addEventListener('scroll', () => this.spy(), { passive: true });
-    this.spy();
+    let html = webcam + status;
+    if (q) {
+      // Everything whose name matches, kind by kind, or whose family starts
+      // with the word (« chapeau » finds the 3D hats, not every pair of glasses).
+      let found = 0;
+      for (const [t, n] of FX_TABS) {
+        if (t === 'touch') continue;
+        const list = fxGroups(t).flatMap(([g, items]) => items.filter(([, name]) => fxFold(name).includes(q) || fxFold(g).startsWith(q)));
+        found += list.length;
+        if (list.length) html += acc('q:' + t, n, t, list);
+      }
+      if (!found) html += `<div class="fxempty">${I.search}<b>Rien pour « ${esc(this.fxQuery)} »</b><span>Essaie un autre mot : chapeau, chat, neige, ciné…</span></div>`;
+    } else if (tab === 'touch') {
+      html += `<div class="fxcard">${range('smooth', 'Peau lisse', ['Naturel', 'Très lisse'])}${range('light', 'Lumière douce', ['Aucune', 'Forte'])}</div>`;
+    } else {
+      const k = fxKey(tab);
+      const all = fxGroups(tab).flatMap(([, items]) => items);
+      const byId = (id) => all.find(([x]) => x === id);
+      const favs = (this.cs.fxFav || []).filter((x) => x.startsWith(k + ':')).map((x) => byId(x.slice(k.length + 1))).filter(Boolean);
+      const recent = (this.cs.fxRecent || []).filter((x) => x.startsWith(k + ':')).map((x) => byId(x.slice(k.length + 1))).filter(Boolean).slice(0, 8);
+      if (tab === 'filter' && f.filter !== 'none') html += `<div class="fxcard">${range('amount', 'Force du filtre', ['Léger', 'Complet'])}</div>`;
+      if (favs.length) html += acc(tab + ':fav', '★ Favoris', tab, favs);
+      if (recent.length) html += acc(tab + ':recent', 'Récents', tab, recent);
+      for (const [g, items] of fxGroups(tab)) html += acc(tab + ':' + g, g, tab, items);
+    }
+    body.innerHTML = html;
     this.fxThumbs();
   },
   // Each filter shown on the current picture.
@@ -1632,7 +1750,8 @@ const Cam = {
     const raw = Effects.active() && Effects.canvases.small;
     const src = raw && raw.width ? raw : $('#c-scene');
     if (!src || !src.width || this.panel !== 'fx') return;
-    for (const cv of document.querySelectorAll('#c-adj canvas[data-thumb]')) {
+    // Only the families that are open: the folded ones cost nothing.
+    for (const cv of document.querySelectorAll('#c-adj .acc.open canvas[data-thumb]')) {
       const look = FX_LOOKS.find(([id]) => id === cv.dataset.thumb);
       const f = FX_FILTERS.find(([id]) => id === cv.dataset.thumb) || FX_FILTERS[0];
       const g = cv.getContext('2d');
@@ -2027,8 +2146,56 @@ const Cam = {
       Cam.paintAdj();
     },
     close: () => Cam.openPanel(Cam.panel),
+    // A card: picks it, or takes it off when it is already on.
     fx: (el) => {
-      Cam.cs.fx[el.dataset.k] = el.dataset.v;
+      const { k, v } = el.dataset;
+      const off = Cam.cs.fx[k] === v;
+      Cam.cs.fx[k] = off ? 'none' : v;
+      if (!off) Cam.cs.fxRecent = [k + ':' + v, ...(Cam.cs.fxRecent || []).filter((x) => x !== k + ':' + v)].slice(0, 16);
+      Cam.fxChanged();
+    },
+    fxtab: (el) => {
+      Cam.fxTab = el.dataset.v;
+      Cam.fxQuery = '';
+      Cam.paintFx();
+    },
+    // A family folds or unfolds, with no repaint (its animation plays).
+    fxacc: (el) => {
+      const key = el.dataset.v;
+      const open = !Cam.fxOpen.has(key);
+      open ? Cam.fxOpen.add(key) : Cam.fxOpen.delete(key);
+      el.setAttribute('aria-expanded', open);
+      el.closest('.acc').classList.toggle('open', open);
+      if (open) Cam.fxThumbs();
+    },
+    fxfav: (el) => {
+      const v = el.dataset.v;
+      const fav = new Set(Cam.cs.fxFav || []);
+      fav.has(v) ? fav.delete(v) : fav.add(v);
+      Cam.cs.fxFav = [...fav];
+      Cam.fxOpen.add((Cam.fxTab || 'filter') + ':fav');
+      const body = $('#c-adj .fxbody');
+      const top = body ? body.scrollTop : 0;
+      Cam.paintFxBody();
+      if (body) body.scrollTop = top;
+      Cam.save();
+    },
+    fxsearch: (el) => {
+      Cam.fxQuery = el.value;
+      el.parentNode.querySelector('.x').classList.toggle('off', !el.value);
+      $('#c-adj .fxtabs').classList.toggle('dim', !!el.value);
+      Cam.paintFxBody();
+      $('#c-adj .fxbody').scrollTop = 0;
+    },
+    fxsearchclr: () => {
+      Cam.fxQuery = '';
+      Cam.paintFx();
+      $('#c-adj .fxsearch input').focus();
+    },
+    // A chip: only that effect goes.
+    fxclear: (el) => {
+      const k = el.dataset.k;
+      Cam.cs.fx[k] = k === 'smooth' || k === 'light' ? 0 : 'none';
       Cam.fxChanged();
     },
     fxslide: (el) => {
@@ -2496,7 +2663,7 @@ const Settings = {
                 <div><b>Rien ne sort de chez toi.</b><small>Hyphn parle seulement à ton iPhone, sur ton réseau, et tout est chiffré.</small></div>
                 <div class="pills"><span class="pl"><b>0</b>compte</span><span class="pl"><b>0</b>serveur</span><span class="pl"><b>0</b>donnée envoyée</span></div>
               </div>
-              <div class="scred"><b>Crédits</b> Traduction : moteur et modèles de Firefox (Mozilla, MPL-2.0). Effets : MediaPipe (Google, Apache-2.0), three.js (MIT), méthode de MindAR (MIT), Fluent Emoji (Microsoft, MIT). Modèles 3D (CC-BY-4.0) : « Thug Life | Cool glasses » par MR EXPERT, « Clown Hat » par PatelDev, « Earring Jade » par Softmind Game Factory (Sketchfab). Décors : photos CC0 et domaine public (Wikimedia Commons, NASA).</div>
+              <div class="scred"><b>Crédits</b> Traduction : moteur et modèles de Firefox (Mozilla, MPL-2.0). Effets : MediaPipe (Google, Apache-2.0), three.js (MIT), méthode de MindAR (MIT), Fluent Emoji (Microsoft, MIT). Modèles 3D (CC-BY-4.0) : « Thug Life | Cool glasses » par MR EXPERT, « Clown Hat » par PatelDev, « Earring Jade » par Softmind Game Factory (Sketchfab) ; 27 objets 3D de Poly Pizza (CC-BY 3.0 : Poly by Google, J-Toastie, jeremy, Michael Fuchs ; CC0 : Quaternius, iPoly3D), liste complète dans vendor/models3d/CREDITS.txt. Décors : photos CC0 et domaine public (Wikimedia Commons, NASA).</div>
               <div class="sver mono">Hyphn ${S ? esc(S.version) : ''} · ${esc(S ? S.pc_name : '')} · empreinte du PC ${esc(S ? S.pc_fingerprint : '')}</div>`)}
           </div>
         </div>

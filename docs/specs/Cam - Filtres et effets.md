@@ -13,7 +13,15 @@ Des filtres simples d'abord (couleur, lumière, flou d'arrière-plan), puis des 
 - Effets qui demandent internet ou un compte.
 
 ## Parcours
-Bouton « Effets » (baguette magique) dans la barre de la Cam : panneau à droite, comme les réglages ([[Cam - Reglages avances]]), avec Filtres (vignettes qui montrent l'image en direct avec le filtre), Masques, Fond, Retouche et « Tout enlever ». Un point vert sur le bouton quand un effet est actif. Codé direct (demande d'Evan, 2026-11-02), pas de maquette.
+Bouton « Effets » (baguette magique) dans la barre de la Cam : panneau à droite, comme les réglages ([[Cam - Reglages avances]]). Un point vert sur le bouton quand un effet est actif. Codé direct (demande d'Evan, 2026-11-02), pas de maquette.
+
+Panneau refait le 2026-11-05 (demande d'Evan : « plus clean, menus déroulants »), de haut en bas :
+- **Recherche** dans tout à la fois (filtres, emojis, 3D, fonds), sans tenir compte des accents ; un effet sort si son nom contient le mot ou si sa famille commence par ce mot.
+- **5 onglets** : Filtres, Emojis, 3D, Fond, Retouche ; un point orange sur l'onglet qui a un effet en cours.
+- **Effets en cours** en pastilles : un clic retire celui-là seulement ; « Tout enlever » à côté.
+- **Familles qui se plient** (menus déroulants animés), avec leur nombre d'effets et le nom de celui qui est choisi. Ouvertes au départ : celle de l'effet en cours, sinon la première. Les vignettes des familles pliées ne sont pas calculées.
+- En haut de chaque onglet : **Favoris** (l'étoile sur une vignette) et **Récents** (8 derniers choisis), gardés dans les réglages.
+- Recliquer sur l'effet choisi l'enlève.
 
 ## Où calculer
 Sur la carte graphique du PC, juste après le décodage, avant la fenêtre et la webcam ([[ADR-0034 Ou appliquer les filtres de la Cam]]). L'iPhone ne fait que filmer et envoyer.
@@ -36,10 +44,10 @@ Sources et licences : [[Filtres et effets existants]], partie « Pour un maximum
 - **E10 — Cheveux** (~10) : teinture rose, bleu, violet, vert, blond, roux, blanc, arc-en-ciel (Hair Segmenter de MediaPipe).
 - **E11 — Effets qui réagissent** (~8) : cœurs si tu souris, confettis si tu ouvres la bouche, éclair si tu clignes des yeux, étoiles si tu lèves les sourcils… (expressions de MediaPipe, canvas-confetti). Remplace E4.
 - **E12 — Plus d'emojis** (fait, 2026-11-04) : 26 → 112, rangés en 9 familles dans le panneau (lunettes et chapeaux, nez et bouche, au-dessus de la tête, autour de toi, pluies et fêtes, têtes d'animaux, de smileys, monstres, 3D). Nouveau mouvement « monte » (ballons, bulles). Fluent Emoji (MIT) ; deux chapeaux absents du dépôt de Microsoft sous ce nom, laissés de côté. Vérifiés sur une photo de visage (page d'essai) ; ceux qui sortent de la bouche ouverte : non vérifiés.
-- **E13 — Plus de masques 3D** (4 → ~20) : chapeaux, couronnes, casques, oreilles, seulement des modèles CC0 ou CC-BY vérifiés un par un et crédités.
+- **E13 — Plus de masques 3D** (fait, 2026-11-05) : 4 → 31, dans l'onglet « 3D » en 4 familles (chapeaux, casques et couronnes, lunettes et visage, oreilles et bijoux). 27 vrais modèles de Poly Pizza (téléchargement sans compte), licence lue sur la page de chaque modèle : CC-BY 3.0 (Poly by Google, J-Toastie, jeremy, Michael Fuchs) ou CC0 (Quaternius, iPoly3D), crédités dans `ui/vendor/models3d/CREDITS.txt` et dans Réglages. Chaque modèle est tourné vers la caméra, posé par son bas (chapeaux) ou par sa face avant (lunettes), et réglé à l'œil sur une photo de visage (page d'essai). Écartés après essai : casque audio, masque à gaz, masque de clown, lunettes cœur, casque d'astronaute, chapeau pizza (mal tournés ou trop gros). Les 2 textures intégrées aux `.glb` sont sorties en fichiers à côté : la règle de sécurité de l'app (CSP) bloque les images `blob:` et n'a pas été changée. Un emoji et un objet 3D ne se combinent pas (un seul « masque »). Non vérifié : sur un vrai visage qui bouge, dans Discord.
 - **E14 — Fonds animés** (~10) : dessinés en direct par nous (aurore, néons, étoiles, pluie, neige, bulles, vagues…), pas de vidéo à licence douteuse.
 - **E15 — Looks cinéma** (fait, 2026-11-04) : 12 → 58 filtres. 46 looks calculés par nous (`ui/fxlook.js`), en 5 familles (cinéma, pellicules, saisons et lumières, noir et blanc, couleurs folles) : chacun devient une fois une table de couleurs 32×32×32 (~30 ms), puis la carte graphique l'applique en WebGL (coût mesuré : aucun écart visible avec « Original », page d'essai). Même curseur de force. Film-Luts n'est pas repris : origine non confirmée.
-- Ordre proposé : E12 et E15 (le plus de filtres pour le moins de code), puis E8, E11, E10, E9, E13, E14.
+- Ordre proposé : E12 et E15 (le plus de filtres pour le moins de code), puis E8, E11, E10, E9, E13, E14. E13 fait avant les autres (demande d'Evan, 2026-11-05).
 
 ## Cas limites
 - PC sans carte graphique assez forte : l'effet trop lourd est signalé (E5), jamais calculé sur le CPU en silence.

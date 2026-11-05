@@ -882,7 +882,65 @@ html.cam-full.idle .pv { cursor: none; }
 .ecard b { font-size: 12.5px; font-weight: 600; text-align: center; }
 .ecard:hover { transform: translateY(-2px); }
 .ecard.on { border-color: var(--co); background: color-mix(in srgb, var(--co) 14%, transparent); }
-.esub { margin: 16px 2px 8px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--tx3); }
+/* Effects panel: search, tabs, chips of what is on, families that fold. */
+.fxtop { display: flex; flex-direction: column; gap: 10px; padding: 2px 18px 12px 22px; border-bottom: 1px solid var(--ln); }
+.fxsearch { display: flex; align-items: center; gap: 9px; height: 42px; padding: 0 6px 0 13px; border-radius: 13px; background: var(--p2); border: 1px solid var(--ln); cursor: text; transition: border-color .2s, box-shadow .2s; }
+.fxsearch:focus-within { border-color: var(--co); box-shadow: 0 0 0 3px color-mix(in srgb, var(--co) 22%, transparent); }
+.fxsearch > svg { flex: none; width: 17px; height: 17px; color: var(--tx3); }
+.fxsearch input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--tx); font: 500 14px Geist, system-ui, sans-serif; }
+.fxsearch input::placeholder { color: var(--tx3); }
+.fxsearch input::-webkit-search-cancel-button { display: none; }
+.fxsearch .x { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 9px; background: transparent; color: var(--tx2); cursor: pointer; transition: opacity .2s, background .2s; }
+.fxsearch .x:hover { background: var(--ln); color: var(--tx); }
+.fxsearch .x.off { opacity: 0; pointer-events: none; }
+.fxsearch .x svg { width: 14px; height: 14px; }
+.fxtabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; padding: 4px; border-radius: 15px; background: var(--p2); transition: opacity .25s; }
+.fxtabs.dim { opacity: .45; }
+.fxtabs button { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-width: 0; height: 52px; padding: 0 2px; border: 0; border-radius: 11px; background: transparent; color: var(--tx2); font: 500 12px Geist, system-ui, sans-serif; cursor: pointer; transition: background .25s, color .25s, transform .2s; }
+.fxtabs button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fxtabs button svg { width: 18px; height: 18px; }
+.fxtabs button:hover { color: var(--tx); }
+.fxtabs button:active { transform: scale(.96); }
+.fxtabs button.on { background: var(--tx); color: var(--on-tx); box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+.fxtabs .dot { position: absolute; top: 7px; left: calc(50% + 9px); width: 7px; height: 7px; border-radius: 50%; background: var(--co); box-shadow: 0 0 0 2px var(--p2); }
+.fxtabs button.on .dot { box-shadow: 0 0 0 2px var(--tx); }
+.fxchips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 30px; }
+.fxnone { font-size: 12.5px; color: var(--tx3); }
+.fxchip { display: inline-flex; align-items: center; gap: 6px; height: 30px; max-width: 100%; padding: 0 8px 0 12px; border-radius: 99px; border: 1px solid color-mix(in srgb, var(--co) 45%, transparent); background: color-mix(in srgb, var(--co) 15%, transparent); color: var(--tx); font: 500 12.5px Geist, system-ui, sans-serif; cursor: pointer; animation: fxpop .3s cubic-bezier(.2,.9,.3,1.3); transition: background .2s; }
+.fxchip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fxchip svg { flex: none; width: 12px; height: 12px; opacity: .7; }
+.fxchip:hover { background: color-mix(in srgb, var(--co) 28%, transparent); }
+.fxchips .clr { margin-left: auto; height: 30px; padding: 0 4px; border: 0; background: none; color: var(--tx2); font: 500 12.5px Geist, system-ui, sans-serif; cursor: pointer; }
+.fxchips .clr:hover { color: var(--tx); text-decoration: underline; }
+@keyframes fxpop { from { transform: scale(.7); opacity: 0; } }
+.fxbody { gap: 8px; padding-top: 14px; }
+.fxcard { padding: 12px 14px; border-radius: 16px; border: 1px solid var(--ln); background: var(--p1); }
+.fxcard .sl + .sl { margin-top: 10px; }
+.acc { flex: none; border-radius: 16px; border: 1px solid var(--ln); background: var(--p1); transition: border-color .25s, background .25s; }
+.acc.open { border-color: var(--ln2); }
+.acch { display: flex; align-items: center; gap: 10px; width: 100%; height: 50px; padding: 0 14px 0 16px; border: 0; border-radius: 16px; background: transparent; color: var(--tx); font: 600 14.5px Geist, system-ui, sans-serif; letter-spacing: -.01em; text-align: left; cursor: pointer; }
+.acch:hover { background: color-mix(in srgb, var(--tx) 4%, transparent); }
+.acch span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acch small { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 9px; border-radius: 99px; background: color-mix(in srgb, var(--co) 18%, transparent); color: var(--tx); font-size: 11.5px; font-weight: 600; }
+.acch em { flex: none; min-width: 26px; padding: 2px 7px; border-radius: 99px; background: var(--p2); color: var(--tx3); font: 500 11.5px Geist, system-ui, sans-serif; font-style: normal; text-align: center; }
+.acch svg { flex: none; width: 17px; height: 17px; color: var(--tx3); transition: transform .35s cubic-bezier(.2,.8,.2,1); }
+.acc.open .acch svg { transform: rotate(180deg); }
+.accb { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .38s cubic-bezier(.2,.8,.2,1); }
+.acc.open .accb { grid-template-rows: 1fr; }
+.accb > div { min-height: 0; overflow: hidden; }
+.acci { padding: 2px 10px 12px; opacity: 0; transform: translateY(-6px); transition: opacity .3s, transform .38s cubic-bezier(.2,.8,.2,1); }
+.acc.open .acci { opacity: 1; transform: none; }
+.fcard, .ecard { position: relative; }
+.fav { position: absolute; top: 7px; right: 7px; display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 50%; background: rgba(10,12,16,.55); color: #fff; cursor: pointer; opacity: 0; transform: scale(.8); transition: opacity .2s, transform .2s, color .2s; backdrop-filter: blur(6px); }
+.fav svg { width: 14px; height: 14px; }
+.fcard:hover .fav, .ecard:hover .fav, .fav:focus-visible, .fav.on { opacity: 1; transform: none; }
+.fav.on { color: #FFD54A; }
+.fav.on svg { fill: currentColor; }
+.ecard.m3 { padding: 5px 5px 8px; }
+.ecard.m3 img { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; filter: none; }
+.fxempty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 40px 10px; color: var(--tx3); text-align: center; font-size: 13px; }
+.fxempty svg { width: 28px; height: 28px; margin-bottom: 4px; }
+.fxempty b { color: var(--tx); font-size: 15px; }
 .upd.ok { background: rgba(185,242,90,.1); border-color: rgba(185,242,90,.35); color: #DDF8A8; }
 
 /* Words wrap nicely everywhere. */
@@ -976,3 +1034,4 @@ html.cam-full .pop { left: 24px; right: auto; bottom: 116px; }
 .lc.busy i { display: block; border: 2px solid rgba(95,212,244,.35); border-top-color: #5FD4F4; animation: popspin 1s linear infinite; width: 10px; height: 10px; }
 .lc.busy::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: var(--lp, 0%); background: linear-gradient(90deg, #5FD4F4, #B9F25A); transition: width .4s; }
 .scred { padding: 14px 0; border-top: 1px solid var(--ln); font-size: 12.5px; line-height: 1.55; color: var(--tx3); } .scred b { color: var(--tx2); margin-right: 6px; }
+.fcard:focus-visible, .ecard:focus-visible { outline: 2px solid var(--co); outline-offset: 2px; }

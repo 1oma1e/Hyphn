@@ -12,6 +12,7 @@ Où trouver des filtres déjà faits pour la Cam ([[Cam - Filtres et effets]]), 
 | MediaPipe Tasks Vision (Google) | Apache-2.0 | Points du visage, détourage (modèle paysage 16:9) | `ui/vendor/mediapipe` |
 | Fluent Emoji 3D (Microsoft) | MIT | Les 112 effets « Emojis » | `ui/vendor/fluent` |
 | Looks cinéma faits par nous | Aucune (notre code) | 46 filtres par table de couleurs (LUT) en WebGL | `ui/fxlook.js` |
+| [Poly Pizza](https://poly.pizza) (Poly by Google, J-Toastie, Quaternius, iPoly3D…) | CC-BY 3.0 ou CC0, lue modèle par modèle | 27 objets 3D de l'onglet « 3D » (chapeaux, casques, lunettes, oreilles) | `ui/vendor/models3d/poly` |
 | Photos Wikimedia Commons (Unsplash CC0, NASA, LoC) | CC0 / domaine public | Les 10 décors de fond | `ui/vendor/backgrounds` |
 | Recettes CSSgram (filtres Instagram en CSS) | MIT | Idée des 12 filtres couleur | `ui/fx.js` |
 
@@ -60,6 +61,16 @@ Licences lues sur les dépôts ou les fiches officielles le 2026-11-04, sauf « 
 | Masques 3D | [Quaternius](https://quaternius.com), [Poly Pizza](https://poly.pizza) (ex. couronne de Quaternius) | CC0 ou CC-BY selon le modèle : à vérifier un par un | Des dizaines de chapeaux, couronnes, casques |
 | Fonds animés | Faits par nous (dessin animé en WebGL : aurore, néons, étoiles, pluie…) ; vidéos [Coverr](https://coverr.co), [Mixkit](https://mixkit.co), [Pixabay](https://pixabay.com/videos/) | Les nôtres : aucune ; les vidéos : licence maison, à lire avant d'en mettre dans l'app | À volonté pour les nôtres |
 | Looks cinéma | [Film-Luts](https://github.com/YahiaAngelo/Film-Luts) (LUT de G'MIC) ; looks calculés par nous | MIT déclaré, mais l'origine G'MIC est à vérifier ; les nôtres : aucune | Des dizaines |
+
+## Packs de vrais filtres 3D (2026-11-05)
+Recherche demandée par Evan (GitHub et banques de modèles). Ce qui a été lu :
+- **Poly Pizza** : des milliers de modèles bas poly, **téléchargeables sans compte** (`static.poly.pizza/<id>.glb`), licence affichée sur chaque page (CC-BY 3.0 pour les anciens modèles « Poly by Google », CC0 pour Quaternius et iPoly3D). Packs utiles : « Cosmetic Pack One » et « Two » de J-Toastie (chapeaux, lunettes, CC-BY). **Retenu** : 27 modèles.
+- **Sketchfab** : beaucoup de chapeaux et masques CC-BY, mais le téléchargement demande un compte (à faire par Evan) : pas utilisé.
+- **Khronos glTF Sample Assets** : « Flight Helmet » (CC0) et « Sunglasses Khronos » (CC-BY 4.0) de très belle qualité, mais 30 à 40 Mo de textures et un pied d'exposition sous le casque : écartés.
+- **Jeeliz FaceFilter**, **WebAR.rocks.face** : code libre, mais les modèles des démos ont des licences à vérifier une par une : pas repris.
+- **needle-engine/facefilter** : bibliothèque de filtres (masques texturés sur le visage, modèles 3D) liée au moteur Needle ; ses textures d'exemple viennent de leur serveur, licence non écrite : pas repris.
+- **MediaPipe** (Apache-2.0) : son exemple « face effect » a une texture de peinture du visage alignée sur sa carte UV (`facepaint.pngblob`), utile plus tard pour E8 (maquillage).
+- Listes de sources CC0 : [awesome-cc0](https://github.com/madjin/awesome-cc0) (Kenney, Quaternius, Poly Haven…), [OpenSource3DAssets](https://github.com/toxsam/os3a-gallery).
 
 ## Conclusion
 Pour des masques 3D façon Snapchat sans rien envoyer dehors : garder MediaPipe (déjà là), ajouter three.js (MIT) pour dessiner des modèles 3D accrochés à la matrice du visage, et prendre les modèles 3D sur Sketchfab (CC-BY, à citer) ou ceux des démos Jeeliz quand leur licence le permet. Snap Camera Kit et DeepAR sont écartés : compte, clé ou serveurs extérieurs.

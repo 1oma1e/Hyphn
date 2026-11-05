@@ -2,3 +2,34 @@
 - glasses: "Thug Life | Cool glasses | Stylise goggles" (https://sketchfab.com/3d-models/thug-life-cool-glasses-stylise-goggles-75945f055a8c47098fa8aa4b6a698b07) by MR EXPERT (https://sketchfab.com/Rahul.Kumar5), licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
 - hat: "Clown Hat" (https://sketchfab.com/3d-models/clown-hat-0f5ef2e6205c4b438c593a979a3ccdae) by PatelDev (https://sketchfab.com/PatelDev), licensed under CC-BY-4.0
 - earring: "Earring Jade" (https://sketchfab.com/3d-models/earring-jade-c91e552728fb4b149d52193fd3e03ac5) by Softmind Game Factory (https://sketchfab.com/softmind), licensed under CC-BY-4.0
+
+3D models from Poly Pizza (poly.pizza, downloaded 2026-11-05, licence read on each model page), in poly/.
+The .webp pictures are Poly Pizza previews of the same models. pirate_0.png and gradcap_0.jpg are the
+textures taken out of their .glb (same files, nothing changed). Models with CC-BY 3.0 must keep this credit:
+- tophat: "Top hat" by Poly by Google (https://poly.pizza/m/1PP65IsuNwv), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- cowboy: "Cowboy hat" by Poly by Google (https://poly.pizza/m/aWzUlZtGLC0), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- pirate: "Pirate hat" by Poly by Google (https://poly.pizza/m/9QEds6cYAy6), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- wizard: "Wizard hat" by Poly by Google (https://poly.pizza/m/7VVumyY7L_u), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- sombrero: "Sombrero" by Poly by Google (https://poly.pizza/m/7fGDqHvHap1), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- gradcap: "Graduation cap" by Poly by Google (https://poly.pizza/m/4v0sRFH6PN9), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- cap: "Baseball cap" by Poly by Google (https://poly.pizza/m/aaC5GgcWEhM), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- propeller: "Propeller hat" by jeremy (https://poly.pizza/m/0vAOG_PcdNb), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- santa: "Santa Hat" by J-Toastie (https://poly.pizza/m/84MpXMAPNQ), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- witch: "Witch Hat" by J-Toastie (https://poly.pizza/m/fy1Elzr3nl), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- frog: "Frog Hat" by J-Toastie (https://poly.pizza/m/IBL2UX2eOZ), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- catbeanie: "Cat Beanie" by J-Toastie (https://poly.pizza/m/draiTvOLMQ), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- foxhat: "Fox Hat" by J-Toastie (https://poly.pizza/m/vIhmiBqBtr), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- crown: "Crown" by Quaternius (https://poly.pizza/m/i0PZVuVlYv), CC0 1.0 (public domain)
+- viking: "Viking Helmet" by Michael Fuchs (https://poly.pizza/m/apPuLbVJ4N5), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- football: "Football helmet" by Poly by Google (https://poly.pizza/m/dCmNk08B6gs), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- hardhat: "Hardhat" by Poly by Google (https://poly.pizza/m/cyjbHPC6QAM), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- halo: "Halo" by Poly by Google (https://poly.pizza/m/5jiuuz7sOV_), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- antlers: "Antlers" by Poly by Google (https://poly.pizza/m/9oH6TjelO-W), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- bunny: "Bunny ears" by Poly by Google (https://poly.pizza/m/8JXxwJPbL6K), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- catears: "Cat ears" by Poly by Google (https://poly.pizza/m/197Gkpt6GNV), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- aviator: "Aviator sunglasses" by Poly by Google (https://poly.pizza/m/0Wsi-ygmiIX), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- partyglasses: "Party Glasses" by iPoly3D (https://poly.pizza/m/tPrk0HHagr), CC0 1.0 (public domain)
+- pixelglasses: "Pixel Glasses" by iPoly3D (https://poly.pizza/m/VQuqLwtyTa), CC0 1.0 (public domain)
+- goggles: "Ski Goggles" by iPoly3D (https://poly.pizza/m/4YCjSY3U6H), CC0 1.0 (public domain)
+- monocle: "Monocle" by Poly by Google (https://poly.pizza/m/3enxGxYxEKF), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+- mustache: "Mustache" by Poly by Google (https://poly.pizza/m/0D0BJl1Esi4), CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
