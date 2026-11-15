@@ -1,6 +1,6 @@
 [package]
 name = "hyphn-desktop"
-version = "0.1.0"
+version = "0.1.1"
 description = "Hyphn for Windows: pair with the iPhone, Cam, Windows webcam, OBS and Drop"
 edition = "2021"
 publish = false

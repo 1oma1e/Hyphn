@@ -42,5 +42,6 @@ Une décision par fichier, numérotée. Modèle : `_modele.md`. Statuts : `propo
 | [[ADR-0036 Objectif exact au lieu de la camera combinee]] | L'iPhone ouvre l'objectif exact du bouton (0,5× / 1× / 2× / 5×) : réglages manuels possibles, courte coupure en changeant d'objectif | accepte (2026-11-02) |
 | [[ADR-0037 Filtres Snap avec accord explicite]] | Filtres Snap (Camera Kit) seulement après un accord explicite, une clé, et quand on s'en sert ; avertissement toujours visible ; kit hors dépôt | remplace (par ADR-0038) |
 | [[ADR-0038 Retrait des filtres Snap]] | Snap retiré en entier (peu de filtres, filigrane, données vers Snap) ; plus d'effets faits en local | accepte (2026-11-04) |
+| [[ADR-0039 Setup Windows publie sur GitHub]] | Setup Windows construit sur le PC d'Evan et déposé dans une Release GitHub ; réglages et langues gardés entre les versions | accepte (2026-11-06) |
 
 Liens : [[00-Accueil]]

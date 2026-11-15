@@ -54,6 +54,8 @@ Idées à ajouter petit à petit. **Aucune n'est validée** : Evan choisit, puis
 ## Phase 6 — Finition
 | Idée | Valeur | Effort | Pourquoi |
 |---|---|---|---|
+| Setup construit par GitHub Actions à chaque tag `v…` (option B de [[ADR-0039 Setup Windows publie sur GitHub]]) | ★★ | M | Plus de dépôt à la main sur GitHub |
+| Mise à jour automatique depuis les Releases GitHub (updater de Tauri, setup signé) | ★★ | M | Une nouvelle version sans retélécharger le setup |
 | Rapport « énergie » par session (batterie consommée, temps chaud) | ★★ | S | Prouve que le budget est tenu |
 | Page d'aide intégrée (brouillons TikTok, chauffe, SideStore) | ★★ | S | Déjà dans les maquettes |
 | Palette de commandes Ctrl K sur le PC (tout faire au clavier) | ★ | S | Vue dans la maquette V1 |
