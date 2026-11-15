@@ -149,6 +149,9 @@ private:
     ComPtr<IMFSample> latest_;
     RECT latestRect_{};
     ULONGLONG latestTick_ = 0;
+    // A gap in the pictures being logged (Fill), and the last picture before it.
+    bool gap_ = false;
+    ULONGLONG gapSince_ = 0;
     uint64_t latestSeq_ = 0;
     // The latest picture came decoded from the app (kRaw): NV12, rows packed.
     bool latestRaw_ = false;

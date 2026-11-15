@@ -829,6 +829,7 @@ pub fn run() {
 
             #[cfg(windows)]
             {
+                vcam::keep_full_speed();
                 tauri::async_runtime::spawn(vcam::serve(hub.clone(), vcam_rx, readers));
                 // Off the main thread: Media Foundation may take a moment.
                 let handle = app.handle().clone();

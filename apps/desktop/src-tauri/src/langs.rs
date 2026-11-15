@@ -36,6 +36,9 @@ pub struct Current {
 pub struct Status {
     /// Read from the disk.
     pub installed: Vec<String>,
+    /// Languages Mozilla has a model for (empty before the first download):
+    /// the window never asks for the others.
+    pub known: Vec<String>,
     pub queue: Vec<(Op, String)>,
     pub current: Option<Current>,
     /// Since the queue was last empty: how many done, out of how many.
@@ -63,7 +66,7 @@ impl Langs {
         let _ = std::fs::create_dir_all(&dir);
         translate::clean(&dir);
         let me = Arc::new(Langs {
-            inner: Mutex::new(Inner { status: Status { installed: translate::installed(&dir), ..Status::default() }, queue: VecDeque::new() }),
+            inner: Mutex::new(Inner { status: Status { installed: translate::installed(&dir), known: translate::known(&dir), ..Status::default() }, queue: VecDeque::new() }),
             wake: Condvar::new(),
             dir,
         });
@@ -77,6 +80,7 @@ impl Langs {
         // Always the truth of the disk, in case anything changed meanwhile.
         if i.status.current.is_none() {
             i.status.installed = translate::installed(&self.dir);
+            i.status.known = translate::known(&self.dir);
         }
         i.status.queue = i.queue.iter().cloned().collect();
         i.status.clone()
@@ -155,6 +159,18 @@ impl Langs {
                 }
                 i.status.batch_done += 1;
                 i.status.installed = translate::installed(&self.dir);
+                i.status.known = translate::known(&self.dir);
+                // Done but the disk says otherwise: failed, so the window does
+                // not ask again and again.
+                let there = i.status.installed.contains(&lang);
+                let unknown = !i.status.known.contains(&lang);
+                let wrong = match op {
+                    Op::Install => !there && !unknown,
+                    Op::Remove => there && lang != "en",
+                };
+                if wrong && !i.status.failed.contains(&lang) {
+                    i.status.failed.push(lang.clone());
+                }
             }
             changed(self.status());
             // The counts stay until the next batch: the window shows the summary.

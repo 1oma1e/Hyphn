@@ -113,12 +113,35 @@ fn pick(records: &[Record], from: &str, to: &str) -> Vec<Record> {
     best.into_values().cloned().collect()
 }
 
-fn engine(records: &[Record]) -> Option<Record> {
-    records
-        .iter()
-        .filter(|r| r.name == "bergamot-translator" && for_desktop(r))
-        .max_by_key(|r| version(&r.version))
-        .cloned()
+/// The files of one pair to use: those already whole on disk, so a newer
+/// version published by Mozilla never makes an installed language download
+/// again; else the newest (to download).
+fn choose(dir: &Path, records: &[Record], from: &str, to: &str) -> Vec<Record> {
+    let newest = pick(records, from, to);
+    let on_disk: Vec<Record> = records.iter().filter(|r| local(dir, r).exists()).cloned().collect();
+    let have = pick(&on_disk, from, to);
+    let same_kinds = |a: &[Record], b: &[Record]| a.iter().all(|x| b.iter().any(|y| y.file_type == x.file_type));
+    if !have.is_empty() && have.iter().any(|r| r.file_type == "model") && same_kinds(&newest, &have) {
+        have
+    } else {
+        newest
+    }
+}
+
+/// The engine: the newest one on disk, else the newest published.
+fn engine(dir: &Path, records: &[Record]) -> Option<Record> {
+    let all: Vec<&Record> = records.iter().filter(|r| r.name == "bergamot-translator" && for_desktop(r)).collect();
+    let newest = |on_disk: bool| {
+        all.iter().filter(|r| !on_disk || local(dir, r).exists()).max_by_key(|r| version(&r.version)).map(|r| (*r).clone())
+    };
+    newest(true).or_else(|| newest(false))
+}
+
+/// The lists in hand plus Mozilla's new ones: older records stay known, so
+/// the files they name on disk still count.
+fn merge(old: Vec<Record>, new: Vec<Record>) -> Vec<Record> {
+    let mut seen = BTreeSet::new();
+    new.into_iter().chain(old).filter(|r| seen.insert((r.name.clone(), r.decompressed_hash.clone()))).collect()
 }
 
 fn sha256_hex(b: &[u8]) -> String {
@@ -150,15 +173,17 @@ fn get(url: &str, limit: u64, mut on: impl FnMut(u64)) -> Result<Vec<u8>, String
 
 fn records(dir: &Path, collection: &str, fresh: bool) -> Result<Vec<Record>, String> {
     let cache = dir.join(format!("{collection}.json"));
+    let cached = std::fs::read(&cache).ok().and_then(|b| serde_json::from_slice::<Records>(&b).ok());
     if !fresh {
-        if let Some(r) = std::fs::read(&cache).ok().and_then(|b| serde_json::from_slice::<Records>(&b).ok()) {
+        if let Some(r) = cached {
             return Ok(r.data);
         }
     }
     let body = get(&format!("{RECORDS}{collection}/records"), 32 << 20, |_| {})?;
     let r: Records = serde_json::from_slice(&body).map_err(|e| format!("liste de Mozilla illisible ({e})"))?;
-    std::fs::write(&cache, &body).map_err(|e| e.to_string())?;
-    Ok(r.data)
+    let all = Records { data: merge(cached.map(|c| c.data).unwrap_or_default(), r.data) };
+    std::fs::write(&cache, serde_json::to_vec(&all).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    Ok(all.data)
 }
 
 /// Downloads one file, checks the published hash of the download and of the
@@ -184,11 +209,11 @@ fn fetch(dir: &Path, r: &Record, on: impl FnMut(u64)) -> Result<(), String> {
 
 /// What is needed for `langs`, from the lists in hand.
 fn plan_from(dir: &Path, models: &[Record], engines: &[Record], langs: &[String]) -> Result<(Plan, Vec<Record>), String> {
-    let wasm = engine(engines).ok_or("moteur de traduction introuvable chez Mozilla")?;
+    let wasm = engine(dir, engines).ok_or("moteur de traduction introuvable chez Mozilla")?;
     let mut need = vec![wasm.clone()];
     let mut pairs = BTreeMap::new();
     for (from, to) in pairs_for(langs) {
-        let files = pick(models, &from, &to);
+        let files = choose(dir, models, &from, &to);
         if !files.iter().any(|r| r.file_type == "model") {
             // A language without a model keeps the user's text (ADR-0033).
             continue;
@@ -252,13 +277,30 @@ pub fn installed(dir: &Path) -> Vec<String> {
         return vec![];
     };
     let whole = |rs: &[Record]| rs.iter().any(|r| r.file_type == "model") && rs.iter().all(|r| local(dir, r).exists());
-    if !engine(&engines).is_some_and(|w| local(dir, &w).exists()) || !whole(&pick(&models, SOURCE, PIVOT)) {
+    if !engine(dir, &engines).is_some_and(|w| local(dir, &w).exists()) || !whole(&choose(dir, &models, SOURCE, PIVOT)) {
         return vec![];
     }
     let targets: BTreeSet<&str> = models.iter().filter(|r| r.source == PIVOT).map(|r| r.target.as_str()).collect();
     std::iter::once(PIVOT.to_string())
-        .chain(targets.into_iter().filter(|t| whole(&pick(&models, PIVOT, t))).map(lang_of))
+        .chain(targets.into_iter().filter(|t| whole(&choose(dir, &models, PIVOT, t))).map(lang_of))
         .collect()
+}
+
+/// Languages Mozilla has a model for, from the list on disk (empty before the
+/// first download): the others keep the typed text and are never fetched.
+pub fn known(dir: &Path) -> Vec<String> {
+    let Ok(models) = records(dir, MODELS, false) else {
+        return vec![];
+    };
+    let mut out: BTreeSet<String> = models
+        .iter()
+        .filter(|r| r.source == PIVOT && r.file_type == "model" && for_desktop(r))
+        .map(|r| lang_of(&r.target))
+        .collect();
+    if models.iter().any(|r| r.source == SOURCE && r.target == PIVOT && r.file_type == "model") {
+        out.insert(PIVOT.to_string());
+    }
+    out.into_iter().collect()
 }
 
 /// Uninstalls one language: its files leave the disk. English, the way to
@@ -269,15 +311,17 @@ pub fn remove(dir: &Path, lang: &str) -> Result<u64, String> {
     let (Ok(models), Ok(engines)) = (records(dir, MODELS, false), records(dir, ENGINE, false)) else {
         return Ok(0);
     };
+    // Every version on disk goes, not only the one in use.
+    let pair = |from: &str, to: &str| models.iter().filter(|r| r.source == from && r.target == to).cloned().collect::<Vec<_>>();
     let files = if lang == PIVOT {
         if installed(dir).len() > 1 {
             return Ok(0);
         }
-        let mut f = pick(&models, SOURCE, PIVOT);
-        f.extend(engine(&engines));
+        let mut f = pair(SOURCE, PIVOT);
+        f.extend(engines.iter().filter(|r| r.name == "bergamot-translator").cloned());
         f
     } else {
-        pick(&models, PIVOT, code(lang))
+        pair(PIVOT, code(lang))
     };
     let mut freed = 0;
     for r in files {
@@ -377,6 +421,39 @@ mod tests {
         assert_eq!(remove(&dir, "en").unwrap(), 10);
         assert!(installed(&dir).is_empty());
         assert!(plan(&dir, &["de".to_string()]).is_err());
+    }
+
+    #[test]
+    fn a_newer_version_at_mozilla_does_not_download_again() {
+        let dir = std::env::temp_dir().join("hyphn-translate-newer");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut old = vec![
+            rec("bergamot-translator", "", "4.0", "", "", ""),
+            rec("model.fren", "model", "3.0", "fr", "en", ""),
+            rec("model.ende", "model", "3.0", "en", "de", ""),
+            rec("vocab.ende", "vocab", "3.0", "en", "de", ""),
+        ];
+        for (i, x) in old.iter_mut().enumerate() {
+            x.decompressed_hash = format!("{i:0>64}");
+            std::fs::write(local(&dir, x), b"12345").unwrap();
+        }
+        // Mozilla's new list: German in a version 4 not on disk; the merge keeps version 3 known.
+        let mut newer = vec![rec("model.ende", "model", "4.0", "en", "de", ""), rec("vocab.ende", "vocab", "4.0", "en", "de", "")];
+        for (i, x) in newer.iter_mut().enumerate() {
+            x.decompressed_hash = format!("{:0>64}", 90 + i);
+        }
+        let models = merge(old[1..].to_vec(), newer);
+        let json = |d: &[Record]| serde_json::to_vec(&Records { data: d.to_vec() }).unwrap();
+        std::fs::write(dir.join(format!("{ENGINE}.json")), json(&old[..1])).unwrap();
+        std::fs::write(dir.join(format!("{MODELS}.json")), json(&models)).unwrap();
+        assert_eq!(installed(&dir), vec!["en", "de"]);
+        assert_eq!(known(&dir), vec!["de", "en"]);
+        let (_, missing) = plan_from(&dir, &models, &old[..1], &["de".to_string()]).unwrap();
+        assert!(missing.is_empty(), "nothing to download: {missing:?}");
+        // Removing German deletes the version on disk.
+        assert_eq!(remove(&dir, "de").unwrap(), 10);
+        assert_eq!(installed(&dir), vec!["en"]);
     }
 
     /// Real download from Mozilla (≈ 50 MB): `cargo test mozilla -- --ignored`.

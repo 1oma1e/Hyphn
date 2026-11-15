@@ -1950,9 +1950,19 @@ const Cam = {
       return;
     }
     const c = this.cs;
-    const missing = c.multi ? chosenLangs(c).filter((l) => needsModel(c, l) && !st.installed.includes(l) && !st.failed.includes(l)) : [];
+    // Mozilla has no model for some languages: they keep the typed text and
+    // are not asked again at every launch.
+    const known = (l) => !st.known || !st.known.length || st.known.includes(l);
+    const missing = c.multi ? chosenLangs(c).filter((l) => needsModel(c, l) && known(l) && !st.installed.includes(l) && !st.failed.includes(l)) : [];
     if (missing.length) {
       invoke('langs_ask', { op: 'install', list: missing });
+      return;
+    }
+    // Unticked but still on disk (a removal cut short): freed now. English
+    // stays while another language needs it (Rust keeps it).
+    const extra = c.multi ? st.installed.filter((l) => l !== 'en' && !chosenLangs(c).includes(l) && !st.failed.includes(l)) : [];
+    if (extra.length) {
+      invoke('langs_ask', { op: 'remove', list: extra });
       return;
     }
     this.translate();

@@ -461,6 +461,7 @@ impl RawFeed {
         let (d, h) = (dec.clone(), hub.clone());
         // Ends when the sink (and so `ftx`) is removed.
         std::thread::spawn(move || {
+            sys::raise_thread();
             for f in frx {
                 if d.push(&f) {
                     h.request_key();
@@ -472,6 +473,7 @@ impl RawFeed {
         let feed = RawFeed { stop: Arc::default(), fx: fx::register(out.clone(), size.clone()), size };
         let (stop, cur) = (feed.stop.clone(), feed.size.clone());
         std::thread::spawn(move || {
+            sys::raise_thread();
             // Woken by each new picture; the 1 s timeout only notices the end.
             while !stop.load(Ordering::Relaxed) {
                 // The window sends pictures with effects: they go instead.
@@ -579,7 +581,7 @@ pub fn obs_present() -> bool {
 }
 
 #[cfg(windows)]
-pub use sys::{create_camera, remove_camera, run_elevated};
+pub use sys::{create_camera, keep_full_speed, remove_camera, run_elevated};
 
 #[cfg(windows)]
 mod sys {
@@ -596,7 +598,33 @@ mod sys {
     use windows_sys::Win32::Security::{GetTokenInformation, TokenUser, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER};
     use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryExW, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR};
     use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ};
-    use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetExitCodeProcess, OpenProcessToken, WaitForSingleObject, INFINITE};
+    use windows_sys::Win32::System::Threading::{
+        GetCurrentProcess, GetCurrentThread, GetExitCodeProcess, OpenProcessToken, ProcessPowerThrottling, SetProcessInformation, SetThreadPriority,
+        WaitForSingleObject, INFINITE, PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
+        PROCESS_POWER_THROTTLING_STATE, THREAD_PRIORITY_ABOVE_NORMAL,
+    };
+
+    /// Hyphn in the background (a game in front) keeps its full speed: Windows
+    /// would otherwise slow it down (EcoQoS) and the webcam would miss pictures.
+    pub fn keep_full_speed() {
+        let st = PROCESS_POWER_THROTTLING_STATE {
+            Version: PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+            ControlMask: PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
+            StateMask: 0,
+        };
+        // SAFETY: a valid struct of the size given, for this very process.
+        unsafe {
+            SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, (&st as *const PROCESS_POWER_THROTTLING_STATE).cast(), std::mem::size_of_val(&st) as u32);
+        }
+    }
+
+    /// The calling thread goes before the normal ones (a game's included).
+    pub fn raise_thread() {
+        // SAFETY: the pseudo handle of the calling thread.
+        unsafe {
+            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+        }
+    }
     use windows_sys::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW};
     use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
 

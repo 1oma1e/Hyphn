@@ -24,6 +24,9 @@ namespace hyphn {
 namespace {
 
 constexpr ULONGLONG kStaleMs = 1500;  // no picture for this long: waiting screen
+// iPhone linked and live: a late picture (the PC busy with a game, a still
+// scene) keeps the last one on screen this long, never the waiting screen.
+constexpr ULONGLONG kHoldMs = 10000;
 constexpr uint32_t kMaxPayload = 16u << 20;
 
 // Same list and order as LANGS in apps/desktop/ui/app.js. `whole`: joined
@@ -840,7 +843,7 @@ bool Feed::HasLiveVideo() {
         live = state_.app && state_.live;
     }
     std::lock_guard<std::mutex> l(frameLock_);
-    return live && latest_ && GetTickCount64() - latestTick_ < kStaleMs;
+    return live && latest_ && GetTickCount64() - latestTick_ < kHoldMs;
 }
 
 HRESULT Feed::Fill(BYTE* dst, LONG pitch, UINT32 w, UINT32 h, Pixel fmt, bool* video) {
@@ -874,8 +877,20 @@ HRESULT Feed::Fill(BYTE* dst, LONG pitch, UINT32 w, UINT32 h, Pixel fmt, bool* v
         tick = latestTick_;
         raw = latestRaw_;
     }
-    bool fresh = sample && GetTickCount64() - tick < kStaleMs;
+    ULONGLONG age = sample ? GetTickCount64() - tick : 0;
+    bool fresh = sample && age < (st.phone ? kHoldMs : kStaleMs);
     bool showVideo = st.app && st.live && fresh && src.right > src.left && src.bottom > src.top;
+    // Gaps in the pictures, for the log: when they start and how long they last.
+    if (st.app && st.live && sample) {
+        if (age >= 500 && !gap_) {
+            gap_ = true;
+            Log("feed: no new picture for %llu ms (phone %s)", age, st.phone ? "linked" : "gone");
+        } else if (age < 500 && gap_) {
+            gap_ = false;
+            Log("feed: pictures back after %llu ms", GetTickCount64() - gapSince_);
+        }
+        if (!gap_) gapSince_ = tick;
+    }
     if (showVideo && raw && fmt == Pixel::NV12 && src.left == 0 && src.top == 0 && static_cast<UINT32>(src.right) == w &&
         static_cast<UINT32>(src.bottom) == h) {
         // Decoded by the app at exactly this size: a plain copy, no trip to the card.
