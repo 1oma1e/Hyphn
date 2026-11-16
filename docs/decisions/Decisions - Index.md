@@ -43,5 +43,6 @@ Une décision par fichier, numérotée. Modèle : `_modele.md`. Statuts : `propo
 | [[ADR-0037 Filtres Snap avec accord explicite]] | Filtres Snap (Camera Kit) seulement après un accord explicite, une clé, et quand on s'en sert ; avertissement toujours visible ; kit hors dépôt | remplace (par ADR-0038) |
 | [[ADR-0038 Retrait des filtres Snap]] | Snap retiré en entier (peu de filtres, filigrane, données vers Snap) ; plus d'effets faits en local | accepte (2026-11-04) |
 | [[ADR-0039 Setup Windows publie sur GitHub]] | Setup Windows construit sur le PC d'Evan et déposé dans une Release GitHub ; réglages et langues gardés entre les versions | accepte (2026-11-06) |
+| [[ADR-0040 Mises a jour auto et depot public]] | Dépôt public ; updater Tauri (latest.json signé) pour le PC, source SideStore pour l'iPhone ; release par `tools/release.ps1` | accepte (2026-11-16) |
 
 Liens : [[00-Accueil]]

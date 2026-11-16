@@ -1035,3 +1035,8 @@ html.cam-full .pop { left: 24px; right: auto; bottom: 116px; }
 .lc.busy::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: var(--lp, 0%); background: linear-gradient(90deg, #5FD4F4, #B9F25A); transition: width .4s; }
 .scred { padding: 14px 0; border-top: 1px solid var(--ln); font-size: 12.5px; line-height: 1.55; color: var(--tx3); } .scred b { color: var(--tx2); margin-right: 6px; }
 .fcard:focus-visible, .ecard:focus-visible { outline: 2px solid var(--co); outline-offset: 2px; }
+
+/* Mise à jour disponible (ADR-0040): above the progress card, never under it. */
+.pop.upd { bottom: auto; top: 84px; align-items: flex-start; }
+.pop.upd .pic::after { display: none; }
+.pop .pact { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }

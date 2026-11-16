@@ -5,6 +5,8 @@
 secrets/
 *.p12
 *.mobileprovision
+# Clé de signature des mises à jour (ADR-0040) : jamais dans le dépôt
+*.key
 
 # Builds
 target/

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Hyphn",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "identifier": "io.github.1oma1e.hyphn.desktop",
   "build": {
     "frontendDist": "../ui"
@@ -37,6 +37,16 @@
         "installerHooks": "./windows/hooks.nsh"
       }
     },
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"]
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVDN0NDOTlFNTc2RDUyNTAKUldSUVVtMVhuc2w4N01Zb0RsaTcvR01jUy9Sc0x5MXdoL2s2Z2FhNTJIV3Y0TFNnc1Q1K2VKWHMK",
+      "endpoints": ["https://github.com/1oma1e/Hyphn/releases/latest/download/latest.json"],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

@@ -55,7 +55,6 @@ Idées à ajouter petit à petit. **Aucune n'est validée** : Evan choisit, puis
 | Idée | Valeur | Effort | Pourquoi |
 |---|---|---|---|
 | Setup construit par GitHub Actions à chaque tag `v…` (option B de [[ADR-0039 Setup Windows publie sur GitHub]]) | ★★ | M | Plus de dépôt à la main sur GitHub |
-| Mise à jour automatique depuis les Releases GitHub (updater de Tauri, setup signé) | ★★ | M | Une nouvelle version sans retélécharger le setup |
 | Image de fond choisie gardée dans un fichier à part, pas dans `settings.json` (277 Ko en texte aujourd'hui) | ★ | S | Réglages plus légers, lus et écrits plus vite |
 | Rapport « énergie » par session (batterie consommée, temps chaud) | ★★ | S | Prouve que le budget est tenu |
 | Page d'aide intégrée (brouillons TikTok, chauffe, SideStore) | ★★ | S | Déjà dans les maquettes |

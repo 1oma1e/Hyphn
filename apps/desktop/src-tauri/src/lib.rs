@@ -16,6 +16,7 @@ mod store;
 mod timing;
 mod tls;
 mod translate;
+mod update;
 mod langs;
 mod vcam;
 mod video;
@@ -782,6 +783,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             let pc_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Ce PC".into());
@@ -899,7 +901,9 @@ pub fn run() {
             cam_live,
             cam_preview,
             cam_video_url,
-            vcam_install
+            vcam_install,
+            update::update_check,
+            update::update_install
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hyphn");

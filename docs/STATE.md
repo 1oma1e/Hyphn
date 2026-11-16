@@ -1,6 +1,6 @@
 # État du projet
 
-Mis à jour : 2026-11-16 (session « vraie app Windows et webcam pendant un jeu »). Réécrit à chaque `/session-end`.
+Mis à jour : 2026-11-16 (mises à jour auto et dépôt public, [[ADR-0040 Mises a jour auto et depot public]]). Réécrit à chaque `/session-end`.
 
 ## Phase
 **1 — Socle**, depuis le 2026-10-31 ([[ADR-0020 Phase 1 sans attendre le rafraichissement]]). Cam v1, Cam v2 et Drop v1 commencés en avance. Porte de la phase 1 : [[ROADMAP]].
@@ -13,6 +13,7 @@ Mis à jour : 2026-11-16 (session « vraie app Windows et webcam pendant un jeu 
 - Effets de la Cam dans la vraie app : panneau avec recherche, filtres, fond, émojis, masques 3D ; Snap essayé puis retiré ([[ADR-0038 Retrait des filtres Snap]]).
 
 ## Fait, pas encore confirmé par Evan
+- **Version 0.2.0** : mise à jour auto du PC (updater Tauri, setup signé, `latest.json`) avec carte « Hyphn x.y est disponible » (vue sur une page d'essai) ; source SideStore `source.json` pour l'iPhone ; README anglais ; `tools/release.ps1`. Fichiers dans `F:\Hyphn\out\v0.2.0\`. Mise à jour réelle non vérifiée (il faut une Release publique plus récente).
 - Webcam pendant un jeu (0.1.1) : garde la dernière image jusqu'à 10 s au lieu de l'écran d'attente, refus d'EcoQoS, décodage en priorité haute, fenêtre non ralentie en arrière-plan (E4 de [[Cam - Webcam Windows et OBS]]).
 - **Drop v1** ([[ADR-0029 Drop guide avec anti-doublon des la v1]], [[ADR-0030 Drop commence sur l'iPhone et le PC confirme]]).
 - iPhone 0.9.1 (16) : objectif exact ([[ADR-0036 Objectif exact au lieu de la camera combinee]]) ; compilé, pas installé.
@@ -20,7 +21,7 @@ Mis à jour : 2026-11-16 (session « vraie app Windows et webcam pendant un jeu 
 - Tests : `cargo test` dans `apps/desktop/src-tauri/` → 102 passent (2026-11-16).
 
 ## Pas fait
-- **Release GitHub v0.1.1** : à créer par Evan (tag `v0.1.1`, fichier `F:\Hyphn\out\Hyphn_0.1.1_x64-setup.exe`).
+- **Par Evan** : rendre le dépôt public, puis créer la Release `v0.2.0` avec les 3 fichiers de `F:\Hyphn\out\v0.2.0\` ; sauvegarder `F:\Hyphn\keys\` (sans la clé, plus de mise à jour possible). La 0.1.1 installée passe à 0.2.0 à la main une fois.
 - Sessions du 2026-11-03 au 2026-11-05 (effets, Snap) sans journal : résumé seulement dans les commits et les ADR 0037-0038.
 - Specs en brouillon à valider : [[Cam - Reglages avances]], [[Cam - Filtres et effets]], [[Cam - Ecrans d'attente]] ; E3 à E6 de [[Cam - Latence et fluidite]].
 - Mesure en Wi-Fi ; but chiffré de latence (à fixer par Evan).
@@ -42,7 +43,7 @@ Mis à jour : 2026-11-16 (session « vraie app Windows et webcam pendant un jeu 
 - Journaux : `C:\ProgramData\Hyphn\vcam.log` (webcam) ; iPhone : Réglages › « Journal de la liaison ».
 
 ## Prochaine étape
-1. Evan publie la Release v0.1.1 et joue avec Discord ouvert : écran d'attente ou pas ? Sinon, lire `vcam.log`.
+1. Evan rend le dépôt public, publie la Release v0.2.0, installe 0.2.0 et joue avec Discord ouvert : écran d'attente ou pas ? Sinon, lire `vcam.log`.
 2. Puis reprendre les specs Cam en brouillon (réglages avancés, filtres et effets) pour les valider, ou la porte de la phase 1 (moins de 3 s après le scan).
 
 Commande pour commencer : `/session-start Vérifier la webcam pendant un jeu, puis valider les specs Cam en brouillon`.

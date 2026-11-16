@@ -18,6 +18,8 @@ L'état exact et la prochaine étape sont dans `docs/STATE.md` (affiché au dém
 ## Commandes
 - Contrôle des docs : `powershell -NoProfile -File tools/check-docs.ps1` (doit afficher `check-docs: OK`).
 - App PC (`apps/desktop/`, iPhone simulé, ADR-0019) : `npm install` une fois, puis `npm run dev` pour la lancer ; tests : `cargo test` dans `apps/desktop/src-tauri/`. Le build Rust va dans `CARGO_TARGET_DIR` (F:).
+- Webcam et plugin OBS : `powershell -NoProfile -File tools/build-native.ps1`.
+- Release (setup signé, `latest.json`, `source.json`) : `powershell -NoProfile -File tools/release.ps1 -Notes "..."`, Hyphn fermée ; clé de signature dans `F:\Hyphn\keys\` (ADR-0040), à ne jamais perdre ni commiter.
 - Après un clone : `git config core.hooksPath .githooks` (active le refus des lignes `Co-Authored-By`).
 
 ## Façon de travailler avec Evan

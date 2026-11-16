@@ -1,0 +1,44 @@
+{
+  "name": "Hyphn",
+  "subtitle": "Your iPhone as your PC's webcam, locally.",
+  "description": "Hyphn turns your iPhone into a 4K60 webcam for Windows and sends your photos to your PC, over Wi-Fi or cable, with no account and no cloud.",
+  "iconURL": "https://raw.githubusercontent.com/1oma1e/Hyphn/main/apps/ios/AppIcon.png",
+  "website": "https://github.com/1oma1e/Hyphn",
+  "tintColor": "#5FD4F4",
+  "nsfw": false,
+  "featuredApps": [
+    "io.github.1oma1e.hyphn"
+  ],
+  "apps": [
+    {
+      "name": "Hyphn",
+      "bundleIdentifier": "io.github.1oma1e.hyphn",
+      "developerName": "1oma1e",
+      "subtitle": "iPhone webcam and photo drop for Windows.",
+      "localizedDescription": "Pair with the Hyphn app on your Windows PC by QR code. Cam: your iPhone becomes a webcam for Discord, Teams and OBS, up to 4K60 HEVC. Drop: send photos and videos to your PC in original quality. Everything stays on your local network.",
+      "iconURL": "https://raw.githubusercontent.com/1oma1e/Hyphn/main/apps/ios/AppIcon.png",
+      "tintColor": "#5FD4F4",
+      "category": "photo-video",
+      "versions": [
+        {
+          "version": "0.9.1",
+          "buildVersion": "16",
+          "date": "2026-11-16",
+          "localizedDescription": "Automatic updates: Hyphn now offers new versions by itself on the PC, and SideStore shows iPhone updates.",
+          "downloadURL": "https://github.com/1oma1e/Hyphn/releases/download/v0.2.0/Hyphn_0.9.1.ipa",
+          "size": 2933386,
+          "minOSVersion": "17.0"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSCameraUsageDescription": "Hyphn uses the camera to read the PC's QR code and to become your PC's webcam.",
+          "NSPhotoLibraryUsageDescription": "Hyphn sends the photos and videos you choose to your PC, in their original quality.",
+          "NSLocalNetworkUsageDescription": "Hyphn talks to your PC on your local network, directly and encrypted."
+        }
+      }
+    }
+  ],
+  "news": []
+}

@@ -12,6 +12,9 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 // itself in plain words: [title, what it does, advice]. A new setting comes
 // with its text here.
 const TIPS = {
+  // Mise à jour (ADR-0040)
+  upd_go: ['Installer', 'Télécharge la nouvelle version depuis GitHub, vérifie sa signature, l’installe et relance Hyphn.', 'Réglages, iPhone relié et langues sont gardés. Windows demande « Oui » une fois.'],
+  upd_later: ['Plus tard', 'Cache cette carte. Hyphn la remontre au prochain lancement.'],
   // Cam › Réglages
   profile: ['Profil', 'Règle tout d’un coup, selon ce que tu fais.', 'Max pour la plus belle image. Appel pour Discord ou Teams. Économie si l’iPhone n’est pas branché.'],
   adjclose: ['Fermer', 'Cache le panneau pour voir l’image entière. Les réglages restent appliqués.'],
@@ -2757,6 +2760,49 @@ const PAGES = { home: Home, pair: Pair, cam: Cam, drop: Drop, settings: Settings
 async function refresh() {
   onSnapshot(await invoke('get_snapshot'));
 }
+// A newer Hyphn on GitHub (ADR-0040): a card offers it at launch; one click
+// downloads, checks and installs it, then Hyphn restarts by itself.
+const Update = {
+  async check() {
+    let u = null;
+    try {
+      u = await invoke('update_check');
+    } catch (e) {
+      console.warn('update check:', e); // offline or no release yet: nothing to show
+      return;
+    }
+    if (!u) return;
+    const el = document.createElement('div');
+    el.className = 'pop upd';
+    el.setAttribute('role', 'dialog');
+    el.innerHTML = `<span class="pic">${I.down}</span>
+      <div class="ptx"><b>Hyphn ${esc(u.version)} est disponible</b><small>Tes réglages et ton iPhone sont gardés.</small>
+        <div class="pact"><button class="btn sm" type="button" data-k="later"${tipAttr('upd_later')}>Plus tard</button>
+        <button class="btn sm pri" type="button" data-k="go"${tipAttr('upd_go')}>Installer</button></div></div>`;
+    document.body.appendChild(el);
+    void el.offsetWidth;
+    el.classList.add('on');
+    el.addEventListener('click', (e) => {
+      const k = e.target.closest('[data-k]')?.dataset.k;
+      if (k === 'later') el.classList.remove('on');
+      if (k === 'go') this.install(el, u.version);
+    });
+  },
+  async install(el, version) {
+    $('.ptx', el).innerHTML = `<b>Installation de ${esc(version)}…</b><small>Hyphn va se fermer puis se rouvrir.</small><div class="pbar"><i></i></div>`;
+    listen('update_progress', (e) => {
+      const [done, total] = e.payload;
+      if (total) $('.pbar i', el).style.width = Math.max(3, (100 * done) / total) + '%';
+    });
+    try {
+      await invoke('update_install');
+    } catch (err) {
+      el.remove();
+      toast(String(err), 'info');
+    }
+  },
+};
+
 function onSnapshot(snap) {
   S = snap;
   paintHeader();
@@ -2776,6 +2822,7 @@ function onSnapshot(snap) {
   listen('pair', (e) => Pair.onPair(e.payload));
   // Installed by itself at launch (one admin « Oui »).
   listen('vcam_installed', () => toast('Webcam Windows prête'));
+  Update.check();
   listen('langs', (e) => {
     Cam.cs = Cam.cs || Object.assign({}, CAM_DEFAULTS, settings.cam || {});
     Cam.onLangs(e.payload);
