@@ -767,7 +767,7 @@ const POWER = [['max', 'Ne rien baisser', 'Plus belle image'], ['balanced', 'Bai
 const CAM_DEFAULTS = {
   res: 0, fps: 3, codec: 0, rate: 0, power: 'max',
   ev: 0, focus: 50, wb: 5600, afA: true, wbA: true, torch: false, stab: 0,
-  aeA: true, iso: 200, shutter: 10000, tint: 0, zoom: 100, hdr: false, poi: null,
+  aeA: true, iso: 200, shutter: 10000, tint: 0, zoom: 100, hdr: false, poi: null, peekAt: null,
   msg: 'Je reviens bientôt', multi: true, langs: null, wst: 0, prof: 0, lens: 1, front: false, mirror: false, turn: 0,
 };
 // Stops offered by the stepped sliders, cut to what the iPhone allows.
@@ -1251,6 +1251,8 @@ const Cam = {
     Video.start($('#c-scene'));
     // Panel open: a click on the live picture picks the focus and exposure point.
     $('#c-vbox').addEventListener('click', (e) => this.pickPoint(e));
+    $('#c-vbox').addEventListener('pointerdown', (e) => this.dragPeek(e));
+    this.placePeek();
     this.paintDock();
     this.push();
     // While paused, the iPhone sends a small preview only while this page is
@@ -1832,6 +1834,44 @@ const Cam = {
     const c = this.cs;
     const i = PROFILES.findIndex(([, r, f, p]) => r === c.res && f === c.fps && p === c.power);
     c.prof = i >= 0 && c.rate === 0 && c.codec === 0 ? i : CUSTOM;
+  },
+  // The paused preview goes where it was dragged: [x, y] from the bottom right
+  // corner, 0..1 of the free room, so it stays inside at any window size.
+  placePeek() {
+    const box = $('#c-vbox');
+    const at = this.cs.peekAt;
+    box.classList.toggle('moved', !!at);
+    if (!at) return;
+    box.style.setProperty('--fx', at[0]);
+    box.style.setProperty('--fy', at[1]);
+  },
+  dragPeek(e) {
+    const box = $('#c-vbox');
+    if (e.button !== 0 || !box.classList.contains('peek') || e.target.closest('.pclose')) return;
+    e.preventDefault();
+    const pv = $('#c-pv').getBoundingClientRect();
+    const b = box.getBoundingClientRect();
+    const dx = e.clientX - b.left, dy = e.clientY - b.top;
+    const clamp = (v) => Math.round(Math.min(1, Math.max(0, v)) * 1000) / 1000;
+    let at = null;
+    const move = (ev) => {
+      at = [clamp((pv.right - (ev.clientX - dx + b.width)) / (pv.width - b.width)),
+        clamp((pv.bottom - (ev.clientY - dy + b.height)) / (pv.height - b.height))];
+      this.cs.peekAt = at;
+      this.placePeek();
+    };
+    const up = () => {
+      box.classList.remove('drag');
+      box.removeEventListener('pointermove', move);
+      box.removeEventListener('pointerup', up);
+      box.removeEventListener('pointercancel', up);
+      if (at) this.save();
+    };
+    box.setPointerCapture(e.pointerId);
+    box.classList.add('drag');
+    box.addEventListener('pointermove', move);
+    box.addEventListener('pointerup', up);
+    box.addEventListener('pointercancel', up);
   },
   // The point as sent: 0..1000 on the picture, letterbox left out.
   pickPoint(e) {
