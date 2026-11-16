@@ -63,7 +63,7 @@ final class CableListener {
         do {
             l = try NWListener(using: p, on: NWEndpoint.Port(rawValue: Self.port)!)
         } catch {
-            onLog?("Câble : écoute impossible (\(error))")
+            onLog?(L("Cable: can't listen (\(error))", "Câble : écoute impossible (\(error))"))
             retryLater()
             return
         }
@@ -79,10 +79,10 @@ final class CableListener {
             DispatchQueue.main.async {
                 guard let self, self.listener === l else { return }
                 switch state {
-                case .ready: self.onLog?("Câble : prêt (port \(Self.port))")
-                case let .waiting(e): self.onLog?("Câble : écoute en attente (\(e))")
+                case .ready: self.onLog?(L("Cable: ready (port \(Self.port))", "Câble : prêt (port \(Self.port))"))
+                case let .waiting(e): self.onLog?(L("Cable: waiting to listen (\(e))", "Câble : écoute en attente (\(e))"))
                 case let .failed(e):
-                    self.onLog?("Câble : écoute arrêtée (\(e))")
+                    self.onLog?(L("Cable: listening stopped (\(e))", "Câble : écoute arrêtée (\(e))"))
                     self.listener?.cancel()
                     self.listener = nil
                     self.retryLater()

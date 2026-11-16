@@ -159,12 +159,12 @@ fn local(dir: &Path, r: &Record) -> PathBuf {
 /// A download; `on(bytes so far)` while it comes, for a smooth progress bar.
 fn get(url: &str, limit: u64, mut on: impl FnMut(u64)) -> Result<Vec<u8>, String> {
     let agent = ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(10)).timeout_read(Duration::from_secs(60)).build();
-    let resp = agent.get(url).call().map_err(|e| format!("téléchargement impossible ({e})"))?;
+    let resp = agent.get(url).call().map_err(|e| format!("{} ({e})", crate::i18n::tr("download failed", "téléchargement impossible")))?;
     let mut out = Vec::new();
     let mut rd = resp.into_reader().take(limit);
     let mut buf = vec![0u8; 256 << 10];
     loop {
-        let n = rd.read(&mut buf).map_err(|e| format!("téléchargement coupé ({e})"))?;
+        let n = rd.read(&mut buf).map_err(|e| format!("{} ({e})", crate::i18n::tr("download interrupted", "téléchargement coupé")))?;
         if n == 0 {
             break;
         }
@@ -194,7 +194,7 @@ fn records(dir: &Path, collection: &str, fresh: bool) -> Result<Vec<Record>, Str
 fn fetch(dir: &Path, r: &Record, on: impl FnMut(u64)) -> Result<(), String> {
     let packed = get(&format!("{CDN}{}", r.attachment.location), r.attachment.size + 1, on)?;
     if packed.len() as u64 != r.attachment.size || sha256_hex(&packed) != r.attachment.hash {
-        return Err(format!("{} : fichier abîmé pendant le téléchargement", r.name));
+        return Err(format!("{}{}{}", r.name, crate::i18n::colon(), crate::i18n::tr("file damaged during download", "fichier abîmé pendant le téléchargement")));
     }
     let mut out = Vec::new();
     ruzstd::decoding::StreamingDecoder::new(packed.as_slice())
@@ -202,7 +202,7 @@ fn fetch(dir: &Path, r: &Record, on: impl FnMut(u64)) -> Result<(), String> {
         .read_to_end(&mut out)
         .map_err(|e| e.to_string())?;
     if sha256_hex(&out) != r.decompressed_hash {
-        return Err(format!("{} : contenu différent de celui publié par Mozilla", r.name));
+        return Err(format!("{}{}{}", r.name, crate::i18n::colon(), crate::i18n::tr("content differs from what Mozilla published", "contenu différent de celui publié par Mozilla")));
     }
     let path = local(dir, r);
     let tmp = path.with_extension("part");
@@ -261,7 +261,7 @@ pub fn plan(dir: &Path, langs: &[String]) -> Result<Plan, String> {
     if missing.is_empty() {
         Ok(plan)
     } else {
-        Err("langue pas encore installée".into())
+        Err(crate::i18n::tr("language not installed yet", "langue pas encore installée").into())
     }
 }
 

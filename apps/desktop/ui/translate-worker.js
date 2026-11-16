@@ -16,7 +16,7 @@ function start(wasmBinary) {
     const m = loadBergamot({
       INITIAL_MEMORY: 41_943_040,
       print: () => {},
-      onAbort: () => reject(new Error('le moteur de traduction n’a pas démarré')),
+      onAbort: () => reject(new Error('the translation engine did not start')),
       onRuntimeInitialized: async () => {
         await Promise.resolve();
         resolve(m);

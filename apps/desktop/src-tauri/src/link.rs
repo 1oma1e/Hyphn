@@ -854,13 +854,13 @@ impl Hub {
         }
         if !self.is_paired(&fp) {
             // Spec `Core - Reconnexion`, E4: never accept an unknown iPhone silently.
-            let msg = "Ce PC ne connaît pas cet iPhone. Relie-le à nouveau avec un QR.".to_string();
+            let msg = crate::i18n::tr("This PC does not know this iPhone. Pair it again with a QR code.", "Ce PC ne connaît pas cet iPhone. Relie-le à nouveau avec un QR.").to_string();
             return Self::refuse(&mut io, Reason::UnknownDevice, msg).await;
         }
         // E6: the cable has priority; a Wi-Fi connection never replaces it.
         let on_cable = self.lock().session.as_ref().is_some_and(|s| s.fingerprint == fp && matches!(s.via, Via::Cable(_)));
         if via == Via::Wifi && on_cable {
-            return Self::refuse(&mut io, Reason::Busy, "Déjà relié par câble.".to_string()).await;
+            return Self::refuse(&mut io, Reason::Busy, crate::i18n::tr("Already paired by cable.", "Déjà relié par câble.").to_string()).await;
         }
         write_msg(&mut io, &env(Msg::Welcome(proto::Welcome { pc_name: self.pc_name.clone() }))).await?;
         self.run_session(io, fp, via).await
@@ -1100,7 +1100,7 @@ impl Hub {
         };
         if !free {
             eprintln!("hyphn: drop: refused, a send is already in progress");
-            let ack = proto::DropAck { ok: false, reason: "Le PC reçoit déjà un envoi.".into(), duplicate: false };
+            let ack = proto::DropAck { ok: false, reason: crate::i18n::tr("The PC is already receiving a transfer.", "Le PC reçoit déjà un envoi.").into(), duplicate: false };
             return write_msg(&mut io, &env(Msg::DropAck(ack))).await;
         }
         (self.notify)(UiEvent::Changed);
@@ -1122,12 +1122,12 @@ impl Hub {
                             Ok(Ok(Some(_))) => unreachable!(),
                         };
                         eprintln!("hyphn: drop: link ended ({why})");
-                        break Err("Liaison perdue : relance l’envoi depuis l’iPhone.".into());
+                        break Err(crate::i18n::tr("Connection lost: start the transfer again from the iPhone.", "Liaison perdue : relance l’envoi depuis l’iPhone.").into());
                     }
                 },
                 _ = self.drop_stop.notified() => {
                     let _ = write_msg(&mut io, &env(Msg::DropCancel(proto::DropCancel {}))).await;
-                    break Err("Envoi annulé.".into());
+                    break Err(crate::i18n::tr("Transfer cancelled.", "Envoi annulé.").into());
                 }
             };
             match m.msg {
@@ -1152,8 +1152,8 @@ impl Hub {
                         r = timeout(DROP_SILENCE, rx) => match r {
                             Ok(Ok(yes)) => yes,
                             _ => {
-                                write_msg(&mut io, &ack(false, "Pas de réponse sur le PC.".into())).await?;
-                                break Err("Pas de réponse : l’envoi a été arrêté.".into());
+                                write_msg(&mut io, &ack(false, crate::i18n::tr("No answer on the PC.", "Pas de réponse sur le PC.").into())).await?;
+                                break Err(crate::i18n::tr("No answer: the transfer was stopped.", "Pas de réponse : l’envoi a été arrêté.").into());
                             }
                         },
                         _ = self.drop_stop.notified() => false,
@@ -1163,7 +1163,7 @@ impl Hub {
                     };
                     self.lock().drop_answer = None;
                     if !yes {
-                        write_msg(&mut io, &ack(false, "Refusé sur le PC.".into())).await?;
+                        write_msg(&mut io, &ack(false, crate::i18n::tr("Declined on the PC.", "Refusé sur le PC.").into())).await?;
                         break Err(String::new());
                     }
                     accepted = true;
@@ -1195,8 +1195,8 @@ impl Hub {
                         continue;
                     }
                     let Some((base, sort)) = &target else {
-                        write_msg(&mut io, &ack(false, "Envoi pas encore accepté sur le PC.".into())).await?;
-                        break Err("Envoi pas accepté.".into());
+                        write_msg(&mut io, &ack(false, crate::i18n::tr("Transfer not accepted on the PC yet.", "Envoi pas encore accepté sur le PC.").into())).await?;
+                        break Err(crate::i18n::tr("Transfer not accepted.", "Envoi pas accepté.").into());
                     };
                     match crate::drop::Incoming::start(base, sort, &f) {
                         Ok(i) => {
@@ -1251,7 +1251,7 @@ impl Hub {
                         }
                     }
                 }
-                Some(Msg::DropCancel(_)) => break Err("Envoi annulé sur l’iPhone.".into()),
+                Some(Msg::DropCancel(_)) => break Err(crate::i18n::tr("Transfer cancelled on the iPhone.", "Envoi annulé sur l’iPhone.").into()),
                 Some(Msg::DropDone(d)) => break Ok((d.failed, d.already)),
                 _ => {}
             }
@@ -1657,7 +1657,7 @@ mod tests {
         assert_eq!(r.hub.drop_previews(), vec!["data:image/jpeg;base64,/9gB".to_string()]);
         assert_eq!(r.hub.view().drop.photos, 3);
         accept_on_pc(&r, false).await;
-        assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if !a.ok && a.reason.contains("Refusé")));
+        assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if !a.ok && a.reason.contains("Declined")));
         // Back to rest, no error shown on the PC.
         wait_until(|| r.hub.view().drop.state.is_empty()).await;
         assert!(r.events.lock().unwrap().contains(&UiEvent::DropAsk));
@@ -1701,7 +1701,7 @@ mod tests {
         drop_chunks(&mut io, &data).await;
         // A wrong hash first: refused, nothing kept; then the right one.
         send(&mut io, Msg::DropEnd(proto::DropEnd { sha256: vec![0; 32], last_of_item: true })).await;
-        assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if !a.ok && a.reason.contains("empreinte")));
+        assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if !a.ok && a.reason.contains("checksum")));
         send(&mut io, Msg::DropFile(file.clone())).await;
         assert!(matches!(recv(&mut io).await, Some(Msg::DropAck(a)) if a.ok));
         drop_chunks(&mut io, &data).await;

@@ -8,20 +8,21 @@
 // The film looks and their colour tables are in fxlook.js.
 'use strict';
 
-// [id, name, canvas filter, overlay [color, blend, strength], vignette]
+// [id, name, canvas filter, overlay [color, blend, strength], vignette]. Names
+// are shown through t() (French in fr.js); ids are what the settings keep.
 const FX_FILTERS = [
   ['none', 'Original', 'none', null, 0],
-  ['vif', 'Vif', 'saturate(1.45) contrast(1.1)', null, 0],
-  ['chaud', 'Chaud', 'saturate(1.15) contrast(1.05) sepia(.12)', ['#FFA552', 'soft-light', 0.4], 0.12],
-  ['froid', 'Froid', 'saturate(1.05) brightness(1.04)', ['#3D8BFF', 'soft-light', 0.35], 0.1],
-  ['nb', 'Noir et blanc', 'grayscale(1) contrast(1.18)', null, 0.25],
+  ['vif', 'Vivid', 'saturate(1.45) contrast(1.1)', null, 0],
+  ['chaud', 'Warm tone', 'saturate(1.15) contrast(1.05) sepia(.12)', ['#FFA552', 'soft-light', 0.4], 0.12],
+  ['froid', 'Cool tone', 'saturate(1.05) brightness(1.04)', ['#3D8BFF', 'soft-light', 0.35], 0.1],
+  ['nb', 'Black and white', 'grayscale(1) contrast(1.18)', null, 0.25],
   ['vintage', 'Vintage', 'sepia(.45) contrast(1.05) brightness(1.05) saturate(1.15)', ['#F5D9A8', 'multiply', 0.3], 0.35],
   ['film', 'Film', 'contrast(1.22) saturate(.82) brightness(.98)', ['#26364A', 'lighten', 0.35], 0.3],
   ['pastel', 'Pastel', 'saturate(.7) brightness(1.1) contrast(.88)', ['#FFC9E3', 'soft-light', 0.35], 0],
-  ['neon', 'Néon', 'saturate(1.9) contrast(1.25) hue-rotate(-12deg)', ['#B64DFF', 'overlay', 0.28], 0.3],
-  ['cine', 'Ciné', 'contrast(1.15) saturate(1.12)', ['#0E9AA7', 'soft-light', 0.3], 0.32],
-  ['doux', 'Doux', 'brightness(1.06) contrast(.92) saturate(1.05)', ['#FFE6D0', 'screen', 0.18], 0.08],
-  ['dramatique', 'Dramatique', 'contrast(1.4) saturate(.9) brightness(.95)', null, 0.45],
+  ['neon', 'Neon', 'saturate(1.9) contrast(1.25) hue-rotate(-12deg)', ['#B64DFF', 'overlay', 0.28], 0.3],
+  ['cine', 'Cine', 'contrast(1.15) saturate(1.12)', ['#0E9AA7', 'soft-light', 0.3], 0.32],
+  ['doux', 'Soft', 'brightness(1.06) contrast(.92) saturate(1.05)', ['#FFE6D0', 'screen', 0.18], 0.08],
+  ['dramatique', 'Dramatic', 'contrast(1.4) saturate(.9) brightness(.95)', null, 0.45],
 ];
 // Masks: [id, name, tile picture, parts]. A part: [picture, anchor, size,
 // dx, dy, motion], sizes and offsets in eye gaps, turned with the head.
@@ -34,104 +35,104 @@ const fxMany = (pics, n, size, how = 'orbit') => Array.from({ length: n }, (_, i
 const fxAbove = (pic, size, dx, dy) => [[pic, 'top', size, dx, dy, 'bob']];
 // [group name, masks]; the panel shows one heading per group.
 const FX_MASK_GROUPS = [
-  ['Lunettes et chapeaux', [
-    ['soleil', 'Lunettes de soleil', 'sunglasses', [['sunglasses', 'eyes', 2.6, 0, 0.1]]],
-    ['lunettes', 'Lunettes', 'glasses', [['glasses', 'eyes', 2.6, 0, 0.1]]],
-    ['masque', 'Masque de plongée', 'goggles', [['goggles', 'eyes', 2.8, 0, 0.1]]],
-    ['yeuxetoiles', 'Yeux étoiles', 'glowing_star', [['glowing_star', 'eyeR', 1.2, 0, 0, 'bob'], ['glowing_star', 'eyeL', 1.2, 0, 0, 'bob']]],
-    ['spirales', 'Tête qui tourne', 'dizzy', [['dizzy', 'eyeR', 1.1, 0, 0], ['dizzy', 'eyeL', 1.1, 0, 0], ...fxMany(['dizzy'], 3, 0.6)]],
-    ['couronne', 'Couronne', 'crown', [['crown', 'top', 2.2, 0, -0.75, 'bob']]],
-    ['chapeau', 'Haut-de-forme', 'top_hat', [['top_hat', 'top', 2.6, 0, -1.05]]],
-    ['casquette', 'Casquette', 'billed_cap', [['billed_cap', 'top', 3, 0, -0.6]]],
-    ['diplome', 'Diplômé', 'graduation_cap', [['graduation_cap', 'top', 2.8, 0, -0.75]]],
-    ['militaire', 'Casque militaire', 'military_helmet', [['military_helmet', 'top', 3.8, 0, -0.5]]],
-    ['noeud', 'Nœud', 'ribbon', [['ribbon', 'top', 1.5, 0.9, -0.35, 'bob']]],
-    ['fleurs', 'Fleurs', 'cherry_blossom', [-1.15, -0.7, -0.25, 0.25, 0.7, 1.15].map((x, i) =>
+  ['Glasses and hats', [
+    ['soleil', 'Sunglasses', 'sunglasses', [['sunglasses', 'eyes', 2.6, 0, 0.1]]],
+    ['lunettes', 'Glasses', 'glasses', [['glasses', 'eyes', 2.6, 0, 0.1]]],
+    ['masque', 'Diving mask', 'goggles', [['goggles', 'eyes', 2.8, 0, 0.1]]],
+    ['yeuxetoiles', 'Star eyes', 'glowing_star', [['glowing_star', 'eyeR', 1.2, 0, 0, 'bob'], ['glowing_star', 'eyeL', 1.2, 0, 0, 'bob']]],
+    ['spirales', 'Dizzy', 'dizzy', [['dizzy', 'eyeR', 1.1, 0, 0], ['dizzy', 'eyeL', 1.1, 0, 0], ...fxMany(['dizzy'], 3, 0.6)]],
+    ['couronne', 'Crown', 'crown', [['crown', 'top', 2.2, 0, -0.75, 'bob']]],
+    ['chapeau', 'Top hat', 'top_hat', [['top_hat', 'top', 2.6, 0, -1.05]]],
+    ['casquette', 'Cap', 'billed_cap', [['billed_cap', 'top', 3, 0, -0.6]]],
+    ['diplome', 'Graduate', 'graduation_cap', [['graduation_cap', 'top', 2.8, 0, -0.75]]],
+    ['militaire', 'Army helmet', 'military_helmet', [['military_helmet', 'top', 3.8, 0, -0.5]]],
+    ['noeud', 'Bow', 'ribbon', [['ribbon', 'top', 1.5, 0.9, -0.35, 'bob']]],
+    ['fleurs', 'Flowers', 'cherry_blossom', [-1.15, -0.7, -0.25, 0.25, 0.7, 1.15].map((x, i) =>
       [['cherry_blossom', 'hibiscus', 'blossom'][i % 3], 'top', 0.85, x, -0.35 - 0.3 * Math.cos(x / 1.2), 'bob'])],
-    ['bouquet', 'Couronne de fleurs', 'sunflower', [-1.2, -0.6, 0, 0.6, 1.2].map((x, i) =>
+    ['bouquet', 'Flower crown', 'sunflower', [-1.2, -0.6, 0, 0.6, 1.2].map((x, i) =>
       [['sunflower', 'tulip', 'rose'][i % 3], 'top', 0.95, x, -0.4 - 0.3 * Math.cos(x / 1.2), 'bob'])],
   ]],
-  ['Nez et bouche', [
-    ['cochon', 'Nez de cochon', 'pig_nose', [['pig_nose', 'nose', 1.25, 0, 0.05]]],
-    ['nezclown', 'Nez de clown', 'red_circle', [['red_circle', 'nose', 0.8, 0, 0.05]]],
-    ['langue', 'Langue', 'tongue', [['tongue', 'mouth', 1.3, 0, 0.55, 'open']]],
-    ['arcenciel', 'Arc-en-ciel', 'rainbow', [['rainbow', 'mouth', 2.6, 0, 1.1, 'open']]],
-    ['dragon', 'Cracheur de feu', 'fire', [['fire', 'mouth', 2.4, 0, 1.3, 'open']]],
-    ['souffle', 'Bulles', 'bubbles', [['bubbles', 'mouth', 2, 0, 1.1, 'open']]],
-    ['sucette', 'Sucette', 'lollipop', [['lollipop', 'mouth', 1.5, 0.75, 0.2]]],
-    ['bisou', 'Bisous', 'kiss_mark', [['kiss_mark', 'cheekR', 0.8, 0, 0], ['kiss_mark', 'cheekL', 0.8, 0, 0]]],
+  ['Nose and mouth', [
+    ['cochon', 'Pig nose', 'pig_nose', [['pig_nose', 'nose', 1.25, 0, 0.05]]],
+    ['nezclown', 'Clown nose', 'red_circle', [['red_circle', 'nose', 0.8, 0, 0.05]]],
+    ['langue', 'Tongue', 'tongue', [['tongue', 'mouth', 1.3, 0, 0.55, 'open']]],
+    ['arcenciel', 'Rainbow', 'rainbow', [['rainbow', 'mouth', 2.6, 0, 1.1, 'open']]],
+    ['dragon', 'Fire breather', 'fire', [['fire', 'mouth', 2.4, 0, 1.3, 'open']]],
+    ['souffle', 'Bubbles', 'bubbles', [['bubbles', 'mouth', 2, 0, 1.1, 'open']]],
+    ['sucette', 'Lollipop', 'lollipop', [['lollipop', 'mouth', 1.5, 0.75, 0.2]]],
+    ['bisou', 'Kisses', 'kiss_mark', [['kiss_mark', 'cheekR', 0.8, 0, 0], ['kiss_mark', 'cheekL', 0.8, 0, 0]]],
   ]],
-  ['Au-dessus de la tête', [
-    ['feu', 'Tête en feu', 'fire', [['fire', 'top', 3, 0, -1, 'bob']]],
-    ['idee', 'Idée', 'light_bulb', fxAbove('light_bulb', 1.4, 0, -1.25)],
-    ['pense', 'Je réfléchis', 'thought_balloon', fxAbove('thought_balloon', 1.8, 1.5, -1.2)],
-    ['dodo', 'Dodo', 'zzz', [...fxAbove('zzz', 1.4, 1.3, -0.9), ['crescent_moon', 'top', 1.2, -1.4, -1, 'bob']]],
-    ['colere', 'En colère', 'anger_symbol', fxAbove('anger_symbol', 1.1, 1.1, -0.45)],
+  ['Above the head', [
+    ['feu', 'Head on fire', 'fire', [['fire', 'top', 3, 0, -1, 'bob']]],
+    ['idee', 'Idea', 'light_bulb', fxAbove('light_bulb', 1.4, 0, -1.25)],
+    ['pense', 'Thinking', 'thought_balloon', fxAbove('thought_balloon', 1.8, 1.5, -1.2)],
+    ['dodo', 'Sleepy', 'zzz', [...fxAbove('zzz', 1.4, 1.3, -0.9), ['crescent_moon', 'top', 1.2, -1.4, -1, 'bob']]],
+    ['colere', 'Angry', 'anger_symbol', fxAbove('anger_symbol', 1.1, 1.1, -0.45)],
     ['question', 'Question', 'red_question_mark', fxAbove('red_question_mark', 1.3, 0, -1.25)],
     ['exclamation', 'Exclamation', 'red_exclamation_mark', fxAbove('red_exclamation_mark', 1.3, 0, -1.25)],
-    ['cent', '100 %', 'hundred_points', fxAbove('hundred_points', 1.6, 0, -1.2)],
-    ['gene', 'Gêné', 'sweat_droplets', fxAbove('sweat_droplets', 1.1, 1.2, -0.3)],
-    ['soleiltete', 'Soleil', 'sun', fxAbove('sun', 2, 0, -1.5)],
-    ['orage', 'Orage', 'cloud_with_lightning', [...fxAbove('cloud_with_lightning', 2.6, 0, -1.7), ...fxMany(['droplet'], 6, 0.4, 'fall')]],
-    ['trophee', 'Trophée', 'trophy', fxAbove('trophy', 1.8, 0, -1.2)],
+    ['cent', '100%', 'hundred_points', fxAbove('hundred_points', 1.6, 0, -1.2)],
+    ['gene', 'Embarrassed', 'sweat_droplets', fxAbove('sweat_droplets', 1.1, 1.2, -0.3)],
+    ['soleiltete', 'Sun', 'sun', fxAbove('sun', 2, 0, -1.5)],
+    ['orage', 'Storm', 'cloud_with_lightning', [...fxAbove('cloud_with_lightning', 2.6, 0, -1.7), ...fxMany(['droplet'], 6, 0.4, 'fall')]],
+    ['trophee', 'Trophy', 'trophy', fxAbove('trophy', 1.8, 0, -1.2)],
   ]],
-  ['Autour de toi', [
-    ['papillons', 'Papillons', 'butterfly', fxMany(['butterfly'], 3, 0.8)],
-    ['coeurs', 'Cœurs', 'sparkling_heart', [['red_heart', 'eyeR', 1.1, 0, 0, 'bob'], ['red_heart', 'eyeL', 1.1, 0, 0, 'bob'],
+  ['Around you', [
+    ['papillons', 'Butterflies', 'butterfly', fxMany(['butterfly'], 3, 0.8)],
+    ['coeurs', 'Hearts', 'sparkling_heart', [['red_heart', 'eyeR', 1.1, 0, 0, 'bob'], ['red_heart', 'eyeL', 1.1, 0, 0, 'bob'],
       ...fxMany(['sparkling_heart'], 5, 0.55)]],
-    ['etoiles', 'Étoiles', 'glowing_star', fxMany(['glowing_star', 'sparkles'], 4, 0.65)],
-    ['musique', 'Musique', 'musical_notes', fxMany(['musical_notes'], 3, 0.75)],
-    ['fantome', 'Fantômes', 'ghost', fxMany(['ghost'], 2, 1)],
-    ['abeilles', 'Abeilles', 'honeybee', fxMany(['honeybee'], 3, 0.7)],
-    ['coccinelles', 'Coccinelles', 'lady_beetle', fxMany(['lady_beetle'], 3, 0.6)],
-    ['chauvesouris', 'Chauves-souris', 'bat', fxMany(['bat'], 3, 0.85)],
-    ['poissons', 'Poissons', 'tropical_fish', fxMany(['tropical_fish'], 3, 0.8)],
-    ['espace', 'Espace', 'ringed_planet', fxMany(['ringed_planet', 'rocket', 'shooting_star'], 3, 0.9)],
-    ['eclairs', 'Éclairs', 'high_voltage', fxMany(['high_voltage'], 4, 0.7)],
+    ['etoiles', 'Stars', 'glowing_star', fxMany(['glowing_star', 'sparkles'], 4, 0.65)],
+    ['musique', 'Music', 'musical_notes', fxMany(['musical_notes'], 3, 0.75)],
+    ['fantome', 'Ghosts', 'ghost', fxMany(['ghost'], 2, 1)],
+    ['abeilles', 'Bees', 'honeybee', fxMany(['honeybee'], 3, 0.7)],
+    ['coccinelles', 'Ladybugs', 'lady_beetle', fxMany(['lady_beetle'], 3, 0.6)],
+    ['chauvesouris', 'Bats', 'bat', fxMany(['bat'], 3, 0.85)],
+    ['poissons', 'Fish', 'tropical_fish', fxMany(['tropical_fish'], 3, 0.8)],
+    ['espace', 'Space', 'ringed_planet', fxMany(['ringed_planet', 'rocket', 'shooting_star'], 3, 0.9)],
+    ['eclairs', 'Lightning', 'high_voltage', fxMany(['high_voltage'], 4, 0.7)],
   ]],
-  ['Pluies et fêtes', [
-    ['fete', 'Fête', 'party_popper', [['party_popper', 'top', 1.3, -1.5, -0.4, 'bob'], ['confetti_ball', 'top', 1.3, 1.5, -0.4, 'bob'],
+  ['Rains and parties', [
+    ['fete', 'Party', 'party_popper', [['party_popper', 'top', 1.3, -1.5, -0.4, 'bob'], ['confetti_ball', 'top', 1.3, 1.5, -0.4, 'bob'],
       ...fxMany(['sparkles'], 6, 0.5, 'fall')]],
-    ['anniversaire', 'Anniversaire', 'birthday_cake', [...fxAbove('birthday_cake', 1.8, 0, -1.25), ...fxMany(['balloon'], 5, 0.8, 'rise')]],
-    ['noel', 'Noël', 'christmas_tree', [['christmas_tree', 'top', 1.4, -1.7, -0.2, 'bob'], ['wrapped_gift', 'top', 1.1, 1.7, -0.1, 'bob'],
+    ['anniversaire', 'Birthday', 'birthday_cake', [...fxAbove('birthday_cake', 1.8, 0, -1.25), ...fxMany(['balloon'], 5, 0.8, 'rise')]],
+    ['noel', 'Christmas', 'christmas_tree', [['christmas_tree', 'top', 1.4, -1.7, -0.2, 'bob'], ['wrapped_gift', 'top', 1.1, 1.7, -0.1, 'bob'],
       ...fxMany(['snowflake'], 6, 0.4, 'fall')]],
     ['halloween', 'Halloween', 'jack-o-lantern', [...fxMany(['jack-o-lantern'], 2, 1), ...fxMany(['bat'], 4, 0.6, 'fall')]],
-    ['neige', 'Neige', 'snowflake', fxMany(['snowflake'], 8, 0.45, 'fall')],
-    ['pluie', 'Pluie', 'droplet', fxMany(['droplet'], 10, 0.35, 'fall')],
-    ['argent', 'Pluie d’argent', 'money_with_wings', fxMany(['money_with_wings'], 6, 0.7, 'fall')],
-    ['diamants', 'Diamants', 'gem_stone', fxMany(['gem_stone'], 6, 0.55, 'fall')],
-    ['chance', 'Trèfles', 'four_leaf_clover', fxMany(['four_leaf_clover'], 6, 0.55, 'fall')],
-    ['automne', 'Automne', 'maple_leaf', fxMany(['maple_leaf', 'fallen_leaf'], 7, 0.6, 'fall')],
-    ['etoilesfilantes', 'Étoiles filantes', 'shooting_star', fxMany(['shooting_star'], 5, 0.7, 'fall')],
-    ['feuxartifice', 'Feux d’artifice', 'fireworks', fxMany(['fireworks'], 4, 1.1, 'fall')],
-    ['cadeaux', 'Cadeaux', 'wrapped_gift', fxMany(['wrapped_gift'], 5, 0.65, 'fall')],
+    ['neige', 'Snow', 'snowflake', fxMany(['snowflake'], 8, 0.45, 'fall')],
+    ['pluie', 'Rain', 'droplet', fxMany(['droplet'], 10, 0.35, 'fall')],
+    ['argent', 'Money rain', 'money_with_wings', fxMany(['money_with_wings'], 6, 0.7, 'fall')],
+    ['diamants', 'Diamonds', 'gem_stone', fxMany(['gem_stone'], 6, 0.55, 'fall')],
+    ['chance', 'Clovers', 'four_leaf_clover', fxMany(['four_leaf_clover'], 6, 0.55, 'fall')],
+    ['automne', 'Autumn', 'maple_leaf', fxMany(['maple_leaf', 'fallen_leaf'], 7, 0.6, 'fall')],
+    ['etoilesfilantes', 'Shooting stars', 'shooting_star', fxMany(['shooting_star'], 5, 0.7, 'fall')],
+    ['feuxartifice', 'Fireworks', 'fireworks', fxMany(['fireworks'], 4, 1.1, 'fall')],
+    ['cadeaux', 'Gifts', 'wrapped_gift', fxMany(['wrapped_gift'], 5, 0.65, 'fall')],
     ['pizza', 'Pizza', 'pizza', fxMany(['pizza'], 5, 0.7, 'fall')],
     ['donuts', 'Donuts', 'doughnut', fxMany(['doughnut'], 5, 0.65, 'fall')],
-    ['ballons', 'Ballons', 'balloon', fxMany(['balloon'], 6, 0.8, 'rise')],
-    ['bulles', 'Bulles qui montent', 'bubbles', fxMany(['bubbles'], 7, 0.55, 'rise')],
+    ['ballons', 'Balloons', 'balloon', fxMany(['balloon'], 6, 0.8, 'rise')],
+    ['bulles', 'Rising bubbles', 'bubbles', fxMany(['bubbles'], 7, 0.55, 'rise')],
   ]],
-  ['Têtes d’animaux', [
-    fxHead('chien', 'Chien', 'dog_face'), fxHead('chat', 'Chat', 'cat_face'), fxHead('panda', 'Panda', 'panda'),
-    fxHead('renard', 'Renard', 'fox'), fxHead('tigre', 'Tigre', 'tiger_face'), fxHead('licorne', 'Licorne', 'unicorn', 4.3),
-    fxHead('singe', 'Singe', 'monkey_face'), fxHead('lion', 'Lion', 'lion'), fxHead('ours', 'Ours', 'bear'),
-    fxHead('koala', 'Koala', 'koala'), fxHead('grenouille', 'Grenouille', 'frog'), fxHead('porc', 'Cochon', 'pig_face'),
-    fxHead('souris', 'Souris', 'mouse_face'), fxHead('lapin', 'Lapin', 'rabbit_face'), fxHead('vache', 'Vache', 'cow_face'),
-    fxHead('hamster', 'Hamster', 'hamster'), fxHead('loup', 'Loup', 'wolf'), fxHead('cheval', 'Cheval', 'horse_face'),
-    fxHead('dragonh', 'Dragon', 'dragon_face'), fxHead('hibou', 'Hibou', 'owl'), fxHead('pingouin', 'Pingouin', 'penguin', 4.4),
+  ['Animal heads', [
+    fxHead('chien', 'Dog', 'dog_face'), fxHead('chat', 'Cat', 'cat_face'), fxHead('panda', 'Panda', 'panda'),
+    fxHead('renard', 'Fox', 'fox'), fxHead('tigre', 'Tiger', 'tiger_face'), fxHead('licorne', 'Unicorn', 'unicorn', 4.3),
+    fxHead('singe', 'Monkey', 'monkey_face'), fxHead('lion', 'Lion', 'lion'), fxHead('ours', 'Bear', 'bear'),
+    fxHead('koala', 'Koala', 'koala'), fxHead('grenouille', 'Frog', 'frog'), fxHead('porc', 'Pig', 'pig_face'),
+    fxHead('souris', 'Mouse', 'mouse_face'), fxHead('lapin', 'Rabbit', 'rabbit_face'), fxHead('vache', 'Cow', 'cow_face'),
+    fxHead('hamster', 'Hamster', 'hamster'), fxHead('loup', 'Wolf', 'wolf'), fxHead('cheval', 'Horse', 'horse_face'),
+    fxHead('dragonh', 'Dragon', 'dragon_face'), fxHead('hibou', 'Owl', 'owl'), fxHead('pingouin', 'Penguin', 'penguin', 4.4),
   ]],
-  ['Têtes de smileys', [
-    fxHead('cool', 'Cool', 'smiling_face_with_sunglasses'), fxHead('star', 'Des étoiles plein les yeux', 'star-struck'),
-    fxHead('mdr', 'Mort de rire', 'face_with_tears_of_joy'), fxHead('amoureux', 'Amoureux', 'smiling_face_with_heart-eyes'),
-    fxHead('intello', 'Intello', 'nerd_face'), fxHead('fetard', 'Fêtard', 'partying_face', 4.4), fxHead('fou', 'Fou', 'zany_face'),
-    fxHead('cowboy', 'Cow-boy', 'cowboy_hat_face', 4.6), fxHead('explose', 'Tête qui explose', 'exploding_head', 4.4),
-    fxHead('chaud', 'Trop chaud', 'hot_face'), fxHead('gele', 'Gelé', 'cold_face'), fxHead('riche', 'Riche', 'money-mouth_face'),
-    fxHead('peur', 'Peur', 'face_screaming_in_fear'), fxHead('ange', 'Ange', 'smiling_face_with_halo', 4.4),
-    fxHead('diable', 'Diable', 'smiling_face_with_horns', 4.4), fxHead('lune', 'Lune', 'new_moon_face'), fxHead('soleilface', 'Soleil', 'sun_with_face', 4.6),
+  ['Smiley heads', [
+    fxHead('cool', 'Cool', 'smiling_face_with_sunglasses'), fxHead('star', 'Starstruck', 'star-struck'),
+    fxHead('mdr', 'Tears of joy', 'face_with_tears_of_joy'), fxHead('amoureux', 'In love', 'smiling_face_with_heart-eyes'),
+    fxHead('intello', 'Nerd', 'nerd_face'), fxHead('fetard', 'Party animal', 'partying_face', 4.4), fxHead('fou', 'Crazy', 'zany_face'),
+    fxHead('cowboy', 'Cowboy', 'cowboy_hat_face', 4.6), fxHead('explose', 'Mind blown', 'exploding_head', 4.4),
+    fxHead('chaud', 'Too hot', 'hot_face'), fxHead('gele', 'Frozen', 'cold_face'), fxHead('riche', 'Rich', 'money-mouth_face'),
+    fxHead('peur', 'Scared', 'face_screaming_in_fear'), fxHead('ange', 'Angel', 'smiling_face_with_halo', 4.4),
+    fxHead('diable', 'Devil', 'smiling_face_with_horns', 4.4), fxHead('lune', 'Moon', 'new_moon_face'), fxHead('soleilface', 'Sun', 'sun_with_face', 4.6),
   ]],
-  ['Monstres', [
-    fxHead('robot', 'Robot', 'robot'), fxHead('alien', 'Extraterrestre', 'alien'), fxHead('envahisseur', 'Envahisseur', 'alien_monster'),
-    fxHead('clown', 'Clown', 'clown_face'), fxHead('squelette', 'Squelette', 'skull'), fxHead('citrouille', 'Citrouille', 'jack-o-lantern'),
-    fxHead('ogre', 'Ogre', 'ogre'), fxHead('lutin', 'Lutin', 'goblin'), fxHead('caca', 'Caca', 'pile_of_poo', 4.3),
+  ['Monsters', [
+    fxHead('robot', 'Robot', 'robot'), fxHead('alien', 'Alien', 'alien'), fxHead('envahisseur', 'Invader', 'alien_monster'),
+    fxHead('clown', 'Clown', 'clown_face'), fxHead('squelette', 'Skeleton', 'skull'), fxHead('citrouille', 'Pumpkin', 'jack-o-lantern'),
+    fxHead('ogre', 'Ogre', 'ogre'), fxHead('lutin', 'Goblin', 'goblin'), fxHead('caca', 'Poop', 'pile_of_poo', 4.3),
   ]],
 ];
 // 3D, the way MindAR does it (fx3d.js): [.., [], [{ model, turn, at (face point), width, off, rot, sit }]].
@@ -140,42 +141,42 @@ const fx3 = (id, name, file, place) => [id, name, `models3d/poly/${file}.webp`, 
 const HAT = (width = 2.9, dy = -0.35, dz = -0.45, turn) => ({ at: 10, width, off: [0, dy, dz], sit: true, turn });
 const SPECS = (width = 2.3, dy = -0.1, dz = 0.25, turn) => ({ at: 168, width, off: [0, dy, dz], front: true, turn });
 const FX_3D_GROUPS = [
-  ['Chapeaux', [
-    fx3('chapeau3d', 'Haut-de-forme', 'tophat', HAT(2.6)), fx3('cowboy3d', 'Cow-boy', 'cowboy', HAT(3.4)),
-    fx3('pirate3d', 'Pirate', 'pirate', HAT(3)), fx3('magicien3d', 'Magicien', 'wizard', HAT()),
-    fx3('sombrero3d', 'Sombrero', 'sombrero', HAT(4.6)), fx3('diplome3d', 'Diplômé', 'gradcap', HAT(3)),
-    fx3('casquette3d', 'Casquette', 'cap', HAT(2.8)), fx3('helice3d', 'Hélice', 'propeller', HAT(2.7)),
-    fx3('noel3d', 'Père Noël', 'santa', HAT(2.9, -0.5)), fx3('sorciere3d', 'Sorcière', 'witch', HAT(3.1)),
-    fx3('grenouille3d', 'Grenouille', 'frog', HAT()), fx3('bonnetchat3d', 'Bonnet chat', 'catbeanie', HAT()),
-    fx3('bonnetrenard3d', 'Bonnet renard', 'foxhat', HAT(3, -2.3)),
-    ['clown3d', 'Chapeau de clown', 'models3d/hat/thumbnail.png', [], [{ model: 'hat', at: 10, width: 3.1, off: [0, 0.6, -0.3] }]],
+  ['Hats', [
+    fx3('chapeau3d', 'Top hat', 'tophat', HAT(2.6)), fx3('cowboy3d', 'Cowboy', 'cowboy', HAT(3.4)),
+    fx3('pirate3d', 'Pirate', 'pirate', HAT(3)), fx3('magicien3d', 'Wizard', 'wizard', HAT()),
+    fx3('sombrero3d', 'Sombrero', 'sombrero', HAT(4.6)), fx3('diplome3d', 'Graduate', 'gradcap', HAT(3)),
+    fx3('casquette3d', 'Cap', 'cap', HAT(2.8)), fx3('helice3d', 'Propeller', 'propeller', HAT(2.7)),
+    fx3('noel3d', 'Santa', 'santa', HAT(2.9, -0.5)), fx3('sorciere3d', 'Witch', 'witch', HAT(3.1)),
+    fx3('grenouille3d', 'Frog', 'frog', HAT()), fx3('bonnetchat3d', 'Cat beanie', 'catbeanie', HAT()),
+    fx3('bonnetrenard3d', 'Fox hat', 'foxhat', HAT(3, -2.3)),
+    ['clown3d', 'Clown hat', 'models3d/hat/thumbnail.png', [], [{ model: 'hat', at: 10, width: 3.1, off: [0, 0.6, -0.3] }]],
   ]],
-  ['Casques et couronnes', [
-    fx3('couronne3d', 'Couronne', 'crown', HAT(2.2)), fx3('viking3d', 'Viking', 'viking', HAT(3)),
-    fx3('foot3d', 'Football américain', 'football', { at: 168, width: 3.3, off: [0, 0.4, -0.8] }),
-    fx3('chantier3d', 'Casque de chantier', 'hardhat', HAT(2.9)),
-    fx3('aureole3d', 'Auréole', 'halo', HAT(2.2, 0.45, -0.45, [Math.PI / 2 - 0.3, 0, 0])), fx3('cerf3d', 'Bois de cerf', 'antlers', HAT(3.6, 0.1)),
+  ['Helmets and crowns', [
+    fx3('couronne3d', 'Crown', 'crown', HAT(2.2)), fx3('viking3d', 'Viking', 'viking', HAT(3)),
+    fx3('foot3d', 'Football', 'football', { at: 168, width: 3.3, off: [0, 0.4, -0.8] }),
+    fx3('chantier3d', 'Hard hat', 'hardhat', HAT(2.9)),
+    fx3('aureole3d', 'Halo', 'halo', HAT(2.2, 0.45, -0.45, [Math.PI / 2 - 0.3, 0, 0])), fx3('cerf3d', 'Antlers', 'antlers', HAT(3.6, 0.1)),
   ]],
-  ['Lunettes et visage', [
-    fx3('aviateur3d', 'Aviateur', 'aviator', SPECS()),
-    fx3('fete3dl', 'Lunettes de fête', 'partyglasses', SPECS()), fx3('pixel3d', 'Lunettes pixel', 'pixelglasses', SPECS()),
-    fx3('ski3d', 'Masque de ski', 'goggles', SPECS(2.6)), fx3('monocle3d', 'Monocle', 'monocle', { at: 468, width: 0.55, off: [0, -0.75, 0.2] }),
+  ['Glasses and face', [
+    fx3('aviateur3d', 'Aviator', 'aviator', SPECS()),
+    fx3('fete3dl', 'Party glasses', 'partyglasses', SPECS()), fx3('pixel3d', 'Pixel glasses', 'pixelglasses', SPECS()),
+    fx3('ski3d', 'Ski goggles', 'goggles', SPECS(2.6)), fx3('monocle3d', 'Monocle', 'monocle', { at: 468, width: 0.55, off: [0, -0.75, 0.2] }),
     ['lunettes3d', 'Thug life', 'models3d/glasses/thumbnail.png', [], [{ model: 'glasses', ...SPECS(2.2) }]],
-    fx3('moustache3d', 'Moustache', 'mustache', { at: 164, width: 1.6, off: [0, 0, 0.3], turn: [Math.PI / 2, 0, 0] }),
+    fx3('moustache3d', 'Mustache', 'mustache', { at: 164, width: 1.6, off: [0, 0, 0.3], turn: [Math.PI / 2, 0, 0] }),
   ]],
-  ['Oreilles et bijoux', [
-    fx3('lapin3d', 'Oreilles de lapin', 'bunny', HAT(2.6, -0.3)), fx3('chat3d', 'Oreilles de chat', 'catears', HAT(2.6, -0.6)),
-    ['boucles3d', 'Boucles d’oreilles', 'models3d/earring/thumbnail.png', [], [
+  ['Ears and jewelry', [
+    fx3('lapin3d', 'Bunny ears', 'bunny', HAT(2.6, -0.3)), fx3('chat3d', 'Cat ears', 'catears', HAT(2.6, -0.6)),
+    ['boucles3d', 'Earrings', 'models3d/earring/thumbnail.png', [], [
       { model: 'earring', at: 177, width: 0.3, off: [0, -0.25, 0] }, { model: 'earring', at: 401, width: 0.3, off: [0, -0.25, 0] }]],
-    ['fete3d', 'Fête', 'models3d/hat/thumbnail.png', [], [
+    ['fete3d', 'Party', 'models3d/hat/thumbnail.png', [], [
       { model: 'hat', at: 10, width: 3.1, off: [0, 0.6, -0.3] }, { model: 'glasses', ...SPECS(2.2) }]],
   ]],
 ];
 const FX_3D = FX_3D_GROUPS.flatMap(([, list]) => list);
-const FX_MASKS = [['none', 'Aucun', null, []], ...FX_MASK_GROUPS.flatMap(([, list]) => list), ...FX_3D];
-const FX_PHOTOS = [['salon', 'Salon'], ['bureau', 'Bureau'], ['bibliotheque', 'Bibliothèque'], ['cuisine', 'Cuisine'], ['lecture', 'Salle de lecture'],
-  ['plage', 'Plage'], ['montagne', 'Montagne'], ['aurore', 'Aurore boréale'], ['ville', 'Ville la nuit'], ['espace', 'Espace']];
-const FX_BG = [['none', 'Normal'], ['blur', 'Flou'], ['strong', 'Très flou'], ...FX_PHOTOS, ['image', 'Ton image']];
+const FX_MASKS = [['none', 'No mask', null, []], ...FX_MASK_GROUPS.flatMap(([, list]) => list), ...FX_3D];
+const FX_PHOTOS = [['salon', 'Living room'], ['bureau', 'Office'], ['bibliotheque', 'Library'], ['cuisine', 'Kitchen'], ['lecture', 'Reading room'],
+  ['plage', 'Beach'], ['montagne', 'Mountain'], ['aurore', 'Northern lights'], ['ville', 'City at night'], ['espace', 'Space']];
+const FX_BG = [['none', 'No background'], ['blur', 'Blur'], ['strong', 'Strong blur'], ...FX_PHOTOS, ['image', 'Your picture']];
 const fxPicture = (name) => (name.includes('/') ? `vendor/${name}` : `vendor/fluent/${name}_3d.png`);
 const FX_DEFAULTS = { filter: 'none', amount: 100, mask: 'none', bg: 'none', bgImg: null, smooth: 0, light: 0 };
 // MediaPipe face mesh: the face outline, the eyes and the lips.
@@ -227,7 +228,7 @@ const Effects = {
   },
   // MediaPipe, from the app itself (vendor/mediapipe): nothing is downloaded.
   load() {
-    Popup.show({ icon: 'wand', title: 'Préparation des effets', text: 'Détection du visage et du fond, sur ce PC', pct: -1 });
+    Popup.show({ icon: 'wand', title: t('Getting the effects ready'), text: t('Face and background detection, on this PC'), pct: -1 });
     this.loading = (async () => {
       try {
         if (!window.Vision) {
@@ -235,7 +236,7 @@ const Effects = {
             const s = document.createElement('script');
             s.src = 'vendor/mediapipe/vision_bundle.js';
             s.onload = ok;
-            s.onerror = () => ko(new Error('MediaPipe absent'));
+            s.onerror = () => ko(new Error(t('MediaPipe missing')));
             document.head.appendChild(s);
           });
         }
@@ -254,10 +255,10 @@ const Effects = {
         // The landscape model: made for 16:9 webcam pictures (cleaner edges than the square one).
         this.seg = await make(window.Vision.ImageSegmenter, 'selfie_segmenter_landscape.tflite', { outputConfidenceMasks: true, outputCategoryMask: false });
         this.error = '';
-        Popup.show({ title: 'Effets prêts', text: 'Masques, fond et retouche', done: true });
+        Popup.show({ title: t('Effects ready'), text: t('Masks, background and touch-up'), done: true });
       } catch (e) {
-        this.error = 'Effets visage et fond indisponibles : ' + (e && e.message ? e.message : e);
-        Popup.show({ title: 'Effets indisponibles', text: String(e && e.message ? e.message : e), bad: true });
+        this.error = t('Face and background effects unavailable: {why}', { why: e && e.message ? e.message : e });
+        Popup.show({ title: t('Effects unavailable'), text: String(e && e.message ? e.message : e), bad: true });
       }
       if (typeof Cam !== 'undefined' && Cam.panel === 'fx') Cam.paintFx();
     })();
@@ -470,7 +471,7 @@ const Effects = {
     if (!m || !m[4] || !this.pose) return;
     if (!this.three) {
       if (!this.loading3d) {
-        this.loading3d = import('./fx3d.js').then((mod) => { this.three = mod.create(); }).catch((e) => { this.error = 'Masques 3D indisponibles : ' + e; });
+        this.loading3d = import('./fx3d.js').then((mod) => { this.three = mod.create(); }).catch((e) => { this.error = t('3D masks unavailable: {why}', { why: e }); });
       }
       return;
     }

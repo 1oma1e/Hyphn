@@ -11,7 +11,11 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-pub const MONTHS: [&str; 12] = [
+const MONTHS_EN: [&str; 12] = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+];
+const MONTHS_FR: [&str; 12] = [
     "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
     "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
 ];
@@ -76,7 +80,7 @@ impl Incoming {
         fs::create_dir_all(&dir).map_err(|e| format!("Dossier {} : {e}", dir.display()))?;
         let name = safe_name(&f.name);
         let part = free_path(&dir, &format!("{name}.part"));
-        let file = fs::File::create(&part).map_err(|e| format!("Écriture de {name} : {e}"))?;
+        let file = fs::File::create(&part).map_err(|e| format!("{} {name}{}{e}", crate::i18n::tr("Writing", "Écriture de"), crate::i18n::colon()))?;
         Ok(Self {
             part,
             dir,
@@ -93,10 +97,10 @@ impl Incoming {
     pub fn chunk(&mut self, data: &[u8]) -> Result<(), String> {
         self.got += data.len() as u64;
         if self.got > self.size {
-            return Err(format!("{} : plus long qu’annoncé", self.name));
+            return Err(format!("{}{}{}", self.name, crate::i18n::colon(), crate::i18n::tr("longer than announced", "plus long qu’annoncé")));
         }
         self.hasher.update(data);
-        self.file.write_all(data).map_err(|e| format!("Écriture de {} : {e}", self.name))
+        self.file.write_all(data).map_err(|e| format!("{} {}{}{e}", crate::i18n::tr("Writing", "Écriture de"), self.name, crate::i18n::colon()))
     }
 
     /// Bytes written so far.
@@ -110,10 +114,10 @@ impl Incoming {
         let check = (|| {
             self.file.flush().map_err(|e| e.to_string())?;
             if self.got != self.size {
-                return Err(format!("{} : {} octets reçus sur {}", self.name, self.got, self.size));
+                return Err(format!("{}{}{} {} {}", self.name, crate::i18n::colon(), self.got, crate::i18n::tr("bytes received out of", "octets reçus sur"), self.size));
             }
             if self.hasher.clone().finalize().as_slice() != sha256 {
-                return Err(format!("{} : empreinte différente", self.name));
+                return Err(format!("{}{}{}", self.name, crate::i18n::colon(), crate::i18n::tr("checksum mismatch", "empreinte différente")));
             }
             Ok(())
         })();
@@ -312,7 +316,7 @@ pub fn summary(base: &Path, limit: usize) -> Vec<MonthSummary> {
         .into_iter()
         .take(limit)
         .map(|(y, m, files, bytes)| MonthSummary {
-            label: format!("{y} › {}", MONTHS[(m - 1) as usize]),
+            label: format!("{y} › {}", (if crate::i18n::french() { MONTHS_FR } else { MONTHS_EN })[(m - 1) as usize]),
             files,
             bytes,
         })
@@ -428,7 +432,7 @@ mod tests {
         let month = dir.path().join("2026").join("10");
         let mut f = Incoming::start(dir.path(), "year_month", &file("a.mov", b"12345")).unwrap();
         f.chunk(b"12345").unwrap();
-        assert!(f.finish(&[0u8; 32]).unwrap_err().contains("empreinte"));
+        assert!(f.finish(&[0u8; 32]).unwrap_err().contains("checksum"));
         let mut g = Incoming::start(dir.path(), "year_month", &file("a.mov", b"12345")).unwrap();
         g.chunk(b"123").unwrap();
         assert!(g.finish(&Sha256::digest(b"123")).is_err());
@@ -470,7 +474,7 @@ mod tests {
         fs::create_dir_all(dir.path().join("notes")).unwrap();
         let s = summary(dir.path(), 3);
         assert_eq!(s.len(), 2);
-        assert_eq!(s[0], MonthSummary { label: "2026 › Octobre".into(), files: 2, bytes: 15 });
-        assert_eq!(s[1].label, "2026 › Septembre");
+        assert_eq!(s[0], MonthSummary { label: "2026 › October".into(), files: 2, bytes: 15 });
+        assert_eq!(s[1].label, "2026 › September");
     }
 }

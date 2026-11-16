@@ -39,7 +39,7 @@ struct WaitState {
     bool phone = false;
     bool multi = true;
     uint8_t style = 0;  // 0 animated, 1 minimal
-    std::wstring message = L"Je reviens bientôt";
+    std::wstring message = L"Be right back";
     // The lines that roll, chosen and translated in the app (ADR-0033);
     // empty: the built-in languages of the default message.
     struct Line {

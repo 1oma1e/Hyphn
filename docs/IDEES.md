@@ -68,5 +68,6 @@ Idées à ajouter petit à petit. **Aucune n'est validée** : Evan choisit, puis
 | Partage d'écran de l'iPhone (ReplayKit) | ★★ | L | Bloqué par les extensions xtool |
 | App Linux (v4l2loopback) | ★ | M | Le serveur et d'autres PC Linux |
 | Android (Samsung) | ★★★ | L | Phase 7, prévu |
+| Message de pause traduit depuis la langue de l'app (anglais ou français), pas toujours depuis le français | ★★ | S | [[ADR-0042 Anglais par defaut et choix de la langue]] |
 
 Liens : [[00-Accueil]]

@@ -583,6 +583,12 @@ pub fn obs_present() -> bool {
 #[cfg(windows)]
 pub use sys::{create_camera, keep_full_speed, remove_camera, run_elevated};
 
+/// The error of a « No » to the Windows admin prompt.
+#[cfg(windows)]
+pub fn cancelled() -> &'static str {
+    crate::i18n::tr("installation cancelled", "installation annulée")
+}
+
 #[cfg(windows)]
 mod sys {
     use std::ffi::c_void;
@@ -748,13 +754,13 @@ mod sys {
             }
             *held = lib as usize;
             let Some(f) = GetProcAddress(lib, c"HyphnVCamCreate".as_ptr() as *const u8) else {
-                return Err("HyphnVCamCreate absent de la DLL".into());
+                return Err(crate::i18n::tr("HyphnVCamCreate missing from the DLL", "HyphnVCamCreate absent de la DLL").into());
             };
             let create: unsafe extern "system" fn(*const u16) -> i32 = std::mem::transmute(f);
             let name = wide("Hyphn");
             let hr = create(name.as_ptr());
             if hr < 0 {
-                return Err(format!("création de la webcam : 0x{:08X}", hr as u32));
+                return Err(format!("{}{}0x{:08X}", crate::i18n::tr("webcam creation", "création de la webcam"), crate::i18n::colon(), hr as u32));
             }
         }
         Ok(())
@@ -820,7 +826,7 @@ mod sys {
             info.lpParameters = params.as_ptr();
             info.nShow = SW_HIDE;
             if ShellExecuteExW(&mut info) == 0 {
-                return Err("installation annulée".into());
+                return Err(super::cancelled().into());
             }
             WaitForSingleObject(info.hProcess, INFINITE);
             let mut code = 1u32;

@@ -54,7 +54,8 @@ Source unique des règles du projet. Les règles **sans exception** sont aussi i
 - Une API Windows se vérifie sur Microsoft Learn.
 - Pas de tampon vidéo par défaut côté PC (latence). Pas de son : Hyphn n'envoie que l'image ([[ADR-0018 Cam image seule et demarrage en pause]]).
 - Les effets d'image (flou, lumière, filtres, cadrage) sont calculés par la carte graphique du PC.
-- Chaque réglage, bouton en icône et chiffre affiché a une **info-bulle** : ce que c'est, son effet, et un exemple ou la valeur conseillée, en français simple. Un nouveau réglage arrive avec la sienne (demande d'Evan, 2026-11-02). Les textes sont dans `TIPS` de `apps/desktop/ui/app.js`.
+- Chaque réglage, bouton en icône et chiffre affiché a une **info-bulle** : ce que c'est, son effet, et un exemple ou la valeur conseillée, en mots simples. Un nouveau réglage arrive avec la sienne (demande d'Evan, 2026-11-02). Les textes sont dans `TIPS` de `apps/desktop/ui/app.js` (anglais) et `TIPS_FR` de `apps/desktop/ui/fr.js` (français).
+- Tout texte visible existe en anglais (par défaut) et en français ([[ADR-0042 Anglais par defaut et choix de la langue]]).
 
 ## Infos et vérification
 - Ne jamais inventer un chiffre : sans mesure, afficher « inconnu ». Pas de « % santé batterie » calculé ([[ADR-0006 Sante batterie par cable]]).

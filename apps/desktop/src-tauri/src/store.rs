@@ -21,6 +21,8 @@ pub struct Settings {
     pub close_to_tray: bool,
     /// "system", "dark" or "light".
     pub theme: String,
+    /// "en" or "fr" (ADR-0042).
+    pub lang: String,
     pub photos_dir: String,
     /// "year_month", "year" or "flat".
     pub sort: String,
@@ -43,6 +45,7 @@ impl Default for Settings {
             launch_at_startup: false,
             close_to_tray: true,
             theme: "system".into(),
+            lang: "en".into(),
             photos_dir: String::new(),
             sort: "year_month".into(),
             low_battery_alert: true,

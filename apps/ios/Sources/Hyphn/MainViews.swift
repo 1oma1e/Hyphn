@@ -92,10 +92,10 @@ struct TabBar: View {
 
     var body: some View {
         HStack {
-            item(.home, "house", "Accueil")
+            item(.home, "house", L("Home", "Accueil"))
             item(.cam, "video", "Cam")
             item(.drop, "arrow.up.arrow.down", "Drop")
-            item(.settings, "slider.horizontal.3", "Réglages")
+            item(.settings, "slider.horizontal.3", L("Settings", "Réglages"))
         }
         .padding(8)
         .frame(height: 68)
@@ -143,7 +143,7 @@ struct HomeView: View {
                     Spacer()
                     HStack(spacing: 8) {
                         Led(on: online)
-                        Text(online ? "\(link.pcName) · \(link.viaCable ? "câble" : "Wi-Fi")" : link.phase == .searching ? "\(link.pcName) · recherche…" : "\(link.pcName) · hors ligne")
+                        Text(online ? "\(link.pcName) · \(link.viaCable ? L("cable", "câble") : "Wi-Fi")" : link.phase == .searching ? L("\(link.pcName) · searching…", "\(link.pcName) · recherche…") : L("\(link.pcName) · offline", "\(link.pcName) · hors ligne"))
                             .font(.geist(13))
                     }
                     .padding(.horizontal, 12).frame(height: 36)
@@ -161,7 +161,7 @@ struct HomeView: View {
             .padding(.bottom, 90)
 
             if toast {
-                Label("Lié à \(link.pcName)", systemImage: "checkmark.circle.fill")
+                Label(L("Paired with \(link.pcName)", "Lié à \(link.pcName)"), systemImage: "checkmark.circle.fill")
                     .font(.geist(14, .semibold))
                     .padding(.horizontal, 16).frame(height: 44)
                     .background(Color(hex: 0x141A12, alpha: 0.9), in: Capsule())
@@ -183,7 +183,7 @@ struct HomeView: View {
             HStack {
                 HStack(spacing: 8) {
                     Led(on: online)
-                    Text(online ? "Prête" : link.phase == .searching ? "Recherche du PC…" : "PC introuvable")
+                    Text(online ? L("Ready", "Prête") : link.phase == .searching ? L("Looking for the PC…", "Recherche du PC…") : L("PC not found", "PC introuvable"))
                 }
                 .font(.geist(12, .semibold))
                 .foregroundStyle(online ? Color(hex: 0xD7F7A6) : Ink.tx3)
@@ -201,21 +201,21 @@ struct HomeView: View {
             }
             Spacer()
             Text("Cam").font(.geist(68, .semibold)).tracking(-4)
-            Text("Ton iPhone devient la webcam de **\(link.pcName)**.")
+            Text(LocalizedStringKey(L("Your iPhone becomes the webcam for **\(link.pcName)**.", "Ton iPhone devient la webcam de **\(link.pcName)**.")))
                 .font(.geist(16)).foregroundStyle(Ink.tx2).padding(.top, 6)
             HStack(spacing: 6) {
-                chip("\(link.camControl.height >= 2160 ? "4K" : "\(link.camControl.height)p") · \(link.camControl.fps) i/s", mono: true)
-                chip("Démarre en pause", mono: false)
+                chip("\(link.camControl.height >= 2160 ? "4K" : "\(link.camControl.height)p") · \(link.camControl.fps) \(L("fps", "i/s"))", mono: true)
+                chip(L("Starts paused", "Démarre en pause"), mono: false)
             }
             .padding(.vertical, 16)
             if case let .offline(msg) = link.phase {
                 if !msg.isEmpty { Text(msg).font(.geist(13)).foregroundStyle(Ink.am).padding(.bottom, 10) }
-                Button { link.reconnectNow() } label: { Label("Reconnecter", systemImage: "arrow.clockwise") }
+                Button { link.reconnectNow() } label: { Label(L("Reconnect", "Reconnecter"), systemImage: "arrow.clockwise") }
                     .buttonStyle(GhostButtonStyle())
             } else {
                 Button { withAnimation(.spring(duration: 0.45)) { tab = .cam } } label: {
                     HStack {
-                        Text("Lancer la caméra")
+                        Text(L("Start the camera", "Lancer la caméra"))
                         Spacer()
                         Image(systemName: "arrow.right")
                             .font(.system(size: 18, weight: .bold))
@@ -258,7 +258,7 @@ struct HomeView: View {
                 .frame(width: 58, height: 58)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Drop").font(.geist(17, .semibold))
-                    Text("Bientôt").font(.geist(13)).foregroundStyle(Ink.tx2)
+                    Text(L("Coming soon", "Bientôt")).font(.geist(13)).foregroundStyle(Ink.tx2)
                 }
                 Spacer()
             }
@@ -309,7 +309,7 @@ struct CamView: View {
             if !camera.live {
                 VStack(spacing: 10) {
                     Spacer()
-                    Text("En pause").font(.geist(30, .semibold)).tracking(-1)
+                    Text(L("Paused", "En pause")).font(.geist(30, .semibold)).tracking(-1)
                     Spacer().frame(height: 260)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -317,7 +317,7 @@ struct CamView: View {
                 .allowsHitTesting(false)
             }
             if camera.denied {
-                Problem(title: "Caméra refusée", text: "Autorise la caméra dans Settings › Hyphn pour utiliser Cam.", settings: true)
+                Problem(title: L("Camera denied", "Caméra refusée"), text: L("Allow the camera in Settings › Hyphn to use Cam.", "Autorise la caméra dans Settings › Hyphn pour utiliser Cam."), settings: true)
                     .padding(20)
                     .background(Ink.card, in: RoundedRectangle(cornerRadius: 28))
                     .padding(16)
@@ -347,15 +347,15 @@ struct CamView: View {
             Button { withAnimation(.spring(duration: 0.45)) { tab = .home } } label: {
                 Image(systemName: "xmark").frame(width: 44, height: 44).background(.ultraThinMaterial, in: Circle())
             }
-            .accessibilityLabel("Fermer Cam")
+            .accessibilityLabel(L("Close Cam", "Fermer Cam"))
             Spacer()
             HStack(spacing: 8) {
                 if camera.live {
                     Circle().fill(Ink.co).frame(width: 8, height: 8)
-                    Text("ENVOI").font(.geist(12, .bold))
+                    Text(L("LIVE", "ENVOI")).font(.geist(12, .bold))
                 } else {
                     Image(systemName: "pause.fill").font(.system(size: 11))
-                    Text("PAUSE").font(.geist(12, .bold))
+                    Text(L("PAUSED", "PAUSE")).font(.geist(12, .bold))
                 }
                 Text(String(format: "%.1f Mb/s", camera.sentMbps)).font(.mono(12))
             }
@@ -367,7 +367,7 @@ struct CamView: View {
                 Text(qualityText).font(.mono(13, .semibold))
                     .padding(.horizontal, 12).frame(height: 44).background(.ultraThinMaterial, in: Capsule())
             }
-            .accessibilityLabel("Choisir la qualité")
+            .accessibilityLabel(L("Choose the quality", "Choisir la qualité"))
         }
         .foregroundStyle(Ink.tx)
     }
@@ -379,11 +379,11 @@ struct CamView: View {
 
     @ViewBuilder private var notices: some View {
         switch DeviceInfo.thermal {
-        case .serious: notice("Chaud : 30 images/s")
-        case .critical: notice("Très chaud : 1080p30")
+        case .serious: notice(L("Hot: 30 fps", "Chaud : 30 images/s"))
+        case .critical: notice(L("Very hot: 1080p30", "Très chaud : 1080p30"))
         default: EmptyView()
         }
-        if link.phase != .online { notice("Reconnexion…") }
+        if link.phase != .online { notice(L("Reconnecting…", "Reconnexion…")) }
     }
 
     private func notice(_ t: String) -> some View {
@@ -398,7 +398,7 @@ struct CamView: View {
             ForEach(0..<4, id: \.self) { i in
                 let on = camera.lens == UInt32(i) && !camera.front
                 Button { camera.pickLens(UInt32(i)) } label: {
-                    Text(["0,5", "1×", "2", "5"][i])
+                    Text([L("0.5", "0,5"), "1×", "2", "5"][i])
                         .font(.mono(on ? 14 : 12, .semibold))
                         .foregroundStyle(on ? Ink.am : Ink.tx)
                         .frame(width: on ? 46 : 38, height: on ? 46 : 38)
@@ -406,7 +406,7 @@ struct CamView: View {
                         .overlay(Circle().stroke(on ? Ink.am.opacity(0.6) : Ink.line))
                 }
                 .disabled(camera.front)
-                .accessibilityLabel("Objectif \(["0,5×", "1×", "2×", "5×"][i])")
+                .accessibilityLabel(L("Lens \(["0.5×", "1×", "2×", "5×"][i])", "Objectif \(["0,5×", "1×", "2×", "5×"][i])"))
             }
         }
         .padding(.bottom, 18)
@@ -415,7 +415,7 @@ struct CamView: View {
 
     private var controls: some View {
         HStack(alignment: .top) {
-            sideButton("arrow.triangle.2.circlepath", label: camera.front ? "Avant" : "Arrière") { camera.flip() }
+            sideButton("arrow.triangle.2.circlepath", label: camera.front ? L("Front", "Avant") : L("Back", "Arrière")) { camera.flip() }
             Spacer()
             VStack(spacing: 8) {
                 Button { camera.toggleLive() } label: {
@@ -428,11 +428,11 @@ struct CamView: View {
                     }
                 }
                 .disabled(link.phase != .online || camera.denied)
-                .accessibilityLabel(camera.live ? "Pause" : "Afficher")
-                Text(camera.live ? "Pause" : "Afficher").font(.geist(12, .semibold))
+                .accessibilityLabel(camera.live ? "Pause" : L("Show", "Afficher"))
+                Text(camera.live ? "Pause" : L("Show", "Afficher")).font(.geist(12, .semibold))
             }
             Spacer()
-            sideButton("moon.fill", label: "Écran noir") { sleep() }
+            sideButton("moon.fill", label: L("Black screen", "Écran noir")) { sleep() }
         }
         .foregroundStyle(Ink.tx)
         .padding(.horizontal, 20)
@@ -453,12 +453,12 @@ struct CamView: View {
             .overlay {
                 VStack(spacing: 10) {
                     Circle().fill(camera.live ? Ink.co : Ink.tx3).frame(width: 8, height: 8)
-                    Text(camera.live ? "EN DIRECT" : "EN PAUSE").font(.geist(13, .semibold)).foregroundStyle(Color(hex: 0x4F5560))
-                    Text("Touche deux fois pour rallumer").font(.geist(12)).foregroundStyle(Color(hex: 0x3A3F48))
+                    Text(camera.live ? L("LIVE", "EN DIRECT") : L("PAUSED", "EN PAUSE")).font(.geist(13, .semibold)).foregroundStyle(Color(hex: 0x4F5560))
+                    Text(L("Double-tap to wake", "Touche deux fois pour rallumer")).font(.geist(12)).foregroundStyle(Color(hex: 0x3A3F48))
                 }
             }
             .onTapGesture(count: 2) { wake(); armIdle() }
-            .accessibilityLabel("Toucher deux fois pour rallumer l’écran")
+            .accessibilityLabel(L("Double-tap to turn the screen back on", "Toucher deux fois pour rallumer l’écran"))
     }
 
     /// E6: black screen by hand, or after 30 s without a touch (setting on by default).
@@ -506,11 +506,11 @@ struct QualitySheet: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            Text("Qualité envoyée").font(.geist(20, .semibold))
-            segment("Qualité", [(2160, "4K"), (1080, "1080p"), (720, "720p")], current: link.camControl.height) {
+            Text(L("Stream quality", "Qualité envoyée")).font(.geist(20, .semibold))
+            segment(L("Quality", "Qualité"), [(2160, "4K"), (1080, "1080p"), (720, "720p")], current: link.camControl.height) {
                 camera.pickQuality(height: $0, fps: link.camControl.fps)
             }
-            segment("Images par seconde", [(24, "24"), (30, "30"), (60, "60")], current: link.camControl.fps) {
+            segment(L("Frames per second", "Images par seconde"), [(24, "24"), (30, "30"), (60, "60")], current: link.camControl.fps) {
                 camera.pickQuality(height: link.camControl.height, fps: $0)
             }
             Button("OK") { dismiss() }.buttonStyle(PrimaryButtonStyle(fill: Ink.tx, text: .black))
@@ -559,7 +559,7 @@ struct DropView: View {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Drop").font(.geist(34, .semibold)).tracking(-1.2)
-                    Text("Vers \(link.pcName)").font(.geist(15)).foregroundStyle(Ink.tx2)
+                    Text(L("To \(link.pcName)", "Vers \(link.pcName)")).font(.geist(15)).foregroundStyle(Ink.tx2)
                 }
                 .padding(.top, 8)
                 content
@@ -627,12 +627,12 @@ struct DropView: View {
             card {
                 VStack(alignment: .leading, spacing: 14) {
                     icon("lock.shield", Ink.cy)
-                    Text("Hyphn a besoin de tes photos").font(.geist(22, .semibold)).tracking(-0.6)
-                    Text("Seulement pour envoyer celles que tu choisis à ton PC, directement et chiffrées. Rien ne part ailleurs.")
+                    Text(L("Hyphn needs your photos", "Hyphn a besoin de tes photos")).font(.geist(22, .semibold)).tracking(-0.6)
+                    Text(L("Only to send the ones you choose to your PC, directly and encrypted. Nothing goes anywhere else.", "Seulement pour envoyer celles que tu choisis à ton PC, directement et chiffrées. Rien ne part ailleurs."))
                         .font(.geist(14)).foregroundStyle(Ink.tx2)
-                    Text("iOS va te demander l’accès : choisis « Allow Full Access » pour tout pouvoir envoyer.")
+                    Text(L("iOS will ask for access: choose “Allow Full Access” so you can send anything.", "iOS va te demander l’accès : choisis « Allow Full Access » pour tout pouvoir envoyer."))
                         .font(.geist(13)).foregroundStyle(Ink.tx3)
-                    Button("Continuer") {
+                    Button(L("Continue", "Continuer")) {
                         Task {
                             _ = await Dropper.askPhotos()
                             explain = nil
@@ -640,7 +640,7 @@ struct DropView: View {
                         }
                     }
                     .buttonStyle(PrimaryButtonStyle(fill: Ink.cy, text: .black))
-                    Button("Plus tard") { explain = nil }.buttonStyle(GhostButtonStyle())
+                    Button(L("Not Now", "Plus tard")) { explain = nil }.buttonStyle(GhostButtonStyle())
                 }
             }
         } else {
@@ -651,8 +651,8 @@ struct DropView: View {
                     HStack(spacing: 14) {
                         ProgressView().tint(Ink.cy)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Je prépare l’envoi…").font(.geist(17, .semibold))
-                            Text("Je demande au PC ce qu’il a déjà.").font(.geist(13)).foregroundStyle(Ink.tx2)
+                            Text(L("Getting the send ready…", "Je prépare l’envoi…")).font(.geist(17, .semibold))
+                            Text(L("Asking the PC what it already has.", "Je demande au PC ce qu’il a déjà.")).font(.geist(13)).foregroundStyle(Ink.tx2)
                         }
                     }
                 }
@@ -660,23 +660,25 @@ struct DropView: View {
                 card {
                     VStack(alignment: .leading, spacing: 12) {
                         icon("arrow.triangle.2.circlepath", Ink.am)
-                        Text(already == total ? "Déjà envoyé\(total > 1 ? "s" : "")" : "\(already) déjà envoyé\(already > 1 ? "s" : "")")
+                        Text(already == total ? L("Already sent", "Déjà envoyé\(total > 1 ? "s" : "")") : L("\(already) already sent", "\(already) déjà envoyé\(already > 1 ? "s" : "")"))
                             .font(.geist(26, .semibold)).tracking(-0.8)
                         Text(already == total
-                             ? "\(total > 1 ? "Ces \(total) éléments sont" : "Cet élément est") déjà arrivé\(total > 1 ? "s" : "") sur \(link.pcName)."
-                             : "Sur les \(total) choisis, \(already) sont déjà arrivés sur \(link.pcName).")
+                             ? L(total > 1 ? "These \(total) items are already on \(link.pcName)." : "This item is already on \(link.pcName).",
+                                 "\(total > 1 ? "Ces \(total) éléments sont" : "Cet élément est") déjà arrivé\(total > 1 ? "s" : "") sur \(link.pcName).")
+                             : L("Of the \(total) you chose, \(already) are already on \(link.pcName).",
+                                 "Sur les \(total) choisis, \(already) sont déjà arrivés sur \(link.pcName)."))
                             .font(.geist(15)).foregroundStyle(Ink.tx2)
-                        Text("Si tu les as supprimés du PC, renvoie-les. Ceux encore présents ne seront pas copiés deux fois.")
+                        Text(L("If you deleted them from the PC, send them again. The ones still there won't be copied twice.", "Si tu les as supprimés du PC, renvoie-les. Ceux encore présents ne seront pas copiés deux fois."))
                             .font(.geist(13)).foregroundStyle(Ink.tx3)
                         if already < total {
-                            Button("Envoyer les \(total - already) nouveau\(total - already > 1 ? "x" : "")") { dropper.answerAlready(false) }
+                            Button(L("Send the \(total - already) new one\(total - already > 1 ? "s" : "")", "Envoyer les \(total - already) nouveau\(total - already > 1 ? "x" : "")")) { dropper.answerAlready(false) }
                                 .buttonStyle(PrimaryButtonStyle(fill: Ink.cy, text: .black)).padding(.top, 4)
-                            Button("Tout renvoyer") { dropper.answerAlready(true) }.buttonStyle(GhostButtonStyle())
+                            Button(L("Send All Again", "Tout renvoyer")) { dropper.answerAlready(true) }.buttonStyle(GhostButtonStyle())
                         } else {
-                            Button("Les renvoyer") { dropper.answerAlready(true) }
+                            Button(L("Send Them Again", "Les renvoyer")) { dropper.answerAlready(true) }
                                 .buttonStyle(PrimaryButtonStyle(fill: Ink.cy, text: .black)).padding(.top, 4)
                         }
-                        Button("Annuler") { dropper.cancel() }
+                        Button(L("Cancel", "Annuler")) { dropper.cancel() }
                             .font(.geist(15, .medium)).foregroundStyle(Ink.tx2)
                             .frame(maxWidth: .infinity).padding(.top, 2)
                     }
@@ -684,29 +686,29 @@ struct DropView: View {
             case let .review(items, bytes):
                 card {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("APERÇU").font(.geist(12, .bold)).tracking(1.5).foregroundStyle(Ink.cy)
-                        Text("Envoyer \(items) élément\(items > 1 ? "s" : "") ?").font(.geist(26, .semibold)).tracking(-0.8)
+                        Text(L("PREVIEW", "APERÇU")).font(.geist(12, .bold)).tracking(1.5).foregroundStyle(Ink.cy)
+                        Text(L("Send \(items) item\(items > 1 ? "s" : "")?", "Envoyer \(items) élément\(items > 1 ? "s" : "") ?")).font(.geist(26, .semibold)).tracking(-0.8)
                         PreviewGrid(previews: dropper.previews, total: items)
-                        Text(Self.kinds(dropper) + " · \(Self.size(bytes)) vers \(link.pcName)")
+                        Text(Self.kinds(dropper) + " · \(Self.size(bytes)) \(L("to", "vers")) \(link.pcName)")
                             .font(.geist(14)).foregroundStyle(Ink.tx2)
                         if dropper.already > 0 {
-                            Text("\(dropper.already) déjà sur le PC : pas renvoyé\(dropper.already > 1 ? "s" : "").")
+                            Text(L("\(dropper.already) already on the PC: not sent again.", "\(dropper.already) déjà sur le PC : pas renvoyé\(dropper.already > 1 ? "s" : "")."))
                                 .font(.geist(13)).foregroundStyle(Ink.li)
                         }
-                        Text("Ton PC te demandera ensuite de confirmer.").font(.geist(13)).foregroundStyle(Ink.tx3)
-                        Button("Envoyer") { dropper.confirmReview(true) }
+                        Text(L("Your PC will then ask you to confirm.", "Ton PC te demandera ensuite de confirmer.")).font(.geist(13)).foregroundStyle(Ink.tx3)
+                        Button(L("Send", "Envoyer")) { dropper.confirmReview(true) }
                             .buttonStyle(PrimaryButtonStyle(fill: Ink.cy, text: .black)).padding(.top, 4)
-                        Button("Annuler") { dropper.cancel() }.buttonStyle(GhostButtonStyle())
+                        Button(L("Cancel", "Annuler")) { dropper.cancel() }.buttonStyle(GhostButtonStyle())
                     }
                 }
             case .waitingPC:
                 card {
                     VStack(alignment: .leading, spacing: 14) {
                         WaitingPC()
-                        Text("Confirme sur ton PC").font(.geist(24, .semibold)).tracking(-0.7)
-                        Text("\(link.pcName) affiche une fenêtre pour accepter l’envoi. La première fois, il te demande aussi où ranger les photos.")
+                        Text(L("Confirm on your PC", "Confirme sur ton PC")).font(.geist(24, .semibold)).tracking(-0.7)
+                        Text(L("\(link.pcName) shows a window to accept the send. The first time, it also asks where to save the photos.", "\(link.pcName) affiche une fenêtre pour accepter l’envoi. La première fois, il te demande aussi où ranger les photos."))
                             .font(.geist(14)).foregroundStyle(Ink.tx2)
-                        Button("Annuler") { dropper.cancel() }.buttonStyle(GhostButtonStyle()).padding(.top, 4)
+                        Button(L("Cancel", "Annuler")) { dropper.cancel() }.buttonStyle(GhostButtonStyle()).padding(.top, 4)
                     }
                 }
             case .sending: card { sending }
@@ -717,22 +719,22 @@ struct DropView: View {
                             .frame(width: 56, height: 56).background(Ink.li, in: Circle())
                             .shadow(color: Ink.li.opacity(0.5), radius: 14)
                             .scaleEffect(shown ? 1 : 0.3)
-                        Text(items > 0 ? "\(items) élément\(items > 1 ? "s" : "") sur le PC" : "Tout est déjà sur le PC")
+                        Text(items > 0 ? L("\(items) item\(items > 1 ? "s" : "") on the PC", "\(items) élément\(items > 1 ? "s" : "") sur le PC") : L("Everything is already on the PC", "Tout est déjà sur le PC"))
                             .font(.geist(24, .semibold)).tracking(-0.7)
-                        Text([items > 0 ? "\(Self.size(bytes)) · vérifiés un par un" : nil,
-                              already > 0 ? "\(already) déjà dessus" : nil].compactMap { $0 }.joined(separator: " · "))
+                        Text([items > 0 ? L("\(Self.size(bytes)) · checked one by one", "\(Self.size(bytes)) · vérifiés un par un") : nil,
+                              already > 0 ? L("\(already) already there", "\(already) déjà dessus") : nil].compactMap { $0 }.joined(separator: " · "))
                             .font(.geist(14)).foregroundStyle(Ink.tx2)
                         if failed > 0 {
-                            Text("\(failed) non envoyé\(failed > 1 ? "s" : "") (introuvable, ou impossible à télécharger depuis iCloud).")
+                            Text(L("\(failed) not sent (not found, or couldn't be downloaded from iCloud).", "\(failed) non envoyé\(failed > 1 ? "s" : "") (introuvable, ou impossible à télécharger depuis iCloud)."))
                                 .font(.geist(13)).foregroundStyle(Ink.am)
                         }
-                        Button("Envoyer autre chose") { dropper.reset() }.buttonStyle(GhostButtonStyle()).padding(.top, 4)
+                        Button(L("Send Something Else", "Envoyer autre chose")) { dropper.reset() }.buttonStyle(GhostButtonStyle()).padding(.top, 4)
                     }
                 }
             case let .failed(message):
                 card {
                     VStack(spacing: 14) {
-                        Problem(title: "Envoi arrêté", text: message, settings: dropper.needsAccess)
+                        Problem(title: L("Send stopped", "Envoi arrêté"), text: message, settings: dropper.needsAccess)
                         Button("OK") { dropper.reset() }.buttonStyle(GhostButtonStyle())
                     }
                 }
@@ -744,30 +746,30 @@ struct DropView: View {
     /// it for an album and files, coming in one after the other.
     private var choose: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Que veux-tu envoyer ?").font(.geist(22, .semibold)).tracking(-0.6).padding(.top, 4)
+            Text(L("What do you want to send?", "Que veux-tu envoyer ?")).font(.geist(22, .semibold)).tracking(-0.6).padding(.top, 4)
             Button { withPhotos { showPicker = true } } label: {
-                ChoiceCard(symbol: "photo.on.rectangle.angled", color: Ink.cy, title: "Photos et vidéos",
-                           text: "Choisis-les dans ta photothèque, en qualité d’origine.", big: true)
+                ChoiceCard(symbol: "photo.on.rectangle.angled", color: Ink.cy, title: L("Photos and videos", "Photos et vidéos"),
+                           text: L("Pick them from your library, in original quality.", "Choisis-les dans ta photothèque, en qualité d’origine."), big: true)
             }
             .buttonStyle(PressStyle())
             .modifier(Arrive(shown: shown, index: 0, online: online))
             HStack(spacing: 12) {
                 Button { withPhotos { showAlbums = true } } label: {
-                    ChoiceCard(symbol: "rectangle.stack.fill", color: Ink.li, title: "Un album", text: "Tout l’album d’un coup.", big: false)
+                    ChoiceCard(symbol: "rectangle.stack.fill", color: Ink.li, title: L("An album", "Un album"), text: L("The whole album at once.", "Tout l’album d’un coup."), big: false)
                 }
                 .buttonStyle(PressStyle())
                 .modifier(Arrive(shown: shown, index: 1, online: online))
                 Button { showFiles = true } label: {
-                    ChoiceCard(symbol: "folder.fill", color: Ink.am, title: "Des fichiers", text: "Depuis l’app Fichiers.", big: false)
+                    ChoiceCard(symbol: "folder.fill", color: Ink.am, title: L("Files", "Des fichiers"), text: L("From the Files app.", "Depuis l’app Fichiers."), big: false)
                 }
                 .buttonStyle(PressStyle())
                 .modifier(Arrive(shown: shown, index: 2, online: online))
             }
             .disabled(!online)
             if !online {
-                Text("PC hors ligne : ouvre Hyphn sur le PC.").font(.geist(13)).foregroundStyle(Ink.am)
+                Text(L("PC offline: open Hyphn on the PC.", "PC hors ligne : ouvre Hyphn sur le PC.")).font(.geist(13)).foregroundStyle(Ink.am)
             } else {
-                Text("En qualité d’origine, vérifié un par un. Rien n’est envoyé deux fois.")
+                Text(L("In original quality, checked one by one. Nothing is sent twice.", "En qualité d’origine, vérifié un par un. Rien n’est envoyé deux fois."))
                     .font(.geist(13)).foregroundStyle(Ink.tx3).padding(.top, 2)
             }
         }
@@ -779,20 +781,20 @@ struct DropView: View {
         let d = dropper
         return VStack(alignment: .leading, spacing: 14) {
             SendingFlow()
-            Text("Envoi en cours").font(.geist(26, .semibold)).tracking(-0.8)
-            Text("Suis la progression sur \(link.pcName).").font(.geist(14)).foregroundStyle(Ink.tx2)
+            Text(L("Sending", "Envoi en cours")).font(.geist(26, .semibold)).tracking(-0.8)
+            Text(L("Follow the progress on \(link.pcName).", "Suis la progression sur \(link.pcName).")).font(.geist(14)).foregroundStyle(Ink.tx2)
             HStack(spacing: 10) {
                 Image(systemName: "doc").font(.system(size: 13)).foregroundStyle(Ink.cy)
-                Text(d.current.isEmpty ? "Préparation…" : d.current).font(.geist(14)).lineLimit(1).truncationMode(.middle)
+                Text(d.current.isEmpty ? L("Getting ready…", "Préparation…") : d.current).font(.geist(14)).lineLimit(1).truncationMode(.middle)
                     .contentTransition(.opacity).animation(.easeOut, value: d.current)
             }
             .padding(.horizontal, 12).frame(height: 38)
             .background(Color.white.opacity(0.05), in: Capsule())
             if let c = d.cloud {
-                Text("Téléchargement iCloud… \(Int(c * 100)) %").font(.geist(13)).foregroundStyle(Ink.am)
+                Text(L("Downloading from iCloud… \(Int(c * 100))%", "Téléchargement iCloud… \(Int(c * 100)) %")).font(.geist(13)).foregroundStyle(Ink.am)
             }
-            Text("Garde Hyphn ouvert pendant l’envoi.").font(.geist(13)).foregroundStyle(Ink.tx3)
-            Button("Annuler") { d.cancel() }.buttonStyle(GhostButtonStyle()).padding(.top, 2)
+            Text(L("Keep Hyphn open while sending.", "Garde Hyphn ouvert pendant l’envoi.")).font(.geist(13)).foregroundStyle(Ink.tx3)
+            Button(L("Cancel", "Annuler")) { d.cancel() }.buttonStyle(GhostButtonStyle()).padding(.top, 2)
         }
     }
 
@@ -813,7 +815,7 @@ struct DropView: View {
 
     /// « 32 photos · 14 vidéos · 2 fichiers ».
     static func kinds(_ d: Dropper) -> String {
-        let parts: [(Int, String)] = [(d.photos, "photo"), (d.videos, "vidéo"), (d.docs, "fichier")]
+        let parts: [(Int, String)] = [(d.photos, "photo"), (d.videos, L("video", "vidéo")), (d.docs, L("file", "fichier"))]
         return parts.filter { $0.0 > 0 }.map { "\($0.0) \($0.1)\($0.0 > 1 ? "s" : "")" }.joined(separator: " · ")
     }
 
@@ -832,7 +834,7 @@ struct LinkJournal: View {
         VStack(alignment: .leading, spacing: 0) {
             Button { withAnimation(.spring(duration: 0.4)) { open.toggle() } } label: {
                 HStack {
-                    Text("Journal de la liaison").font(.geist(15))
+                    Text(L("Link log", "Journal de la liaison")).font(.geist(15))
                     Spacer()
                     Image(systemName: open ? "chevron.up" : "chevron.down").foregroundStyle(Ink.tx3)
                 }
@@ -842,7 +844,7 @@ struct LinkJournal: View {
             if open {
                 VStack(alignment: .leading, spacing: 6) {
                     if link.journal.isEmpty {
-                        Text("Rien pour l’instant.").font(.geist(13)).foregroundStyle(Ink.tx3)
+                        Text(L("Nothing yet.", "Rien pour l’instant.")).font(.geist(13)).foregroundStyle(Ink.tx3)
                     }
                     ForEach(Array(link.journal.enumerated()), id: \.offset) { _, line in
                         Text(line).font(.mono(12)).foregroundStyle(Ink.tx2).textSelection(.enabled)
@@ -1047,7 +1049,7 @@ struct AlbumList: View {
                     }
                 }
             }
-            .navigationTitle("Un album")
+            .navigationTitle(L("An album", "Un album"))
             .navigationBarTitleDisplayMode(.inline)
         }
         .task { albums = Self.load() }
@@ -1082,9 +1084,9 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Réglages").font(.geist(34, .semibold)).tracking(-1.5).padding(.top, 10).padding(.bottom, 10)
+                Text(L("Settings", "Réglages")).font(.geist(34, .semibold)).tracking(-1.5).padding(.top, 10).padding(.bottom, 10)
 
-                section("Ordinateur relié")
+                section(L("Linked computer", "Ordinateur relié"))
                 group {
                     HStack {
                         Image(systemName: "desktopcomputer").foregroundStyle(Ink.li)
@@ -1092,21 +1094,21 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(link.pcName).font(.geist(16, .medium))
                             if let pc = link.pc {
-                                Text("\(link.viaCable ? "Câble" : "Wi-Fi") · relié le \(pc.pairedAt.formatted(.dateTime.day().month(.twoDigits)))")
+                                Text("\(link.viaCable ? L("Cable", "Câble") : "Wi-Fi") · \(L("paired on", "relié le")) \(pc.pairedAt.formatted(.dateTime.day().month(.twoDigits)))")
                                     .font(.geist(12)).foregroundStyle(Ink.tx3)
                             }
                         }
                         Spacer()
-                        Button("Oublier") { withAnimation { asking = true } }
+                        Button(L("Forget", "Oublier")) { withAnimation { asking = true } }
                             .font(.geist(14, .semibold)).foregroundStyle(Ink.co)
                     }
                     .padding(14)
                     if asking {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("\(link.pcName) sera oublié. Il faudra scanner un nouveau QR pour le relier.").font(.geist(14))
+                            Text(L("\(link.pcName) will be forgotten. You'll need to scan a new QR code to pair it again.", "\(link.pcName) sera oublié. Il faudra scanner un nouveau QR pour le relier.")).font(.geist(14))
                             HStack {
-                                Button("Annuler") { withAnimation { asking = false } }.buttonStyle(GhostButtonStyle())
-                                Button("Oublier") { link.forget() }.buttonStyle(PrimaryButtonStyle(fill: Ink.co, text: Ink.onCo))
+                                Button(L("Cancel", "Annuler")) { withAnimation { asking = false } }.buttonStyle(GhostButtonStyle())
+                                Button(L("Forget", "Oublier")) { link.forget() }.buttonStyle(PrimaryButtonStyle(fill: Ink.co, text: Ink.onCo))
                             }
                         }
                         .padding(14)
@@ -1114,12 +1116,12 @@ struct SettingsView: View {
                     }
                     Divider().overlay(Ink.line)
                     Button { link.reconnectNow() } label: {
-                        Label("Reconnecter", systemImage: "arrow.clockwise").font(.geist(15, .medium)).foregroundStyle(Ink.tx)
+                        Label(L("Reconnect", "Reconnecter"), systemImage: "arrow.clockwise").font(.geist(15, .medium)).foregroundStyle(Ink.tx)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(14)
                     }
                     Divider().overlay(Ink.line)
                     Button { scanning = true } label: {
-                        Text("+ Relier un autre PC").font(.geist(15, .medium)).foregroundStyle(Ink.li)
+                        Text(L("+ Pair another PC", "+ Relier un autre PC")).font(.geist(15, .medium)).foregroundStyle(Ink.li)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(14)
                     }
                 }
@@ -1128,19 +1130,19 @@ struct SettingsView: View {
                 group {
                     Toggle(isOn: $autoBlack) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Écran noir automatique").font(.geist(15))
-                            Text("Après 30 s sans toucher").font(.geist(12)).foregroundStyle(Ink.tx3)
+                            Text(L("Auto black screen", "Écran noir automatique")).font(.geist(15))
+                            Text(L("After 30 s without a touch", "Après 30 s sans toucher")).font(.geist(12)).foregroundStyle(Ink.tx3)
                         }
                     }
                     .tint(Ink.li)
                     .padding(14)
                 }
 
-                section("Aide")
+                section(L("Help", "Aide"))
                 group {
                     Button { withAnimation { heat.toggle() } } label: {
                         HStack {
-                            Text("L’iPhone chauffe : que faire").font(.geist(15))
+                            Text(L("iPhone getting hot: what to do", "L’iPhone chauffe : que faire")).font(.geist(15))
                             Spacer()
                             Image(systemName: heat ? "chevron.up" : "chevron.down").foregroundStyle(Ink.tx3)
                         }
@@ -1148,14 +1150,14 @@ struct SettingsView: View {
                     }
                     .foregroundStyle(Ink.tx)
                     if heat {
-                        Text("Retire la coque, pose l’iPhone sur un support aéré, charge-le par câble plutôt qu’en MagSafe. Hyphn baisse tout seul la qualité s’il chauffe trop.")
+                        Text(L("Take off the case, put the iPhone on an open stand, and charge it by cable rather than MagSafe. Hyphn lowers the quality on its own if it gets too hot.", "Retire la coque, pose l’iPhone sur un support aéré, charge-le par câble plutôt qu’en MagSafe. Hyphn baisse tout seul la qualité s’il chauffe trop."))
                             .font(.geist(14)).foregroundStyle(Ink.tx2).padding([.horizontal, .bottom], 14)
                     }
                 }
 
                 LinkJournal()
 
-                Text("Hyphn \(DeviceInfo.appVersion) · protocole v\(protocolVersion)")
+                Text("Hyphn \(DeviceInfo.appVersion) · \(L("protocol", "protocole")) v\(protocolVersion)")
                     .font(.mono(12)).foregroundStyle(Ink.tx3)
                     .frame(maxWidth: .infinity).padding(.top, 18)
             }

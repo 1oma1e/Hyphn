@@ -5,6 +5,7 @@ mod cable;
 mod cam;
 mod drop;
 mod h264;
+mod i18n;
 mod identity;
 mod install;
 mod link;
@@ -217,7 +218,7 @@ fn vcam_state(h: &Hyphn) -> vcam::VcamState {
         phone: v.connected.is_some(),
         multi: c.get("multi").and_then(|v| v.as_bool()).unwrap_or(true),
         style: c.get("wst").and_then(|v| v.as_u64()).unwrap_or(0).min(2) as u8,
-        message: c.get("msg").and_then(|v| v.as_str()).unwrap_or("Je reviens bientôt").to_string(),
+        message: c.get("msg").and_then(|v| v.as_str()).unwrap_or(i18n::tr("Be right back", "Je reviens bientôt")).to_string(),
         lines: wait_lines(c),
     }
 }
@@ -323,7 +324,13 @@ fn pair_offer(h: State<'_, Hyphn>) -> OfferView {
     let Some(ip) = net::local_ip() else {
         return OfferView {
             qr: None,
-            problem: Some("Ce PC n’est relié à aucun réseau local. Branche-le au Wi-Fi ou au câble de ta box, puis réessaie.".into()),
+            problem: Some(
+                i18n::tr(
+                    "This PC is not on a local network. Connect it to Wi-Fi or to your router with a cable, then try again.",
+                    "Ce PC n’est relié à aucun réseau local. Branche-le au Wi-Fi ou au câble de ta box, puis réessaie.",
+                )
+                .into(),
+            ),
             seconds_left: 0,
         };
     };
@@ -351,9 +358,13 @@ fn save_settings(settings: Settings, app: AppHandle, h: State<'_, Hyphn>) -> Res
     if settings.launch_at_startup != inner.settings.launch_at_startup {
         let auto = app.autolaunch();
         let r = if settings.launch_at_startup { auto.enable() } else { auto.disable() };
-        r.map_err(|e| format!("Lancement avec Windows : {e}"))?;
+        r.map_err(|e| format!("{}{}{e}", i18n::tr("Start with Windows", "Lancement avec Windows"), i18n::colon()))?;
     }
     h.hub.store.save_settings(&settings)?;
+    if settings.lang != inner.settings.lang {
+        i18n::set(&settings.lang);
+        set_tray_menu(&app);
+    }
     h.hub.set_drop_target(PathBuf::from(&settings.photos_dir), settings.sort.clone());
     inner.settings = settings;
     Ok(())
@@ -571,9 +582,9 @@ fn set_vcam_declined(app: &AppHandle, declined: bool) {
 /// the camera is created at once. Blocking.
 #[cfg(windows)]
 fn install_native(app: &AppHandle, uninstall: bool) -> Result<(), String> {
-    let native = app.state::<Hyphn>().lock().native.clone().ok_or("Fichiers de la webcam introuvables.")?;
+    let native = app.state::<Hyphn>().lock().native.clone().ok_or(i18n::tr("Webcam files not found.", "Fichiers de la webcam introuvables."))?;
     if !uninstall && !vcam::native_is_genuine(&native) {
-        return Err("Les fichiers de la webcam ont été modifiés : réinstalle Hyphn.".into());
+        return Err(i18n::tr("The webcam files were changed: reinstall Hyphn.", "Les fichiers de la webcam ont été modifiés : réinstalle Hyphn.").into());
     }
     if uninstall {
         vcam::remove_camera();
@@ -586,7 +597,8 @@ fn install_native(app: &AppHandle, uninstall: bool) -> Result<(), String> {
     if code != 0 {
         let why = std::fs::read_to_string(&report).unwrap_or_default();
         let why = why.trim();
-        return Err(if why.is_empty() { format!("L’installation a échoué (code {code}).") } else { format!("L’installation a échoué : {why}") });
+        let failed = i18n::tr("Installation failed", "L’installation a échoué");
+        return Err(if why.is_empty() { format!("{failed} (code {code}).") } else { format!("{failed}{}{why}", i18n::colon()) });
     }
     if uninstall {
         app.state::<Hyphn>().lock().camera = false;
@@ -624,7 +636,7 @@ fn auto_install(app: &AppHandle) {
             let _ = app.emit("vcam_installed", ());
         }
         Err(e) => {
-            if e.contains("annulée") {
+            if e == vcam::cancelled() {
                 set_vcam_declined(app, true);
             }
             let h = app.state::<Hyphn>();
@@ -658,10 +670,21 @@ fn show_main(app: &AppHandle) {
     }
 }
 
+fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let open = MenuItem::with_id(app, "open", i18n::tr("Open Hyphn", "Ouvrir Hyphn"), true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", i18n::tr("Quit", "Quitter"), true, None::<&str>)?;
+    Menu::with_items(app, &[&open, &quit])
+}
+
+/// After a language change: the tray menu in the new language.
+fn set_tray_menu(app: &AppHandle) {
+    if let (Some(tray), Ok(menu)) = (app.tray_by_id("main"), tray_menu(app)) {
+        let _ = tray.set_menu(Some(menu));
+    }
+}
+
 fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Ouvrir Hyphn", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quitter", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &quit])?;
+    let menu = tray_menu(app)?;
     let mut tray = TrayIconBuilder::with_id("main")
         .tooltip("Hyphn")
         .menu(&menu)
@@ -786,10 +809,11 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
-            let pc_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Ce PC".into());
+            let pc_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "PC".into());
             let identity = Identity::load_or_create(&dir, &format!("Hyphn {pc_name}"))?;
             let store = Store::new(&dir)?;
             let mut settings = store.settings();
+            i18n::set(&settings.lang);
             if settings.photos_dir.is_empty() {
                 let pictures = app.path().picture_dir().unwrap_or_else(|_| dir.clone());
                 settings.photos_dir = pictures.join("Hyphn").display().to_string();

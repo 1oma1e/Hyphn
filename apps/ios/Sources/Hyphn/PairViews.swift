@@ -13,9 +13,9 @@ struct WelcomeView: View {
     private let timer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
 
     private let slides: [(String, Color, String, String)] = [
-        ("Bienvenue", Ink.li, "Ton iPhone et ton PC, reliés.", "Un QR code, une seule fois. Ensuite ils se retrouvent tout seuls, sans compte et sans cloud."),
-        ("Cam", Ink.co, "Ta meilleure webcam, c’est ton iPhone.", "Jusqu’en 4K pour Discord, Teams ou OBS. Le PC voit aussi ta batterie et la chaleur."),
-        ("Drop", Ink.cy, "Tes photos, rangées toutes seules.", "Par année et par mois, vérifiées une par une. Bientôt."),
+        (L("Welcome", "Bienvenue"), Ink.li, L("Your iPhone and your PC, linked.", "Ton iPhone et ton PC, reliés."), L("One QR code, just once. Then they find each other on their own, with no account and no cloud.", "Un QR code, une seule fois. Ensuite ils se retrouvent tout seuls, sans compte et sans cloud.")),
+        ("Cam", Ink.co, L("Your best webcam is your iPhone.", "Ta meilleure webcam, c’est ton iPhone."), L("Up to 4K for Discord, Teams or OBS. The PC also sees your battery and heat.", "Jusqu’en 4K pour Discord, Teams ou OBS. Le PC voit aussi ta batterie et la chaleur.")),
+        ("Drop", Ink.cy, L("Your photos, sorted on their own.", "Tes photos, rangées toutes seules."), L("By year and month, checked one by one. Coming soon.", "Par année et par mois, vérifiées une par une. Bientôt.")),
     ]
 
     var body: some View {
@@ -71,7 +71,7 @@ struct WelcomeView: View {
                 .buttonStyle(PrimaryButtonStyle(fill: Ink.tx, text: .black))
 
                 HStack(spacing: 16) {
-                    ForEach(["Sans compte", "Sans cloud", "Chiffré"], id: \.self) { t in
+                    ForEach([L("No account", "Sans compte"), L("No cloud", "Sans cloud"), L("Encrypted", "Chiffré")], id: \.self) { t in
                         Label(t, systemImage: "checkmark").font(.geist(12)).foregroundStyle(Ink.tx3)
                     }
                 }
@@ -112,7 +112,7 @@ struct LinkHero: View {
         }
         .onAppear { drawn = true }
         .accessibilityElement()
-        .accessibilityLabel("Un iPhone et un PC reliés par un fil lumineux")
+        .accessibilityLabel(L("An iPhone and a PC linked by a glowing wire", "Un iPhone et un PC reliés par un fil lumineux"))
     }
 }
 
@@ -148,7 +148,7 @@ struct ScanView: View {
                         link.cancelPairing()
                         scanning = false
                     } label: {
-                        Label("Retour", systemImage: "chevron.left").font(.geist(14, .medium))
+                        Label(L("Back", "Retour"), systemImage: "chevron.left").font(.geist(14, .medium))
                             .padding(.horizontal, 14).frame(height: 44)
                             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
                     }
@@ -160,7 +160,7 @@ struct ScanView: View {
                                 .background(torch ? AnyShapeStyle(Ink.tx) : AnyShapeStyle(.ultraThinMaterial), in: RoundedRectangle(cornerRadius: 14))
                                 .foregroundStyle(torch ? Color.black : Ink.tx)
                         }
-                        .accessibilityLabel("Lampe")
+                        .accessibilityLabel(L("Flashlight", "Lampe"))
                     }
                 }
                 .foregroundStyle(Ink.tx)
@@ -182,24 +182,24 @@ struct ScanView: View {
 
     @ViewBuilder private var panel: some View {
         if cameraDenied {
-            Problem(title: "Caméra refusée", text: "Hyphn a besoin de la caméra pour lire le QR, et seulement pour ça.", settings: true)
+            Problem(title: L("Camera denied", "Caméra refusée"), text: L("Hyphn needs the camera to read the QR code, and only for that.", "Hyphn a besoin de la caméra pour lire le QR, et seulement pour ça."), settings: true)
         } else {
             switch link.pairStep {
             case .idle:
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Vise le QR de ton PC").font(.geist(20, .semibold))
-                    Text("Tiens l’iPhone à une vingtaine de centimètres de l’écran.")
+                    Text(L("Scan your PC's QR code", "Vise le QR de ton PC")).font(.geist(20, .semibold))
+                    Text(L("Hold the iPhone about 20 cm (8 in) from the screen.", "Tiens l’iPhone à une vingtaine de centimètres de l’écran."))
                         .font(.geist(14)).foregroundStyle(Ink.tx2)
-                    Text("Ou branche-le au PC avec un câble : pas besoin de QR.")
+                    Text(L("Or plug it into the PC with a cable: no QR code needed.", "Ou branche-le au PC avec un câble : pas besoin de QR."))
                         .font(.geist(14)).foregroundStyle(Ink.tx3)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             case let .connecting(host, secured):
                 VStack(alignment: .leading, spacing: 12) {
-                    PairStepRow(text: host == PCLink.cableHost ? "Câble branché" : "QR lu", state: .done)
-                    PairStepRow(text: "Je contacte ton PC", state: secured ? .done : .active)
-                    PairStepRow(text: "Je vérifie que c’est bien lui", state: secured ? .active : .todo)
-                    Button("Annuler") { link.cancelPairing() }
+                    PairStepRow(text: host == PCLink.cableHost ? L("Cable plugged in", "Câble branché") : L("QR code scanned", "QR lu"), state: .done)
+                    PairStepRow(text: L("Contacting your PC", "Je contacte ton PC"), state: secured ? .done : .active)
+                    PairStepRow(text: L("Checking it's really your PC", "Je vérifie que c’est bien lui"), state: secured ? .active : .todo)
+                    Button(L("Cancel", "Annuler")) { link.cancelPairing() }
                         .buttonStyle(GhostButtonStyle())
                         .padding(.top, 4)
                 }
@@ -209,13 +209,13 @@ struct ScanView: View {
             case .confirming:
                 HStack(spacing: 12) {
                     ProgressView().tint(Ink.li)
-                    Text("Je relie ton iPhone…").font(.geist(17, .semibold))
+                    Text(L("Pairing your iPhone…", "Je relie ton iPhone…")).font(.geist(17, .semibold))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             case let .failed(message):
                 VStack(spacing: 14) {
-                    Problem(title: "Ça n’a pas marché", text: message, settings: message.contains("Settings"))
-                    Button("Scanner à nouveau") { link.pairStep = .idle }.buttonStyle(GhostButtonStyle())
+                    Problem(title: L("That didn't work", "Ça n’a pas marché"), text: message, settings: message.contains("Settings"))
+                    Button(L("Scan Again", "Scanner à nouveau")) { link.pairStep = .idle }.buttonStyle(GhostButtonStyle())
                 }
             case .linked:
                 EmptyView()
@@ -312,8 +312,8 @@ struct CodeSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("\(pcName) trouvé".uppercased()).font(.geist(12, .semibold)).tracking(1.5).foregroundStyle(Ink.tx3)
-            Text("Le même code s’affiche sur ton PC ?").font(.geist(20, .semibold))
+            Text(L("\(pcName) found", "\(pcName) trouvé").uppercased()).font(.geist(12, .semibold)).tracking(1.5).foregroundStyle(Ink.tx3)
+            Text(L("Does your PC show the same code?", "Le même code s’affiche sur ton PC ?")).font(.geist(20, .semibold))
             HStack(spacing: 10) {
                 ForEach(Array(code.enumerated()), id: \.offset) { pair in
                     let i = pair.offset
@@ -332,11 +332,11 @@ struct CodeSheet: View {
             .frame(maxWidth: .infinity)
             .accessibilityElement()
             .accessibilityLabel("Code \(code.map(String.init).joined(separator: " "))")
-            Text("Sinon, touche Non.")
+            Text(L("If not, tap No.", "Sinon, touche Non."))
                 .font(.geist(14)).foregroundStyle(Ink.tx2)
             HStack(spacing: 10) {
-                Button("Non") { link.answer(false) }.buttonStyle(GhostButtonStyle()).frame(width: 100)
-                Button("Oui, relier") { link.answer(true) }.buttonStyle(PrimaryButtonStyle())
+                Button(L("No", "Non")) { link.answer(false) }.buttonStyle(GhostButtonStyle()).frame(width: 100)
+                Button(L("Yes, Pair", "Oui, relier")) { link.answer(true) }.buttonStyle(PrimaryButtonStyle())
             }
         }
         .onAppear { shown = true }
@@ -358,7 +358,7 @@ struct Problem: View {
                 }
             }
             if settings {
-                Button("Ouvrir Settings") {
+                Button(L("Open Settings", "Ouvrir Settings")) {
                     if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) }
                 }
                 .buttonStyle(PrimaryButtonStyle())
@@ -590,13 +590,13 @@ struct LinkedView: View {
                 }
                 .frame(height: 120)
 
-                Text("Lié à \(pcName)")
+                Text(L("Paired with \(pcName)", "Lié à \(pcName)"))
                     .font(.geist(32, .semibold)).tracking(-1.5)
                     .opacity(stage >= 4 ? 1 : 0)
                     .offset(y: stage >= 4 ? 0 : 16)
 
                 VStack(spacing: 10) {
-                    ForEach(Array(["Relié pour de bon", "Chiffré de bout en bout", "Se reconnecte tout seul"].enumerated()), id: \.offset) { pair in
+                    ForEach(Array([L("Paired for good", "Relié pour de bon"), L("End-to-end encrypted", "Chiffré de bout en bout"), L("Reconnects on its own", "Se reconnecte tout seul")].enumerated()), id: \.offset) { pair in
                         let i = pair.offset
                         Label(pair.element, systemImage: "checkmark")
                             .font(.geist(14))
@@ -609,7 +609,7 @@ struct LinkedView: View {
                 }
 
                 Button { leave() } label: {
-                    Text("Aller à l’accueil")
+                    Text(L("Go to Home", "Aller à l’accueil"))
                         .overlay(alignment: .bottomLeading) {
                             GeometryReader { g in
                                 Capsule().fill(Ink.li).frame(width: progress ? g.size.width : 0, height: 3)

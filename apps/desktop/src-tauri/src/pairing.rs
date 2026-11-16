@@ -33,23 +33,23 @@ const QR_BYTES: usize = 6 + QR_FINGERPRINT_LEN + TOKEN_LEN;
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[cfg_attr(not(test), allow(dead_code))]
 pub enum PairError {
-    #[error("Ce QR code ne vient pas de Hyphn.")]
+    #[error("{}", crate::i18n::tr("This QR code is not from Hyphn.", "Ce QR code ne vient pas de Hyphn."))]
     NotHyphn,
-    #[error("Ce QR code est abîmé.")]
+    #[error("{}", crate::i18n::tr("This QR code is damaged.", "Ce QR code est abîmé."))]
     Malformed,
-    #[error("Versions différentes : mets à jour Hyphn sur le PC et l’iPhone.")]
+    #[error("{}", crate::i18n::tr("Different versions: update Hyphn on the PC and the iPhone.", "Versions différentes : mets à jour Hyphn sur le PC et l’iPhone."))]
     WrongVersion,
-    #[error("Ce QR a expiré. Clique « Nouveau QR » sur le PC.")]
+    #[error("{}", crate::i18n::tr("This QR code has expired. Click “New QR” on the PC.", "Ce QR a expiré. Clique « Nouveau QR » sur le PC."))]
     Expired,
-    #[error("Ce QR a déjà servi. Clique « Nouveau QR » sur le PC.")]
+    #[error("{}", crate::i18n::tr("This QR code was already used. Click “New QR” on the PC.", "Ce QR a déjà servi. Clique « Nouveau QR » sur le PC."))]
     AlreadyUsed,
-    #[error("Ce QR n’est plus valable. Clique « Nouveau QR » sur le PC.")]
+    #[error("{}", crate::i18n::tr("This QR code is no longer valid. Click “New QR” on the PC.", "Ce QR n’est plus valable. Clique « Nouveau QR » sur le PC."))]
     UnknownToken,
-    #[error("PC introuvable ou faux QR.")]
+    #[error("{}", crate::i18n::tr("PC not found, or wrong QR code.", "PC introuvable ou faux QR."))]
     WrongFingerprint,
-    #[error("Un appairage attend déjà une réponse sur un iPhone.")]
+    #[error("{}", crate::i18n::tr("A pairing is already waiting for an answer on an iPhone.", "Un appairage attend déjà une réponse sur un iPhone."))]
     Busy,
-    #[error("Ce PC est déjà relié à un autre iPhone : relie celui-ci avec le QR.")]
+    #[error("{}", crate::i18n::tr("This PC is already paired with another iPhone: pair this one with the QR code.", "Ce PC est déjà relié à un autre iPhone : relie celui-ci avec le QR."))]
     OtherDevice,
 }
 

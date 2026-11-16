@@ -2,6 +2,12 @@
 // Rust side (`link`), which talks to the real iPhone app over TLS.
 'use strict';
 
+// Language of the window (ADR-0042): English, or French from Settings. Texts are written in English; fr.js holds the French.
+let LANG = 'en';
+const t = (en, vars) => { let s = (LANG === 'fr' && FR[en]) || en; if (vars) for (const k in vars) s = s.split('{' + k + '}').join(vars[k]); return s; };
+// A count with its word: French puts the plural from 2, English from everything but 1.
+const plural = (n, one, many) => t((LANG === 'fr' ? n > 1 : n !== 1) ? many : one, { n });
+
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
@@ -12,112 +18,115 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 // itself in plain words: [title, what it does, advice]. A new setting comes
 // with its text here.
 const TIPS = {
-  // Mise à jour (ADR-0040)
-  upd_go: ['Installer', 'Télécharge la nouvelle version depuis GitHub, vérifie sa signature, l’installe et relance Hyphn.', 'Réglages, iPhone relié et langues sont gardés. Windows demande « Oui » une fois.'],
-  upd_later: ['Plus tard', 'Cache cette carte. Hyphn la remontre au prochain lancement.'],
-  // Cam › Réglages
-  profile: ['Profil', 'Règle tout d’un coup, selon ce que tu fais.', 'Max pour la plus belle image. Appel pour Discord ou Teams. Économie si l’iPhone n’est pas branché.'],
-  adjclose: ['Fermer', 'Cache le panneau pour voir l’image entière. Les réglages restent appliqués.'],
-  manual: ['Auto ou Manuel', 'Auto : l’iPhone règle tout seul selon la scène. Manuel : c’est toi qui choisis, et ça ne bouge plus.', 'Auto convient presque toujours.'],
-  reset: ['Remettre', 'Remet ce réglage comme au départ.'],
-  greset: ['Remettre la catégorie', 'Remet tous les réglages de cette catégorie comme au départ.'],
-  allreset: ['Tout remettre', 'Remet toute la caméra comme au départ : profil Max, tout en Auto.'],
-  update: ['App iPhone à jour', 'Cette version de l’app iPhone ne dit pas encore ce que sa caméra sait faire. Installe la dernière pour avoir tous les réglages.'],
-  power: ['Si l’iPhone chauffe', 'Ce que fait Hyphn quand l’iPhone chauffe ou que sa batterie baisse.', 'S’il devient très chaud, l’image passe toujours en 1080p : sinon iOS couperait la caméra.'],
-  ev: ['Plus sombre ou plus clair', 'L’iPhone règle la lumière tout seul ; ce curseur la corrige un peu. Vers la droite, l’image est plus claire. Le chiffre compte en « crans » de lumière : +1 donne deux fois plus de lumière.', 'Devant une fenêtre, ton visage est sombre : pousse vers la droite.'],
-  iso: ['Sensibilité', 'Rend l’image plus claire, mais ajoute du grain (des petits points).', '100 à 400 de jour, 800 et plus dans une pièce sombre.'],
-  shutter: ['Vitesse', 'Le temps pendant lequel chaque image prend la lumière. Plus long : plus clair, mais flou quand tu bouges.', '1/50 ou 1/100 : les lampes ne clignotent pas à l’image.'],
-  focusP: ['Distance', 'À quelle distance l’image est nette, en Manuel.', 'Une personne devant son bureau : vers 30 %.'],
-  wbK: ['Chaleur des couleurs', 'Vers la gauche, l’image devient plus bleue ; vers la droite, plus orange.', 'Sous une lampe jaune, va vers la gauche.'],
-  tint: ['Teinte', 'Corrige une image trop verte ou trop rose.', 'Utile sous des néons. Sinon, laisse au milieu.'],
-  zoom: ['Zoom', 'Rapproche l’image, en plus de l’objectif choisi en bas.', 'Au-delà de 2×, l’image est moins nette : prends plutôt l’objectif suivant.'],
-  poi: ['Point suivi', 'Clique sur l’image : la netteté et la lumière suivent ce point.', 'Pratique pour montrer un objet à la caméra.'],
-  stab: ['Anti-tremblement', 'Calme l’image quand l’iPhone bouge.', 'Coupé si l’iPhone est sur un pied : pas de retard en plus.'],
-  hdr: ['Contre-jour', 'Garde les détails dans les parties très claires et très sombres, par exemple une fenêtre derrière toi.', 'Coupé par défaut : il fait chauffer l’iPhone.'],
-  torch: ['Lampe', 'Allume la lampe à l’arrière de l’iPhone.', 'Elle chauffe et use la batterie.'],
-  res: ['Taille de l’image', 'Plus grand : plus net, mais plus lourd à envoyer et un peu plus de retard.', 'Discord et Teams ne montrent pas plus que 1080p.'],
-  fps: ['Fluidité', 'Combien d’images par seconde.', '60 pour des gestes fluides ; 30 pour un appel, l’iPhone chauffe moins.'],
-  codec: ['Compression', 'Comment l’image est rendue plus légère avant l’envoi.', 'HEVC est deux fois plus léger. H.264 seulement si l’image ne s’affiche pas.'],
-  rate: ['Débit', 'Combien de données partent chaque seconde. Plus : image plus fine.', 'Auto convient. Trop haut en Wi-Fi donne des saccades.'],
-  msg: ['Message de pause', 'Le texte que voient Discord et OBS quand la caméra est en pause.'],
-  multi: ['Plusieurs langues', 'Le message défile dans les langues choisies, traduit sur ce PC.', 'Le moteur de traduction de Firefox : il se télécharge une fois, puis tout reste sur ce PC.'],
-  langs: ['Langues', 'Les langues dans lesquelles le message défile, 2,6 secondes chacune. 58 au choix.', 'Une langue de plus allonge le tour ; 18 font environ 47 secondes.'],
-  wst: ['Style', 'Animé : l’enseigne néon bouge. Calme : la même, immobile.'],
-  cat_profile: ['Profil', 'Règle la taille, la fluidité et la protection de l’iPhone d’un seul clic.'],
-  cat_light: ['Lumière', 'Image plus claire ou plus sombre.'],
-  cat_sharp: ['Netteté', 'Ce qui est net dans l’image.'],
-  cat_color: ['Couleurs', 'Couleurs plus chaudes ou plus froides.'],
-  cat_frame: ['Cadrage', 'Zoom, anti-tremblement, contre-jour et lampe.'],
-  cat_stream: ['Envoi', 'Taille, fluidité et compression de l’image envoyée par l’iPhone.'],
-  cat_wait: ['Pause', 'Ce que voient Discord et OBS quand la caméra est en pause.'],
-  // Cam › Effets (spec `Cam - Filtres et effets`)
-  fx: ['Effets', 'Filtres de couleur, emojis sur le visage, fond flou ou remplacé, retouche. Ce que tu vois ici, Discord et Teams le voient aussi.'],
-  fx_filter: ['Filtres', 'Change les couleurs de toute l’image : filtres façon Instagram, puis looks de cinéma, de pellicule, de saison, en noir et blanc ou plus fous. Calculés par la carte graphique du PC.', 'Chaque vignette montre déjà ton image avec le filtre. Reclique dessus pour l’enlever.'],
-  fx_amount: ['Force du filtre', 'À gauche, le filtre est léger ; à droite, il est complet.'],
-  fx_mask: ['Emojis', 'Plus de 100 emojis qui suivent ton visage, comme sur Snapchat ou Messenger : les Fluent Emoji 3D de Microsoft, rangés par famille.', 'Ouvre grand la bouche avec Arc-en-ciel, Langue, Cracheur de feu ou Bulles.'],
-  fx_3d: ['3D', 'De vrais objets en 3D posés sur ta tête : chapeaux, casques, couronnes, lunettes, oreilles. Ils tournent avec toi, et ta tête cache ce qui passe derrière.', 'Modèles libres (CC0 ou CC-BY), crédités dans Réglages. Un emoji et un objet 3D ne vont pas ensemble : le dernier choisi reste.'],
-  fx_touch: ['Retouche', 'Peau lisse et lumière douce sur le visage, réglables au pourcent près.'],
-  fx_search: ['Chercher', 'Cherche dans tous les filtres, emojis, objets 3D et fonds à la fois. Les accents ne comptent pas.', 'Essaie « chapeau », « chat », « neige » ou « ciné ».'],
-  fx_searchclr: ['Effacer', 'Vide la recherche et revient à l’onglet.'],
-  fx_fav: ['Favori', 'L’étoile met cet effet dans « Favoris », en haut de son onglet. Reclique pour l’enlever.'],
-  fx_group: ['Famille', 'Clique pour ouvrir ou fermer cette famille. Le chiffre dit combien d’effets elle contient ; le nom à côté, celui qui est choisi.'],
-  fx_chip: ['Effet en cours', 'Clique pour retirer seulement cet effet ; les autres restent.'],
-  fx_bg: ['Fond', 'Floute ce qu’il y a derrière toi, ou le remplace par un décor (vraies photos libres de droits) ou ta propre image. Ton visage et ton corps restent nets.', 'Une image à toi : « Ton image », puis choisis un fichier.'],
-  fx_smooth: ['Peau lisse', 'Adoucit la peau du visage. Les yeux et la bouche restent nets.', 'Vers 30 % : naturel.'],
-  fx_light: ['Lumière douce', 'Éclaire un peu le visage, comme une lampe devant toi.'],
-  fx_off: ['Tout enlever', 'Retire tous les effets : l’image redevient celle de l’iPhone.'],
-  fx_webcam: ['Vers Discord', 'Avec un effet, la webcam reçoit l’image dessinée ici. Sans effet, elle reçoit l’image de l’iPhone telle quelle, avec le moins de retard.'],
-  // Cam › barre du bas
-  pause: ['Pause ou Afficher', 'Envoie l’image ou la met en pause. En pause, Discord voit l’écran de pause et l’iPhone se repose.'],
-  lens: ['Objectif', '0,5× : très large. 1× : le principal, le plus net. 2× et 5× : zoom.', 'Changer d’objectif coupe l’image une demi-seconde.'],
-  mirror: ['Miroir', 'Retourne l’image comme dans un miroir, pour toi et pour Discord. Le texte de l’écran de pause reste lisible.'],
-  turn: ['Tourner', 'Tourne l’image d’un quart de tour à chaque clic, si l’iPhone est posé de travers.'],
-  flipcam: ['Changer de caméra', 'Passe de la caméra arrière (la meilleure) à la caméra avant, et inversement.'],
-  peek: ['Aperçu', 'Montre ou cache l’image sur ce PC pendant la pause. Discord ne la voit jamais.'],
-  info: ['Infos du flux', 'Ce que l’iPhone envoie, l’état du lien et le retard de l’image, étape par étape.'],
-  set: ['Réglages', 'Les réglages de la caméra, par-dessus l’image en direct.'],
-  full: ['Plein écran', 'L’image prend tout l’écran. F11 ou Échap pour sortir.'],
-  // Cam › en-tête de l’image
-  hudq: ['Qualité', 'Taille et images par seconde envoyées en ce moment par l’iPhone.'],
-  hudused: ['Webcam utilisée', 'Une app (Discord, Teams, OBS…) affiche en ce moment la webcam Hyphn.'],
-  battery: ['Batterie', 'La batterie de l’iPhone. L’éclair : il est en charge.'],
-  heat: ['Chaleur', 'La chaleur de l’iPhone selon iOS : Normale, Tiède, Chaude ou Très chaude.', 'Chaude : Hyphn baisse un peu l’image si ton profil le demande. Très chaude : 1080p, toujours.'],
-  ping: ['Réponse du lien', 'Le temps pour qu’un message aille à l’iPhone et revienne.', 'Ce n’est pas le retard de l’image : il est dans Infos du flux.'],
-  storage: ['Stockage', 'Place libre sur l’iPhone pour les photos et vidéos.'],
-  // Cam › Infos du flux
-  i_health: ['État du flux', 'Le résumé : tout va bien, ou ce qui ralentit l’image.'],
-  i_sent: ['Image envoyée', 'Taille et images par seconde que l’iPhone envoie vraiment.', 'Plus bas que demandé : l’iPhone chauffe ou ton profil le baisse.'],
-  i_codec: ['Compression', 'Le format de l’image en ce moment. HEVC est le plus léger.'],
-  i_rate: ['Débit', 'Données reçues pendant la dernière seconde, en mégabits par seconde. La courbe montre les 40 dernières secondes.'],
-  i_fps: ['Images reçues', 'Images arrivées pendant la dernière seconde.', 'Moins que demandé : l’iPhone ou le lien ne suit pas.'],
-  i_ping: ['Réponse du lien', 'Le temps d’un aller-retour de message. Il mesure le lien, pas l’image.'],
-  i_drop: ['Images sautées', 'Images jetées parce que l’affichage était en retard.', '0 ou presque : parfait.'],
-  i_keys: ['Images complètes', 'Images envoyées en entier en une minute. Elles sont lourdes.', 'Environ 15 : normal.'],
-  i_queue: ['Attente dans l’iPhone', 'Les données qui attendent de partir.', 'Plus de 0 ms : le lien ne suit pas, baisse le débit.'],
-  i_delay: ['Retard de l’image', 'Le temps entre la vraie scène et l’image sur ce PC, étape par étape. Il manque quelques ms (capteur, écran).', 'Par câble : environ 80 ms en 720p et 130 ms en 4K.'],
-  i_enc: ['Compression', 'Sur l’iPhone : de la prise de vue à l’image compressée.'],
-  i_link: ['Trajet', 'De l’iPhone jusqu’au PC, par câble ou en Wi-Fi.'],
-  i_dec: ['Décompression', 'Sur ce PC : la carte graphique décompresse l’image.'],
-  i_draw: ['Affichage', 'L’attente du prochain rafraîchissement de l’écran.'],
-  i_phone: ['iPhone', 'Batterie et chaleur de l’iPhone.'],
-  // Réglages du PC
-  launch_at_startup: ['Démarrer avec Windows', 'Hyphn se lance discrètement près de l’horloge, et l’iPhone se reconnecte tout seul.'],
-  close_to_tray: ['Garder près de l’horloge', 'Fermer la fenêtre garde Hyphn ouvert : la webcam et la liaison continuent.', 'Coupé : fermer quitte Hyphn.'],
-  theme: ['Apparence', 'Les couleurs de l’app. « Comme Windows » suit le mode clair ou sombre de Windows.'],
-  low_battery_alert: ['Batterie faible', 'Prévient quand l’iPhone passe sous 15 % sans être en charge.'],
-  photos_dir: ['Dossier', 'Où Drop range les photos et fichiers reçus.'],
-  sort: ['Rangement', 'Comment Drop range les photos dans le dossier.'],
-  reconnect: ['Reconnecter', 'Coupe et refait la liaison avec l’iPhone, si quelque chose bloque.'],
-  forget: ['Oublier', 'Supprime la liaison avec cet iPhone : il faudra scanner un nouveau QR code.'],
-  vcam: ['Webcam Windows', 'La caméra « Hyphn » que voient Discord, Teams, OBS… Installée une fois, avec l’accord administrateur.'],
-  obs: ['OBS', 'La source « Hyphn » dans OBS : l’image arrive sans passer par la webcam Windows.'],
-  fingerprint: ['Empreinte', 'Le code unique de la liaison. Le même sur l’iPhone : personne d’autre ne peut se faire passer pour lui.'],
+  // Update (ADR-0040)
+  upd_go: ['Install', 'Downloads the new version from GitHub, checks its signature, installs it and restarts Hyphn.', 'Settings, paired iPhone and languages are kept. Windows asks for “Yes” once.'],
+  upd_later: ['Later', 'Hides this card. Hyphn shows it again next time it starts.'],
+  // Cam › Settings
+  profile: ['Profile', 'Sets everything at once, for what you are doing.', 'Max for the best picture. Call for Discord or Teams. Saver if the iPhone is not plugged in.'],
+  adjclose: ['Close', 'Hides the panel to see the whole picture. The settings stay on.'],
+  manual: ['Auto or Manual', 'Auto: the iPhone sets it by itself for the scene. Manual: you choose, and it stays put.', 'Auto is right almost always.'],
+  reset: ['Reset', 'Puts this setting back as it was at the start.'],
+  greset: ['Reset the category', 'Puts every setting of this category back as it was at the start.'],
+  allreset: ['Reset everything', 'Puts the whole camera back as it was at the start: Max profile, everything on Auto.'],
+  update: ['Update the iPhone app', 'This version of the iPhone app does not yet say what its camera can do. Install the latest one to get every setting.'],
+  power: ['If the iPhone gets hot', 'What Hyphn does when the iPhone gets hot or its battery runs low.', 'If it gets very hot, the picture always drops to 1080p: otherwise iOS would stop the camera.'],
+  ev: ['Darker or brighter', 'The iPhone sets the light by itself; this slider corrects it a little. To the right, the picture is brighter. The number counts in light “stops”: +1 gives twice as much light.', 'In front of a window, your face is dark: push to the right.'],
+  iso: ['Sensitivity', 'Makes the picture brighter, but adds grain (small dots).', '100 to 400 by day, 800 and more in a dark room.'],
+  shutter: ['Shutter speed', 'How long each picture takes in light. Longer: brighter, but blurry when you move.', '1/50 or 1/100: lamps do not flicker on the picture.'],
+  focusP: ['Distance', 'At what distance the picture is sharp, in Manual.', 'Someone at their desk: about 30%.'],
+  wbK: ['Color warmth', 'To the left, the picture gets bluer; to the right, more orange.', 'Under a yellow lamp, go to the left.'],
+  tint: ['Tint', 'Fixes a picture that is too green or too pink.', 'Useful under neon lights. Otherwise, leave it in the middle.'],
+  zoom: ['Zoom', 'Brings the picture closer, on top of the lens chosen below.', 'Past 2×, the picture is less sharp: take the next lens instead.'],
+  poi: ['Tracked point', 'Click the picture: focus and light follow that point.', 'Handy to show an object to the camera.'],
+  stab: ['Stabilization', 'Calms the picture when the iPhone moves.', 'Off if the iPhone is on a stand: no extra delay.'],
+  hdr: ['Backlight', 'Keeps the details in very bright and very dark parts, for example a window behind you.', 'Off by default: it makes the iPhone hot.'],
+  torch: ['Flashlight', 'Turns on the light on the back of the iPhone.', 'It gets hot and drains the battery.'],
+  res: ['Picture size', 'Bigger: sharper, but heavier to send and a little more delay.', 'Discord and Teams show no more than 1080p.'],
+  fps: ['Smoothness', 'How many pictures per second.', '60 for smooth moves; 30 for a call, the iPhone stays cooler.'],
+  codec: ['Compression', 'How the picture is made lighter before it is sent.', 'HEVC is twice as light. H.264 only if the picture does not show.'],
+  rate: ['Bitrate', 'How much data leaves every second. More: a finer picture.', 'Auto is fine. Too high on Wi-Fi gives stutters.'],
+  msg: ['Pause message', 'The text Discord and OBS see while the camera is paused.'],
+  multi: ['Several languages', 'The message rolls through the chosen languages, translated on this PC.', 'Firefox’s translation engine: downloaded once, then everything stays on this PC.'],
+  langs: ['Languages', 'The languages the message rolls through, 2.6 seconds each. 58 to choose from.', 'Each extra language makes the round longer; 18 take about 47 seconds.'],
+  wst: ['Style', 'Animated: the neon sign moves. Calm: the same, still.'],
+  cat_profile: ['Profile', 'Sets the size, the smoothness and the iPhone’s protection in one click.'],
+  cat_light: ['Lighting', 'A brighter or darker picture.'],
+  cat_sharp: ['Focus', 'What is sharp in the picture.'],
+  cat_color: ['Colors', 'Warmer or cooler colors.'],
+  cat_frame: ['Framing', 'Zoom, stabilization, backlight and flashlight.'],
+  cat_stream: ['Sending', 'Size, smoothness and compression of the picture the iPhone sends.'],
+  cat_wait: ['Pause', 'What Discord and OBS see while the camera is paused.'],
+  // Cam › Effects (spec `Cam - Filtres et effets`)
+  fx: ['Effects', 'Color filters, emojis on your face, blurred or replaced background, touch-up. What you see here, Discord and Teams see too.'],
+  fx_filter: ['Filters', 'Changes the colors of the whole picture: Instagram-style filters, then movie, film, season, black and white or crazier looks. Worked out by the PC’s graphics card.', 'Each thumbnail already shows your picture with the filter. Click it again to remove it.'],
+  fx_amount: ['Filter strength', 'To the left, the filter is light; to the right, it is full.'],
+  fx_mask: ['Emojis', 'Over 100 emojis that follow your face, like on Snapchat or Messenger: Microsoft’s Fluent Emoji 3D, sorted by family.', 'Open your mouth wide with Rainbow, Tongue, Fire breather or Bubbles.'],
+  fx_3d: ['3D', 'Real 3D objects on your head: hats, helmets, crowns, glasses, ears. They turn with you, and your head hides what goes behind it.', 'Free models (CC0 or CC-BY), credited in Settings. An emoji and a 3D object do not go together: the last one chosen stays.'],
+  fx_touch: ['Touch-up', 'Smooth skin and soft light on your face, set to the percent.'],
+  fx_search: ['Search', 'Searches every filter, emoji, 3D object and background at once. Accents do not matter.', 'Try “hat”, “cat”, “snow” or “cine”.'],
+  fx_searchclr: ['Clear', 'Empties the search and goes back to the tab.'],
+  fx_fav: ['Favorite', 'The star puts this effect in “Favorites”, at the top of its tab. Click again to remove it.'],
+  fx_group: ['Family', 'Click to open or close this family. The number says how many effects it holds; the name next to it, the one chosen.'],
+  fx_chip: ['Effect in use', 'Click to remove only this effect; the others stay.'],
+  fx_bg: ['Background', 'Blurs what is behind you, or replaces it with a scene (real royalty-free photos) or your own picture. Your face and body stay sharp.', 'A picture of yours: “Your picture”, then pick a file.'],
+  fx_smooth: ['Smooth skin', 'Softens the skin of your face. Eyes and mouth stay sharp.', 'Around 30%: natural.'],
+  fx_light: ['Soft light', 'Lights up your face a little, like a lamp in front of you.'],
+  fx_off: ['Remove all', 'Removes every effect: the picture is the iPhone’s again.'],
+  fx_webcam: ['To Discord', 'With an effect, the webcam gets the picture drawn here. With no effect, it gets the iPhone’s picture as it is, with the least delay.'],
+  // Cam › bottom bar
+  pause: ['Pause or Show', 'Sends the picture or pauses it. Paused, Discord sees the pause screen and the iPhone rests.'],
+  lens: ['Lens', '0.5×: very wide. 1×: the main one, the sharpest. 2× and 5×: zoom.', 'Switching lens cuts the picture for half a second.'],
+  mirror: ['Mirror', 'Flips the picture like a mirror, for you and for Discord. The text of the pause screen stays readable.'],
+  turn: ['Rotate', 'Turns the picture a quarter turn on each click, if the iPhone sits sideways.'],
+  flipcam: ['Switch camera', 'Goes from the back camera (the best one) to the front camera, and back.'],
+  peek: ['Preview', 'Shows or hides the picture on this PC while paused. Discord never sees it.'],
+  info: ['Stream info', 'What the iPhone sends, the state of the link and the delay of the picture, step by step.'],
+  set: ['Settings', 'The camera settings, over the live picture.'],
+  full: ['Full screen', 'The picture takes the whole screen. F11 or Esc to leave.'],
+  // Cam › top of the picture
+  hudq: ['Quality', 'Size and pictures per second the iPhone is sending right now.'],
+  hudused: ['Webcam in use', 'An app (Discord, Teams, OBS…) is showing the Hyphn webcam right now.'],
+  battery: ['Battery', 'The iPhone’s battery. The lightning bolt: it is charging.'],
+  heat: ['Heat', 'How hot the iPhone is according to iOS: Normal, Warm, Hot or Very hot.', 'Hot: Hyphn lowers the picture a little if your profile asks for it. Very hot: 1080p, always.'],
+  ping: ['Link response', 'The time for a message to reach the iPhone and come back.', 'This is not the picture delay: that one is in Stream info.'],
+  storage: ['Storage', 'Free space on the iPhone for photos and videos.'],
+  // Cam › Stream info
+  i_health: ['Stream state', 'The summary: all is well, or what slows the picture down.'],
+  i_sent: ['Picture sent', 'Size and pictures per second the iPhone really sends.', 'Lower than asked: the iPhone is hot or your profile lowers it.'],
+  i_codec: ['Compression', 'The format of the picture right now. HEVC is the lightest.'],
+  i_rate: ['Bitrate', 'Data received in the last second, in megabits per second. The chart shows the last 40 seconds.'],
+  i_fps: ['Pictures received', 'Pictures that arrived in the last second.', 'Fewer than asked: the iPhone or the link cannot keep up.'],
+  i_ping: ['Link response', 'The time of a message round trip. It measures the link, not the picture.'],
+  i_drop: ['Skipped pictures', 'Pictures thrown away because the display was late.', '0 or almost: perfect.'],
+  i_keys: ['Full pictures', 'Pictures sent whole in one minute. They are heavy.', 'About 15: normal.'],
+  i_queue: ['Waiting in the iPhone', 'The data waiting to leave.', 'More than 0 ms: the link cannot keep up, lower the bitrate.'],
+  i_delay: ['Picture delay', 'The time between the real scene and the picture on this PC, step by step. A few ms are missing (sensor, screen).', 'With a cable: about 80 ms in 720p and 130 ms in 4K.'],
+  i_enc: ['Compression', 'On the iPhone: from the shot to the compressed picture.'],
+  i_link: ['Network', 'From the iPhone to the PC, by cable or Wi-Fi.'],
+  i_dec: ['Decoding', 'On this PC: the graphics card unpacks the picture.'],
+  i_draw: ['Display', 'Waiting for the next screen refresh.'],
+  i_phone: ['iPhone', 'Battery and heat of the iPhone.'],
+  // PC settings
+  lang: ['Language', 'The language of Hyphn on this PC: the window, its messages and the menu near the clock.', 'The window reloads to switch; nothing else changes.'],
+  launch_at_startup: ['Start with Windows', 'Hyphn starts quietly near the clock, and the iPhone reconnects by itself.'],
+  close_to_tray: ['Keep near the clock', 'Closing the window keeps Hyphn open: the webcam and the link go on.', 'Off: closing quits Hyphn.'],
+  theme: ['Appearance', 'The colors of the app. “Like Windows” follows Windows’ light or dark mode.'],
+  low_battery_alert: ['Low battery', 'Warns when the iPhone drops below 15% and is not charging.'],
+  photos_dir: ['Folder', 'Where Drop puts the photos and files it receives.'],
+  sort: ['Sorting', 'How Drop sorts the photos in the folder.'],
+  reconnect: ['Reconnect', 'Ends and redoes the link with the iPhone, if something is stuck.'],
+  forget: ['Forget', 'Deletes the link with this iPhone: you will need to scan a new QR code.'],
+  vcam: ['Windows webcam', 'The “Hyphn” camera that Discord, Teams, OBS… see. Installed once, with the administrator’s approval.'],
+  obs: ['OBS', 'The “Hyphn” source in OBS: the picture arrives without going through the Windows webcam.'],
+  fingerprint: ['Fingerprint', 'The unique code of the link. The same on the iPhone: nobody else can pretend to be it.'],
 };
-const tipText = (k) => (TIPS[k] || []).join(' ');
+// The tip of a key in the window's language (French in fr.js).
+const tipOf = (k) => (LANG === 'fr' && TIPS_FR[k]) || TIPS[k];
+const tipText = (k) => (tipOf(k) || []).join(' ');
 /// A small « i » that shows its bubble on hover, focus or click.
-const tip = (k) => (TIPS[k] ? `<span class="tip" tabindex="0" role="img" aria-label="${esc(tipText(k))}" data-tip="${k}">i</span>` : '');
+const tip = (k) => (tipOf(k) ? `<span class="tip" tabindex="0" role="img" aria-label="${esc(tipText(k))}" data-tip="${k}">i</span>` : '');
 /// The bubble on the element itself (icon buttons, chips).
-const tipAttr = (k) => (TIPS[k] ? ` data-tip="${k}"` : '');
+const tipAttr = (k) => (tipOf(k) ? ` data-tip="${k}"` : '');
 
 // One bubble for the whole app, placed above (or below) its element and
 // kept inside the window: the title, the plain explanation, then the advice.
@@ -125,8 +134,8 @@ const Bubble = {
   el: null,
   at: null,
   show(target) {
-    const t = TIPS[target.dataset.tip];
-    if (!t) return;
+    const text = tipOf(target.dataset.tip);
+    if (!text) return;
     if (!this.el) {
       this.el = document.createElement('div');
       this.el.className = 'bubble';
@@ -134,7 +143,7 @@ const Bubble = {
       document.body.appendChild(this.el);
     }
     this.at = target;
-    const [title, body, advice] = t;
+    const [title, body, advice] = text;
     this.el.innerHTML = `<b>${esc(title)}</b>${body ? `<span>${esc(body)}</span>` : ''}${advice ? `<em>${esc(advice)}</em>` : ''}`;
     this.el.classList.remove('on', 'below');
     const r = target.getBoundingClientRect();
@@ -231,46 +240,50 @@ const I = {
 };
 
 // ---------- Formatting ----------
-const nf = new Intl.NumberFormat('fr-FR');
-const n1 = (x) => x.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const locale = () => (LANG === 'fr' ? 'fr-FR' : 'en-US');
+const nf = (x) => x.toLocaleString(locale());
+const n1 = (x) => x.toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+// A percentage: « 12 % » in French, « 12% » in English.
+const perc = (x) => x + (LANG === 'fr' ? ' %' : '%');
 function bytes(b) {
-  if (b >= 1e9) return n1(b / 1e9) + ' Go';
-  if (b >= 1e6) return Math.round(b / 1e6) + ' Mo';
-  if (b >= 1e3) return Math.round(b / 1e3) + ' Ko';
-  return b + ' o';
+  if (b >= 1e9) return n1(b / 1e9) + ' ' + t('GB');
+  if (b >= 1e6) return Math.round(b / 1e6) + ' ' + t('MB');
+  if (b >= 1e3) return Math.round(b / 1e3) + ' ' + t('KB');
+  return b + ' ' + t('B');
 }
 function ago(unix) {
-  if (!unix) return 'jamais vu';
+  if (!unix) return t('never seen');
   const s = Math.max(0, Date.now() / 1000 - unix);
-  if (s < 60) return 'vu à l’instant';
-  if (s < 3600) return `vu il y a ${Math.floor(s / 60)} min`;
-  if (s < 86400) return `vu il y a ${Math.floor(s / 3600)} h`;
-  return `vu il y a ${Math.floor(s / 86400)} j`;
+  if (s < 60) return t('seen just now');
+  if (s < 3600) return t('seen {n} min ago', { n: Math.floor(s / 60) });
+  if (s < 86400) return t('seen {n} h ago', { n: Math.floor(s / 3600) });
+  return t('seen {n} d ago', { n: Math.floor(s / 86400) });
 }
 function when(unix) {
   const d = new Date(unix * 1000), now = new Date();
-  const hm = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const hm = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const diff = (day(now) - day(d)) / 86400000;
-  if (diff === 0) return 'Auj. ' + hm;
-  if (diff === 1) return 'Hier ' + hm;
-  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' ' + hm;
+  if (diff === 0) return t('Today {hm}', { hm });
+  if (diff === 1) return t('Yesterday {hm}', { hm });
+  return d.toLocaleDateString(locale(), { day: '2-digit', month: '2-digit' }) + ' ' + hm;
 }
-function dateFr(unix) {
-  return new Date(unix * 1000).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+function dateStr(unix) {
+  return new Date(unix * 1000).toLocaleDateString(locale(), { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
-const HEAT = { nominal: 'Normale', fair: 'Tiède', serious: 'Chaude', critical: 'Très chaude' };
+// Shown through t().
+const HEAT = { nominal: 'Normal', fair: 'Warm', serious: 'Hot', critical: 'Very hot' };
 const HEAT_COLOR = { nominal: 'var(--li)', fair: 'var(--li)', serious: 'var(--am)', critical: 'var(--co)' };
-const CHARGE = { charging: 'en charge', full: 'pleine', unplugged: 'sur batterie' };
+const CHARGE = { charging: 'charging', full: 'full', unplugged: 'on battery' };
 const resName = (h) => (h >= 2160 ? '4K' : h + 'p');
 function linkQuality(ms) {
-  if (ms == null) return 'inconnu';
-  return ms < 10 ? 'Excellente' : ms < 30 ? 'Bonne' : 'Faible';
+  if (ms == null) return t('unknown');
+  return t(ms < 10 ? 'Excellent' : ms < 30 ? 'Good' : 'Weak');
 }
 
-// « Par câble » / « Wi-Fi » next to the green dot (spec `Core - Liaison par cable`, E9).
+// « By cable » / « Wi-Fi » next to the green dot (spec `Core - Liaison par cable`, E9).
 const onCable = () => !!(S && S.connected && S.link === 'cable');
-const linkName = () => (onCable() ? 'par câble' : 'en Wi-Fi');
+const linkName = () => t(onCable() ? 'by cable' : 'on Wi-Fi');
 
 // ---------- State ----------
 let S = null; // last snapshot from Rust
@@ -321,7 +334,7 @@ const Popup = {
       bar.classList.toggle('busy', pct < 0);
       $('i', bar).style.width = (pct < 0 ? 35 : Math.max(3, Math.min(100, pct))) + '%';
     }
-    $('.ppct', el).textContent = pct != null && pct >= 0 && !done ? Math.round(pct) + ' %' : '';
+    $('.ppct', el).textContent = pct != null && pct >= 0 && !done ? perc(Math.round(pct)) : '';
     if (done || bad) this.hideT = setTimeout(() => this.hide(), bad ? 7000 : 3600);
   },
   hide() {
@@ -370,7 +383,8 @@ const Popup = {
     $('.pall i', el).style.width = this.allPct + '%';
   },
 };
-const langList = (ls) => (ls.length > 3 ? ls.slice(0, 3).map((l) => LANG_NAMES[l]).join(', ') + ` et ${ls.length - 3} autres` : ls.map((l) => LANG_NAMES[l]).join(', '));
+const langName = (l) => (LANG_NAMES[l] ? t(LANG_NAMES[l]) : l);
+const langList = (ls) => (ls.length > 3 ? t('{list} and {n} more', { list: ls.slice(0, 3).map(langName).join(', '), n: ls.length - 3 }) : ls.map(langName).join(', '));
 
 async function saveSettings() {
   try {
@@ -403,13 +417,21 @@ function waves(n, y0, gap, alpha, swap) {
 $('#trame').innerHTML = waves(16, 50, 13, 0.2);
 
 // ---------- Header ----------
+// The fixed texts of index.html (written in English): menu labels and aria-labels.
+function translateStatic() {
+  for (const a of document.querySelectorAll('.navp a')) {
+    const n = a.lastChild;
+    if (n && n.nodeType === 3) n.textContent = t(n.textContent);
+  }
+  for (const el of document.querySelectorAll('.top [aria-label]')) el.setAttribute('aria-label', t(el.getAttribute('aria-label')));
+}
 function paintHeader() {
   const el = $('#devc');
   if (!S || !S.device) {
-    el.innerHTML = '<span class="led off"></span>Aucun appareil';
+    el.innerHTML = `<span class="led off"></span>${t('No device')}`;
     return;
   }
-  const state = S.connected ? `${linkName()}` + (S.latency_ms == null ? '' : ` · ${S.latency_ms} ms`) : 'en veille';
+  const state = S.connected ? `${linkName()}` + (S.latency_ms == null ? '' : ` · ${S.latency_ms} ms`) : t('asleep');
   el.innerHTML = `<span class="led${S.connected ? '' : ' off'}"></span>${esc(S.device.name)} · ${state}`;
 }
 
@@ -461,12 +483,12 @@ const GLOBAL_ACTS = {
   // Both sides start fresh: the PC ends the link, the iPhone comes back at once.
   reconnect: async () => {
     await invoke('reconnect');
-    toast('Reconnexion…', 'info');
+    toast(t('Reconnecting…'), 'info');
   },
 };
 
 // ===================================================================
-// Accueil
+// Home
 // ===================================================================
 const Home = {
   key() {
@@ -481,25 +503,25 @@ const Home = {
     let left;
     if (k === 'on') {
       left = `
-        <span class="eyebrow"><span class="led"></span>${name} · <span id="h-via">relié ${linkName()}</span></span>
-        <h1 class="big-h"><span class="w">Tout</span> <span class="w" style="animation-delay:.08s">est</span> <span class="w" style="animation-delay:.16s">prêt.</span></h1>
-        <p class="lead">Lance la caméra pour tes appels et tes streams, ou récupère tes photos en un clic.</p>
+        <span class="eyebrow"><span class="led"></span>${name} · <span id="h-via">${t('linked {via}', { via: linkName() })}</span></span>
+        <h1 class="big-h">${t('All set.').split(' ').map((w, i) => `<span class="w" style="animation-delay:${(i * 0.08).toFixed(2)}s">${w}</span>`).join(' ')}</h1>
+        <p class="lead">${t('Start the camera for your calls and streams, or get your photos in one click.')}</p>
         <div class="row" style="gap:12px">
-          <a class="btn cam xl" href="#cam">${I.cam}Ouvrir Cam</a>
-          <a class="btn xl" href="#drop">${I.down}Ouvrir Drop</a>
+          <a class="btn cam xl" href="#cam">${I.cam}${t('Open Cam')}</a>
+          <a class="btn xl" href="#drop">${I.down}${t('Open Drop')}</a>
         </div>`;
     } else if (k === 'veille') {
       left = `
         <span class="eyebrow"><span class="led off"></span>${name} · <span id="h-seen">${ago(S.device.last_seen)}</span></span>
-        <h1 class="big-h"><span class="w">En attente</span><br><span class="w" style="animation-delay:.1s">de l’iPhone.</span></h1>
-        <p class="lead">Ouvre Hyphn sur l’iPhone : il se reconnecte tout seul, sans scanner.</p>
-        <button class="btn xl" type="button" data-act="reconnect">${I.refresh}Reconnecter</button>`;
+        <h1 class="big-h"><span class="w">${t('Waiting')}</span><br><span class="w" style="animation-delay:.1s">${t('for the iPhone.')}</span></h1>
+        <p class="lead">${t('Open Hyphn on the iPhone: it reconnects by itself, no scan needed.')}</p>
+        <button class="btn xl" type="button" data-act="reconnect">${I.refresh}${t('Reconnect')}</button>`;
     } else {
       left = `
-        <span class="eyebrow">Bienvenue dans Hyphn</span>
-        <h1 class="big-h"><span class="w">Relie</span> <span class="w" style="animation-delay:.08s">ton</span> <span class="w" style="animation-delay:.16s">iPhone.</span></h1>
-        <p class="lead">Un QR code à scanner, une seule fois. Ensuite tout se fait tout seul.</p>
-        <a class="btn pri xl" href="#pair">Relier un iPhone</a>`;
+        <span class="eyebrow">${t('Welcome to Hyphn')}</span>
+        <h1 class="big-h">${t('Pair your iPhone.').split(' ').map((w, i) => `<span class="w" style="animation-delay:${(i * 0.08).toFixed(2)}s">${w}</span>`).join(' ')}</h1>
+        <p class="lead">${t('One QR code to scan, just once. Then everything happens by itself.')}</p>
+        <a class="btn pri xl" href="#pair">${t('Pair an iPhone')}</a>`;
     }
     const dim = k === 'on' ? '' : ' dim';
     root.innerHTML = `
@@ -507,7 +529,7 @@ const Home = {
         <div id="h-low"></div>
         <section class="hero">
           <div>${left}</div>
-          <div class="orbit${dim}" role="img" id="h-orbit" aria-label="Batterie de l’iPhone">
+          <div class="orbit${dim}" role="img" id="h-orbit" aria-label="${t('iPhone battery')}">
             <div class="spin"><span class="sat"></span></div>
             <svg class="ring" viewBox="0 0 340 340" aria-hidden="true">
               <defs><linearGradient id="bg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E7FFB8"/><stop offset="1" stop-color="#B9F25A"/></linearGradient></defs>
@@ -517,16 +539,16 @@ const Home = {
             <div class="core">
               ${I.phone}
               <span class="pct" id="h-pct">—</span>
-              <span style="font-size:13px;color:var(--tx2)" id="h-charge">${k === 'none' ? 'aucun iPhone' : ''}</span>
+              <span style="font-size:13px;color:var(--tx2)" id="h-charge">${k === 'none' ? t('no iPhone') : ''}</span>
             </div>
           </div>
         </section>
         ${k === 'none' ? '' : `
-        <section class="facts${dim}" aria-label="État de l’iPhone">
-          <div class="fact" style="--c:var(--li)"><span class="ic">${I.bolt}</span><div><div class="k">Batterie${tip('battery')}</div><div class="v" id="f-bat">inconnu</div></div></div>
-          <div class="fact" style="--c:var(--li)"><span class="ic">${I.temp}</span><div><div class="k">Chaleur${tip('heat')}</div><div class="v" id="f-heat">inconnu</div></div></div>
-          <div class="fact" style="--c:var(--cy)"><span class="ic">${I.wifi}</span><div><div class="k">Connexion${tip('ping')}</div><div class="v" id="f-link">inconnu</div></div></div>
-          <div class="fact" style="--c:var(--cy)"><span class="ic">${I.disk}</span><div><div class="k">Stockage${tip('storage')}</div><div class="v" id="f-disk">inconnu</div></div></div>
+        <section class="facts${dim}" aria-label="${t('iPhone state')}">
+          <div class="fact" style="--c:var(--li)"><span class="ic">${I.bolt}</span><div><div class="k">${t('Battery')}${tip('battery')}</div><div class="v" id="f-bat">${t('unknown')}</div></div></div>
+          <div class="fact" style="--c:var(--li)"><span class="ic">${I.temp}</span><div><div class="k">${t('Heat')}${tip('heat')}</div><div class="v" id="f-heat">${t('unknown')}</div></div></div>
+          <div class="fact" style="--c:var(--cy)"><span class="ic">${I.wifi}</span><div><div class="k">${t('Connection')}${tip('ping')}</div><div class="v" id="f-link">${t('unknown')}</div></div></div>
+          <div class="fact" style="--c:var(--cy)"><span class="ic">${I.disk}</span><div><div class="k">${t('Storage')}${tip('storage')}</div><div class="v" id="f-disk">${t('unknown')}</div></div></div>
         </section>
         <section class="acts${dim}">
           <a class="act" style="--c:var(--co)" href="#cam">
@@ -534,9 +556,9 @@ const Home = {
               <span class="bk" style="left:6%;top:10%;width:60px;height:60px;background:#FFB547"></span>
               <span class="bk" style="left:64%;top:4%;width:74px;height:74px;background:#FF7A66;animation-delay:-3s"></span>
               <div class="mini"><span class="h"></span><span class="s"></span></div>
-              <span class="tag" id="h-camtag">Prête</span>
+              <span class="tag" id="h-camtag">${t('Ready')}</span>
             </div>
-            <div><h3>Cam</h3><p>Ton iPhone devient la webcam du PC, pour Discord, Teams ou OBS.</p><span class="go">Ouvrir${I.arrow}</span></div>
+            <div><h3>Cam</h3><p>${t('Your iPhone becomes the PC’s webcam, for Discord, Teams or OBS.')}</p><span class="go">${t('Open')}${I.arrow}</span></div>
           </a>
           <a class="act" style="--c:var(--cy)" href="#drop">
             <div class="fly" aria-hidden="true">
@@ -547,11 +569,11 @@ const Home = {
               <span class="ph" style="background:linear-gradient(135deg,#B9F25A,#3E9B4F);animation-delay:1.4s"></span>
               <span class="ph" style="background:linear-gradient(135deg,#8E7CFF,#4A3BB5);animation-delay:2.1s"></span>
             </div>
-            <div><h3>Drop</h3><p>Photos et fichiers entre l’iPhone et le PC. Arrive bientôt.</p><span class="go">Voir${I.arrow}</span></div>
+            <div><h3>Drop</h3><p>${t('Photos and files between the iPhone and the PC. Coming soon.')}</p><span class="go">${t('See')}${I.arrow}</span></div>
           </a>
         </section>`}
       </main>`;
-    if (arrive) toast(`${devName()} est lié à ce PC`);
+    if (arrive) toast(t('{name} is paired with this PC', { name: devName() }));
   },
   update() {
     if (!S.device) return;
@@ -559,27 +581,27 @@ const Home = {
     const pct = p.battery;
     $('#h-pct').innerHTML = pct == null ? '—' : `${pct}<small>%</small>`;
     $('#h-arc').style.strokeDasharray = `${pct == null ? 0 : (1024 * pct / 100).toFixed(0)} 1025`;
-    $('#h-orbit').setAttribute('aria-label', pct == null ? 'Batterie inconnue' : `Batterie de l’iPhone : ${pct} %`);
-    $('#h-charge').textContent = p.charge ? 'batterie · ' + CHARGE[p.charge] : 'batterie';
-    $('#f-bat').textContent = pct == null ? 'inconnu' : `${pct} %` + (p.charge ? ' · ' + CHARGE[p.charge] : '');
-    $('#f-heat').textContent = p.thermal ? HEAT[p.thermal] : 'inconnu';
-    $('#f-link').textContent = S.connected ? `${linkQuality(S.latency_ms)} · ${linkName()}` : 'Hors ligne';
-    $('#f-disk').textContent = p.storage_free_gb == null ? 'inconnu' : `${nf.format(Math.round(p.storage_free_gb))} Go libres`;
+    $('#h-orbit').setAttribute('aria-label', pct == null ? t('Battery unknown') : t('iPhone battery: {pct}', { pct: perc(pct) }));
+    $('#h-charge').textContent = p.charge ? t('battery') + ' · ' + t(CHARGE[p.charge]) : t('battery');
+    $('#f-bat').textContent = pct == null ? t('unknown') : perc(pct) + (p.charge ? ' · ' + t(CHARGE[p.charge]) : '');
+    $('#f-heat').textContent = p.thermal ? t(HEAT[p.thermal]) : t('unknown');
+    $('#f-link').textContent = S.connected ? `${linkQuality(S.latency_ms)} · ${linkName()}` : t('Offline');
+    $('#f-disk').textContent = p.storage_free_gb == null ? t('unknown') : t('{n} GB free', { n: nf(Math.round(p.storage_free_gb)) });
     const q = S.cam.effective.quality;
-    $('#h-camtag').textContent = S.connected ? `Prête · ${resName(q.height)}${q.fps}` : 'Hors ligne';
+    $('#h-camtag').textContent = S.connected ? `${t('Ready')} · ${resName(q.height)}${q.fps}` : t('Offline');
     const via = $('#h-via');
-    if (via) via.textContent = 'relié ' + linkName();
+    if (via) via.textContent = t('linked {via}', { via: linkName() });
     const seen = $('#h-seen');
     if (seen) seen.textContent = ago(S.device.last_seen);
     const low = pct != null && pct < 15 && p.charge === 'unplugged' && settings && settings.low_battery_alert;
     $('#h-low').innerHTML = low
-      ? `<div class="ban bad">${I.alert}<span><strong>Batterie faible : ${pct} %.</strong> Branche l’iPhone ; Hyphn baisse la qualité pour tenir.</span></div>`
+      ? `<div class="ban bad">${I.alert}<span><strong>${t('Low battery: {pct}.', { pct: perc(pct) })}</strong> ${t('Plug in the iPhone; Hyphn lowers the quality to last.')}</span></div>`
       : '';
   },
 };
 
 // ===================================================================
-// Appairage
+// Pairing
 // ===================================================================
 
 // The QR in whole screen pixels per square, with a 3-square light margin
@@ -644,29 +666,29 @@ const Pair = {
     let body = '';
     if (this.step === 'problem') {
       body = `<div class="problem"><span class="ic">${I.wifiOff}</span>
-        <h2 style="margin:0;font-size:28px;letter-spacing:-.03em">Pas de QR pour l’instant</h2>
+        <h2 style="margin:0;font-size:28px;letter-spacing:-.03em">${t('No QR code for now')}</h2>
         <p class="sub" style="max-width:520px;line-height:1.55">${esc(this.offer.problem)}</p>
-        <button class="btn pri" type="button" data-act="renew">${I.refresh}Réessayer</button></div>`;
+        <button class="btn pri" type="button" data-act="renew">${I.refresh}${t('Try again')}</button></div>`;
     } else if (this.step === 'qr') {
       body = `<div class="stage">
         <div class="qrbox">
           <span class="corner a"></span><span class="corner b"></span><span class="corner c"></span><span class="corner e"></span>
-          <div class="qr" role="img" aria-label="QR code d’appairage"><canvas id="p-qr"></canvas></div>
+          <div class="qr" role="img" aria-label="${t('Pairing QR code')}"><canvas id="p-qr"></canvas></div>
         </div>
         <div>
-          <span class="lbl">Étape 1 sur 2</span>
+          <span class="lbl">${t('Step 1 of 2')}</span>
           <div class="steps">
-            <div class="st"><b>1</b>Ouvre Hyphn sur l’iPhone</div>
-            <div class="st"><b>2</b>Touche « Scanner le QR code »</div>
-            <div class="st"><b>3</b>Vise ce code, c’est tout</div>
+            <div class="st"><b>1</b>${t('Open Hyphn on the iPhone')}</div>
+            <div class="st"><b>2</b>${t('Hold it about 20 cm from the screen')}</div>
+            <div class="st"><b>3</b>${t('Point at this code, that’s all')}</div>
           </div>
           <div class="timer">
-            <div class="row" style="justify-content:space-between;font-size:13px;color:var(--tx2)"><span>Usage unique · expire dans</span><span class="mono" id="p-clock" style="color:var(--tx);font-size:20px">1:00</span></div>
+            <div class="row" style="justify-content:space-between;font-size:13px;color:var(--tx2)"><span>${t('Single use · expires in')}</span><span class="mono" id="p-clock" style="color:var(--tx);font-size:20px">1:00</span></div>
             <div class="track"><span id="p-track" style="width:100%"></span></div>
           </div>
           ${this.err ? `<div class="ban bad" style="margin-bottom:18px">${I.alert}<span>${esc(this.err)}</span></div>` : ''}
           <div class="row">
-            <button class="btn" type="button" data-act="renew">${I.refresh}Nouveau QR</button>
+            <button class="btn" type="button" data-act="renew">${I.refresh}${t('New QR')}</button>
           </div>
         </div>
       </div>`;
@@ -674,10 +696,10 @@ const Pair = {
       const d = this.code.split('');
       body = `<div class="stage" style="grid-template-columns:1fr;text-align:center;padding:56px 36px">
         <div>
-          <span class="lbl">Étape 2 sur 2 · ${esc(this.device)} trouvé</span>
-          <h2 style="margin:16px 0 36px;font-size:36px;letter-spacing:-.04em;font-weight:600">Confirme sur l’iPhone</h2>
-          <div class="digits" aria-label="Code ${d.join(' ')}">${d.map((x, i) => `<span class="dg" style="animation-delay:${i * 0.12}s">${x}</span>`).join('')}</div>
-          <p style="margin:26px auto 0;max-width:520px;color:var(--tx2);font-size:14px;line-height:1.55">Même code sur l’iPhone ? Touche « Oui, relier ».</p>
+          <span class="lbl">${t('Step 2 of 2 · {name} found', { name: esc(this.device) })}</span>
+          <h2 style="margin:16px 0 36px;font-size:36px;letter-spacing:-.04em;font-weight:600">${t('Confirm on the iPhone')}</h2>
+          <div class="digits" aria-label="${t('Code {code}', { code: d.join(' ') })}">${d.map((x, i) => `<span class="dg" style="animation-delay:${i * 0.12}s">${x}</span>`).join('')}</div>
+          <p style="margin:26px auto 0;max-width:520px;color:var(--tx2);font-size:14px;line-height:1.55">${t('Same code on the iPhone? Tap “Yes, Pair”.')}</p>
         </div>
       </div>`;
     } else {
@@ -690,21 +712,21 @@ const Pair = {
           <span class="lock">${I.lock}</span>
           <span class="dv b">${I.phone}</span>
         </div>
-        <h2 class="lt">Ce PC et ${esc(this.device)} sont liés</h2>
+        <h2 class="lt">${t('This PC and {name} are paired', { name: esc(this.device) })}</h2>
         <div class="lchips">
-          <span class="lchip" style="animation-delay:2.1s">${I.check}Relié pour de bon</span>
-          <span class="lchip" style="animation-delay:2.3s">${I.check}Chiffré de bout en bout</span>
-          <span class="lchip" style="animation-delay:2.5s">${I.check}Se reconnecte tout seul</span>
+          <span class="lchip" style="animation-delay:2.1s">${I.check}${t('Paired for good')}</span>
+          <span class="lchip" style="animation-delay:2.3s">${I.check}${t('End-to-end encrypted')}</span>
+          <span class="lchip" style="animation-delay:2.5s">${I.check}${t('Reconnects by itself')}</span>
         </div>
-        <button class="btn auto" type="button" data-act="home">Aller à l’accueil</button>
+        <button class="btn auto" type="button" data-act="home">${t('Go to Home')}</button>
       </div>`;
     }
-    const replace = S && S.device ? `<p class="sub">Relier un nouvel iPhone remplace ${esc(S.device.name)}.</p>` : '<p class="sub">Une seule fois. Ensuite, l’iPhone et ce PC se reconnaissent tout seuls.</p>';
+    const replace = `<p class="sub">${S && S.device ? t('Pairing a new iPhone replaces {name}.', { name: esc(S.device.name) }) : t('Just once. Then the iPhone and this PC find each other by themselves.')}</p>`;
     this.root.innerHTML = `
       <main class="wrap enter" id="p-main">
         <header class="row" style="justify-content:space-between;align-items:flex-end;gap:16px">
-          <div><h1 class="h1">Relier un iPhone</h1>${replace}</div>
-          <a class="btn" href="#home">Fermer</a>
+          <div><h1 class="h1">${t('Pair an iPhone')}</h1>${replace}</div>
+          <a class="btn" href="#home">${t('Close')}</a>
         </header>
         <section class="card" style="padding:0">${body}</section>
       </main>`;
@@ -722,7 +744,7 @@ const Pair = {
   // Events from `link`: the iPhone scanned (code), said yes (linked) or left (ended).
   onPair(e) {
     if (page !== Pair) {
-      if (e.step === 'linked') toast(`${e.device_name} est lié à ce PC`);
+      if (e.step === 'linked') toast(t('{name} is paired with this PC', { name: e.device_name }));
       return;
     }
     if (e.step === 'code') {
@@ -735,10 +757,10 @@ const Pair = {
       Pair.device = e.device_name;
       Pair.step = 'linked';
       Pair.paint();
-      // E8: about 8 s of « liés », then slide to the home page.
+      // E8: about 8 s of « paired », then slide to the home page.
       Pair.t1 = setTimeout(() => Pair.leave(), 8000);
     } else if (Pair.step !== 'linked') {
-      Pair.err = e.message || (Pair.step === 'code' ? 'L’iPhone a refusé ou s’est déconnecté. Voici un nouveau QR.' : '');
+      Pair.err = e.message || (Pair.step === 'code' ? t('The iPhone said no or disconnected. Here is a new QR code.') : '');
       Pair.newOffer();
     }
   },
@@ -758,17 +780,18 @@ const RES = [2160, 1440, 1080, 720, 480];
 const RES_L = ['4K', '1440p', '1080p', '720p', '480p'];
 const FPS = [24, 25, 30, 60, 120];
 const RATE = [0, 8, 20, 40, 80];
-// One list (ADR-0032): [name, res index, fps index, power, what it is for]. Index 6 = Personnalisé.
-const PROFILES = [['Max', 0, 3, 'max', 'La plus belle image · 4K 60'], ['Équilibré', 2, 3, 'balanced', '1080p 60 · chauffe moins'],
-  ['Économie', 3, 2, 'eco', '720p 30 · tient longtemps'], ['Appel', 2, 2, 'balanced', '1080p 30 · Discord, Teams'],
-  ['Stream', 0, 3, 'balanced', '4K 60 · OBS'], ['Cours', 3, 2, 'balanced', '720p 30 · léger']];
+// One list (ADR-0032): [name, res index, fps index, power, what it is for]. Index 6 = Custom.
+// Names and captions are shown through t().
+const PROFILES = [['Max', 0, 3, 'max', 'The best picture · 4K 60'], ['Balanced', 2, 3, 'balanced', '1080p 60 · runs cooler'],
+  ['Saver', 3, 2, 'eco', '720p 30 · lasts long'], ['Call', 2, 2, 'balanced', '1080p 30 · Discord, Teams'],
+  ['Stream', 0, 3, 'balanced', '4K 60 · OBS'], ['Class', 3, 2, 'balanced', '720p 30 · light']];
 const CUSTOM = 6;
-const POWER = [['max', 'Ne rien baisser', 'Plus belle image'], ['balanced', 'Baisser un peu', 'Moins de chaleur'], ['eco', 'Économiser', 'Batterie']];
+const POWER = [['max', 'Lower nothing', 'Best picture'], ['balanced', 'Lower a little', 'Less heat'], ['eco', 'Save power', 'Battery']];
 const CAM_DEFAULTS = {
   res: 0, fps: 3, codec: 0, rate: 0, power: 'max',
   ev: 0, focus: 50, wb: 5600, afA: true, wbA: true, torch: false, stab: 0,
   aeA: true, iso: 200, shutter: 10000, tint: 0, zoom: 100, hdr: false, poi: null, peekAt: null,
-  msg: 'Je reviens bientôt', multi: true, langs: null, wst: 0, prof: 0, lens: 1, front: false, mirror: false, turn: 0,
+  msg: 'Be right back', multi: true, langs: null, wst: 0, prof: 0, lens: 1, front: false, mirror: false, turn: 0,
 };
 // Stops offered by the stepped sliders, cut to what the iPhone allows.
 const ISO_STOPS = [20, 25, 32, 40, 50, 64, 80, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 2000, 2500, 3200, 4000, 5000, 6400, 8000, 10000, 12800];
@@ -780,7 +803,7 @@ const RESETS = {
   msg: ['msg'], multi: ['multi'], langs: ['langs'], wst: ['wst'],
 };
 const GROUPS = { light: ['exp'], sharp: ['focus', 'poi'], color: ['wb'], frame: ['zoom', 'stab', 'hdr', 'torch'], stream: ['res', 'fps', 'codec', 'rate', 'power'], wait: ['msg', 'multi', 'langs', 'wst'] };
-// The « Auto » half of each Auto / Manuel switch: [setting, value meaning Auto].
+// The « Auto » half of each Auto / Manual switch: [setting, value meaning Auto].
 const AUTOS = { exp: ['aeA', true], focus: ['afA', true], wb: ['wbA', true] };
 // Settings that make the iPhone camera work again (sent at once).
 const SENT = ['res', 'fps', 'rate', 'codec', 'stab', 'power', 'aeA', 'ev', 'iso', 'shutter', 'afA', 'focus', 'wbA', 'wb', 'tint', 'zoom', 'hdr', 'poi', 'torch'];
@@ -791,22 +814,35 @@ const VK = { wb: 'wbK', focus: 'focusP' };
 // apps/desktop-vcam/src/feed.cpp), then every other language Mozilla
 // translates into. 2.6 s each.
 const BUILTIN = {
-  fr: 'Je reviens bientôt', en: 'Be right back', es: 'Vuelvo enseguida', de: 'Bin gleich zurück',
+  en: 'Be right back', fr: 'Je reviens bientôt', es: 'Vuelvo enseguida', de: 'Bin gleich zurück',
   it: 'Torno subito', pt: 'Volto já', nl: 'Ben zo terug', pl: 'Zaraz wracam',
   tr: 'Hemen dönüyorum', ru: 'Скоро вернусь', uk: 'Скоро повернуся', ar: 'سأعود قريبًا',
   hi: 'थोड़ी देर में वापस', zh: '马上回来', ja: 'すぐ戻ります', ko: '곧 돌아올게요',
   vi: 'Quay lại ngay', id: 'Segera kembali',
 };
 const DEFAULT_LANGS = Object.keys(BUILTIN);
+// Both built-in defaults count as « no own message »: switching the window's
+// language keeps a default message, in the new language (CAM_DEFAULTS.msg).
+const isDefaultMsg = (m) => m === BUILTIN.en || m === BUILTIN.fr;
+const sameMsg = (a, b) => a === b || (isDefaultMsg(a) && isDefaultMsg(b));
+// What the translator reads (it translates from French): the French default for a default message.
+const trSource = (m) => (isDefaultMsg(m) ? BUILTIN.fr : m);
+// The Cam settings as saved, with a default message in the window's language.
+function camSettings() {
+  const c = Object.assign({}, CAM_DEFAULTS, settings.cam || {});
+  if (isDefaultMsg(c.msg)) c.msg = CAM_DEFAULTS.msg;
+  return c;
+}
+// Shown through langName() (t()).
 const LANG_NAMES = {
-  fr: 'Français', en: 'Anglais', es: 'Espagnol', de: 'Allemand', it: 'Italien', pt: 'Portugais', nl: 'Néerlandais', pl: 'Polonais',
-  tr: 'Turc', ru: 'Russe', uk: 'Ukrainien', ar: 'Arabe', hi: 'Hindi', zh: 'Chinois simplifié', ja: 'Japonais', ko: 'Coréen',
-  vi: 'Vietnamien', id: 'Indonésien', af: 'Afrikaans', sq: 'Albanais', az: 'Azéri', eu: 'Basque', bn: 'Bengali', be: 'Biélorusse',
-  bs: 'Bosnien', bg: 'Bulgare', ca: 'Catalan', 'zh-Hant': 'Chinois traditionnel', hr: 'Croate', da: 'Danois', et: 'Estonien',
-  fi: 'Finnois', gl: 'Galicien', el: 'Grec', gu: 'Gujarati', he: 'Hébreu', hu: 'Hongrois', is: 'Islandais', kn: 'Kannada',
-  lv: 'Letton', lt: 'Lituanien', ms: 'Malais', ml: 'Malayalam', mr: 'Marathi', nb: 'Norvégien', ug: 'Ouïghour', ur: 'Ourdou',
-  fa: 'Persan', ro: 'Roumain', sr: 'Serbe', sk: 'Slovaque', sl: 'Slovène', sv: 'Suédois', tl: 'Tagalog', ta: 'Tamoul',
-  cs: 'Tchèque', te: 'Télougou', th: 'Thaï',
+  en: 'English', fr: 'French', es: 'Spanish', de: 'German', it: 'Italian', pt: 'Portuguese', nl: 'Dutch', pl: 'Polish',
+  tr: 'Turkish', ru: 'Russian', uk: 'Ukrainian', ar: 'Arabic', hi: 'Hindi', zh: 'Simplified Chinese', ja: 'Japanese', ko: 'Korean',
+  vi: 'Vietnamese', id: 'Indonesian', af: 'Afrikaans', sq: 'Albanian', az: 'Azerbaijani', eu: 'Basque', bn: 'Bengali', be: 'Belarusian',
+  bs: 'Bosnian', bg: 'Bulgarian', ca: 'Catalan', 'zh-Hant': 'Traditional Chinese', hr: 'Croatian', da: 'Danish', et: 'Estonian',
+  fi: 'Finnish', gl: 'Galician', el: 'Greek', gu: 'Gujarati', he: 'Hebrew', hu: 'Hungarian', is: 'Icelandic', kn: 'Kannada',
+  lv: 'Latvian', lt: 'Lithuanian', ms: 'Malay', ml: 'Malayalam', mr: 'Marathi', nb: 'Norwegian', ug: 'Uyghur', ur: 'Urdu',
+  fa: 'Persian', ro: 'Romanian', sr: 'Serbian', sk: 'Slovak', sl: 'Slovenian', sv: 'Swedish', tl: 'Tagalog', ta: 'Tamil',
+  cs: 'Czech', te: 'Telugu', th: 'Thai',
 };
 const ALL_LANGS = Object.keys(LANG_NAMES);
 // Right to left, and joined letters shown whole instead of letter by letter.
@@ -817,16 +853,16 @@ const LOCALE = { fr: 'fr-fr', en: 'en-us', es: 'es-es', de: 'de-de', it: 'it-it'
 const chosenLangs = (c) => (Array.isArray(c.langs) && c.langs.length ? c.langs : DEFAULT_LANGS).filter((l) => LANG_NAMES[l]);
 // The lines that roll: [lang, text] for each chosen language that has its words.
 function waitLines(c) {
-  const own = c.msg !== CAM_DEFAULTS.msg;
-  const tr = c.tr && c.tr.msg === c.msg ? c.tr.t : {};
+  const own = !isDefaultMsg(c.msg);
+  const tr = c.tr && sameMsg(c.tr.msg, c.msg) ? c.tr.t : {};
   return chosenLangs(c).map((l) => [l, own ? (l === 'fr' ? c.msg : tr[l]) : BUILTIN[l] || tr[l]]).filter(([, t]) => t);
 }
 // A language needs its model from Mozilla to show the message in use.
-const needsModel = (c, l) => l !== 'fr' && (c.msg !== CAM_DEFAULTS.msg || !BUILTIN[l]);
+const needsModel = (c, l) => l !== 'fr' && (!isDefaultMsg(c.msg) || !BUILTIN[l]);
 // Languages still to translate for the message in use.
 function untranslated(c) {
-  const own = c.msg !== CAM_DEFAULTS.msg;
-  const tr = c.tr && c.tr.msg === c.msg ? c.tr.t : {};
+  const own = !isDefaultMsg(c.msg);
+  const tr = c.tr && sameMsg(c.tr.msg, c.msg) ? c.tr.t : {};
   const failed = (typeof Cam !== 'undefined' && Cam.trFailed) || new Set();
   return chosenLangs(c).filter((l) => l !== 'fr' && !failed.has(l) && !(own ? tr[l] : BUILTIN[l] || tr[l]));
 }
@@ -1038,7 +1074,7 @@ const Video = {
 };
 Video.detect();
 
-const LENS_L = ['0,5×', '1×', '2×', '5×'];
+const LENS_L = ['0.5×', '1×', '2×', '5×']; // shown through t()
 
 // A sentence wider than the picture shrinks until it fits, on one line, like
 // the webcam does (feed.cpp). Runs whenever a waiting screen is put on screen.
@@ -1097,9 +1133,9 @@ function waitScreen(c, sub) {
   </div>`;
 }
 
-// Categories of the settings panel, in order: [id, name, icon].
-const CATS = [['profile', 'Profil', 'spark'], ['light', 'Lumière', 'sun'], ['sharp', 'Netteté', 'target'], ['color', 'Couleurs', 'palette'],
-  ['frame', 'Cadrage', 'frame'], ['stream', 'Envoi', 'up'], ['wait', 'Pause', 'moon']];
+// Categories of the settings panel, in order: [id, name (through t()), icon].
+const CATS = [['profile', 'Profile', 'spark'], ['light', 'Lighting', 'sun'], ['sharp', 'Focus', 'target'], ['color', 'Colors', 'palette'],
+  ['frame', 'Framing', 'frame'], ['stream', 'Sending', 'up'], ['wait', 'Pause', 'moon']];
 
 // Offline translation (ADR-0033): Rust brings the files (downloaded once
 // from Mozilla), a worker runs Firefox's engine. One worker for the app.
@@ -1121,7 +1157,7 @@ const Translator = {
         this.worker.terminate();
         this.worker = null;
         this.started = false;
-        for (const id of Object.keys(this.wait)) this.wait[id][1](new Error('le traducteur s’est arrêté'));
+        for (const id of Object.keys(this.wait)) this.wait[id][1](new Error(t('the translator stopped')));
         this.wait = {};
       };
     }
@@ -1144,7 +1180,7 @@ const Translator = {
   async start() {
     if (this.started) return;
     const plan = await invoke('translate_plan', { langs: ['en'] });
-    if (!plan || !plan.pairs['fr-en']) throw new Error('pas de modèle français → anglais');
+    if (!plan || !plan.pairs['fr-en']) throw new Error(t('no French → English model'));
     const wasm = await this.bytes(plan.wasm);
     await this.call({ type: 'start', wasm }, [wasm]);
     await this.load('fr-en', plan.pairs['fr-en']);
@@ -1175,37 +1211,37 @@ const Translator = {
   },
 };
 
-// The effects panel's tabs: [tab, name, icon, tooltip].
-const FX_TABS = [['filter', 'Filtres', 'palette', 'fx_filter'], ['mask', 'Emojis', 'smile', 'fx_mask'], ['3d', '3D', 'cube', 'fx_3d'],
-  ['bg', 'Fond', 'layers', 'fx_bg'], ['touch', 'Retouche', 'spark', 'fx_touch']];
-// The families of a tab: [name, [[id, name, picture], ...]].
-function fxGroups(t) {
-  if (t === 'filter') return [['Classiques', FX_FILTERS.filter(([id]) => id !== 'none')], ...FX_LOOK_GROUPS];
-  if (t === 'mask') return FX_MASK_GROUPS;
-  if (t === '3d') return FX_3D_GROUPS;
-  if (t === 'bg') return [['Flou', FX_BG.filter(([id]) => id === 'blur' || id === 'strong')], ['Décors', FX_PHOTOS], ['À toi', FX_BG.filter(([id]) => id === 'image')]];
+// The effects panel's tabs: [tab, name (through t()), icon, tooltip].
+const FX_TABS = [['filter', 'Filters', 'palette', 'fx_filter'], ['mask', 'Emojis', 'smile', 'fx_mask'], ['3d', '3D', 'cube', 'fx_3d'],
+  ['bg', 'Background', 'layers', 'fx_bg'], ['touch', 'Touch-up', 'spark', 'fx_touch']];
+// The families of a tab: [name, [[id, name, picture], ...]]. Names go through t().
+function fxGroups(kind) {
+  if (kind === 'filter') return [['Classics', FX_FILTERS.filter(([id]) => id !== 'none')], ...FX_LOOK_GROUPS];
+  if (kind === 'mask') return FX_MASK_GROUPS;
+  if (kind === '3d') return FX_3D_GROUPS;
+  if (kind === 'bg') return [['Blur', FX_BG.filter(([id]) => id === 'blur' || id === 'strong')], ['Scenes', FX_PHOTOS], ['Yours', FX_BG.filter(([id]) => id === 'image')]];
   return [];
 }
-const fxKey = (t) => (t === 'filter' || t === 'bg' ? t : 'mask');
-const fxChosen = (f, t) => (t === 'touch' ? f.smooth > 0 || f.light > 0 : fxGroups(t).some(([, items]) => items.some(([id]) => id === f[fxKey(t)])));
+const fxKey = (kind) => (kind === 'filter' || kind === 'bg' ? kind : 'mask');
+const fxChosen = (f, kind) => (kind === 'touch' ? f.smooth > 0 || f.light > 0 : fxGroups(kind).some(([, items]) => items.some(([id]) => id === f[fxKey(kind)])));
 // What is on now, as [setting, label] for the chips.
 function fxActive(f) {
-  const name = (list, id) => (list.find(([x]) => x === id) || [])[1];
+  const name = (list, id) => { const n = (list.find(([x]) => x === id) || [])[1]; return n ? t(n) : id; };
   const out = [];
-  if (f.filter !== 'none') out.push(['filter', name([...FX_FILTERS, ...FX_LOOKS], f.filter) || f.filter]);
-  if (f.mask !== 'none') out.push(['mask', name(FX_MASKS, f.mask) || f.mask]);
-  if (f.bg !== 'none') out.push(['bg', name(FX_BG, f.bg) || f.bg]);
-  if (f.smooth > 0) out.push(['smooth', `Peau lisse ${f.smooth} %`]);
-  if (f.light > 0) out.push(['light', `Lumière douce ${f.light} %`]);
+  if (f.filter !== 'none') out.push(['filter', name([...FX_FILTERS, ...FX_LOOKS], f.filter)]);
+  if (f.mask !== 'none') out.push(['mask', name(FX_MASKS, f.mask)]);
+  if (f.bg !== 'none') out.push(['bg', name(FX_BG, f.bg)]);
+  if (f.smooth > 0) out.push(['smooth', t('Smooth skin {pct}', { pct: perc(f.smooth) })]);
+  if (f.light > 0) out.push(['light', t('Soft light {pct}', { pct: perc(f.light) })]);
   return out;
 }
 function fxDefaultOpen(f) {
   const open = new Set();
-  for (const [t] of FX_TABS) {
-    const groups = fxGroups(t);
+  for (const [kind] of FX_TABS) {
+    const groups = fxGroups(kind);
     if (!groups.length) continue;
-    const i = groups.findIndex(([, items]) => items.some(([id]) => id === f[fxKey(t)]));
-    open.add(`${t}:${groups[Math.max(0, i)][0]}`).add(t + ':fav').add(t + ':recent');
+    const i = groups.findIndex(([, items]) => items.some(([id]) => id === f[fxKey(kind)]));
+    open.add(`${kind}:${groups[Math.max(0, i)][0]}`).add(kind + ':fav').add(kind + ':recent');
   }
   return open;
 }
@@ -1215,9 +1251,9 @@ const fxFold = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().r
 const Cam = {
   key: () => '',
   mount(root) {
-    this.cs = Object.assign({}, CAM_DEFAULTS, settings.cam || {});
+    this.cs = camSettings();
     if (this.cs.wst > 1) this.cs.wst = 0;
-    // Saved before the power profiles (ADR-0032): its quality is kept, as « Personnalisé ».
+    // Saved before the power profiles (ADR-0032): its quality is kept, as « Custom ».
     if (settings.cam && Object.keys(settings.cam).length && !('power' in settings.cam)) Object.assign(this.cs, { power: 'max', prof: CUSTOM });
     // The point is chosen on the live picture, never kept from one time to the next.
     this.cs.poi = null;
@@ -1235,17 +1271,17 @@ const Cam = {
       <main class="cam-wrap">
         <div class="pv" id="c-pv">
           <div class="vbox" id="c-vbox">
-            <canvas class="scene vid" id="c-scene" role="img" aria-label="Image de la caméra de l’iPhone"></canvas>
-            <span class="ptag">Aperçu · toi seul</span>
-            <button class="pclose" type="button" aria-label="Cacher l’aperçu" title="Cacher l’aperçu" data-act="peek">${I.close}</button>
+            <canvas class="scene vid" id="c-scene" role="img" aria-label="${t('Picture from the iPhone camera')}"></canvas>
+            <span class="ptag">${t('Preview · only you')}</span>
+            <button class="pclose" type="button" aria-label="${t('Hide the preview')}" title="${t('Hide the preview')}" data-act="peek">${I.close}</button>
             <span class="poi" id="c-poi" aria-hidden="true"></span>
           </div>
           <div id="c-wait"></div>
           <div class="hud l" id="c-hudl"></div>
           <div class="hud r" id="c-hudr"></div>
           <div id="c-notice"></div>
-          <div class="dock" role="toolbar" aria-label="Commandes de la caméra" id="c-dock"></div>
-          <aside class="adj" id="c-adj" aria-label="Panneau de la caméra"></aside>
+          <div class="dock" role="toolbar" aria-label="${t('Camera controls')}" id="c-dock"></div>
+          <aside class="adj" id="c-adj" aria-label="${t('Camera panel')}"></aside>
         </div>
       </main>`;
     Video.start($('#c-scene'));
@@ -1357,9 +1393,9 @@ const Cam = {
       $('#c-wait').innerHTML = '';
       return;
     }
-    const sub = !S || !S.device ? 'Aucun iPhone relié · <a href="#pair">Relier</a>'
-      : !conn ? 'iPhone hors ligne'
-        : live ? 'L’image arrive…' : '';
+    const sub = !S || !S.device ? `${t('No iPhone paired')} · <a href="#pair">${t('Pair')}</a>`
+      : !conn ? t('iPhone offline')
+        : live ? t('The picture is coming…') : '';
     // Already on screen (a new message, style…): no fade in again, the camera
     // picture behind must never show through.
     const shown = !!$('#c-wait .wait2');
@@ -1371,17 +1407,17 @@ const Cam = {
     const conn = this.connected();
     const live = this.isLive() && conn;
     $('#c-dock').innerHTML = `
-      <button class="pz ${live ? 'live' : 'paused'}" type="button" data-act="pause"${tipAttr('pause')} ${conn ? '' : 'disabled'}>${live ? I.pause + 'Pause' : I.play + 'Afficher la caméra'}</button>
-      <div class="lens" role="group" aria-label="Objectif"${tipAttr('lens')}>${LENS_L.map((n, i) => `<button type="button" class="${i === c.lens && !c.front ? 'on' : ''}" data-act="set" data-k="lens" data-v="${i}" ${c.front ? 'disabled' : ''}>${n}</button>`).join('')}</div>
-      <button class="db${c.mirror ? ' on' : ''}" type="button" aria-label="Miroir" aria-pressed="${!!c.mirror}"${tipAttr('mirror')} data-act="mirror">${I.mirror}</button>
-      <button class="db${c.turn ? ' on' : ''}" type="button" aria-label="Tourner de 90°"${tipAttr('turn')} data-act="turn">${I.turn}</button>
-      <button class="db" type="button" aria-label="Changer de caméra"${tipAttr('flipcam')} data-act="flipcam">${I.flip}</button>
-      ${live ? '' : `<button class="db${this.peekOn() ? ' on' : ''}" type="button" aria-label="${this.peekOn() ? 'Cacher' : 'Montrer'} l’aperçu" aria-pressed="${this.peekOn()}"${tipAttr('peek')} data-act="peek">${this.peekOn() ? I.eye : I.eyeOff}</button>`}
+      <button class="pz ${live ? 'live' : 'paused'}" type="button" data-act="pause"${tipAttr('pause')} ${conn ? '' : 'disabled'}>${live ? I.pause + t('Pause') : I.play + t('Show camera')}</button>
+      <div class="lens" role="group" aria-label="${t('Lens')}"${tipAttr('lens')}>${LENS_L.map((n, i) => `<button type="button" class="${i === c.lens && !c.front ? 'on' : ''}" data-act="set" data-k="lens" data-v="${i}" ${c.front ? 'disabled' : ''}>${t(n)}</button>`).join('')}</div>
+      <button class="db${c.mirror ? ' on' : ''}" type="button" aria-label="${t('Mirror')}" aria-pressed="${!!c.mirror}"${tipAttr('mirror')} data-act="mirror">${I.mirror}</button>
+      <button class="db${c.turn ? ' on' : ''}" type="button" aria-label="${t('Rotate 90°')}"${tipAttr('turn')} data-act="turn">${I.turn}</button>
+      <button class="db" type="button" aria-label="${t('Switch camera')}"${tipAttr('flipcam')} data-act="flipcam">${I.flip}</button>
+      ${live ? '' : `<button class="db${this.peekOn() ? ' on' : ''}" type="button" aria-label="${t(this.peekOn() ? 'Hide the preview' : 'Show the preview')}" aria-pressed="${this.peekOn()}"${tipAttr('peek')} data-act="peek">${this.peekOn() ? I.eye : I.eyeOff}</button>`}
       <span class="sep"></span>
-      <button class="db fxb${this.panel === 'fx' ? ' on' : ''}${Effects.active() ? ' lit' : ''}" type="button" aria-label="Effets"${tipAttr('fx')} data-act="panel" data-v="fx">${I.wand}</button>
-      <button class="db${this.panel === 'info' ? ' on' : ''}" type="button" aria-label="Infos du flux"${tipAttr('info')} data-act="panel" data-v="info">${I.info}</button>
-      <button class="db${this.panel === 'set' ? ' on' : ''}" type="button" aria-label="Réglages de la caméra"${tipAttr('set')} data-act="panel" data-v="set">${I.sliders}</button>
-      <button class="db" type="button" aria-label="${this.full ? 'Quitter le plein écran' : 'Plein écran'}"${tipAttr('full')} data-act="full">${this.full ? I.shrink : I.expand}</button>`;
+      <button class="db fxb${this.panel === 'fx' ? ' on' : ''}${Effects.active() ? ' lit' : ''}" type="button" aria-label="${t('Effects')}"${tipAttr('fx')} data-act="panel" data-v="fx">${I.wand}</button>
+      <button class="db${this.panel === 'info' ? ' on' : ''}" type="button" aria-label="${t('Stream info')}"${tipAttr('info')} data-act="panel" data-v="info">${I.info}</button>
+      <button class="db${this.panel === 'set' ? ' on' : ''}" type="button" aria-label="${t('Camera settings')}"${tipAttr('set')} data-act="panel" data-v="set">${I.sliders}</button>
+      <button class="db" type="button" aria-label="${t(this.full ? 'Exit full screen' : 'Full screen')}"${tipAttr('full')} data-act="full">${this.full ? I.shrink : I.expand}</button>`;
   },
   paintHud() {
     const conn = this.connected();
@@ -1389,10 +1425,10 @@ const Cam = {
     const q = S.cam.effective.quality;
     const ph = S.cam.phone;
     const qual = ph && ph.height && live ? `${resName(Math.min(ph.width, ph.height))} · ${ph.fps}` : `${resName(q.height)} · ${q.fps}`;
-    const used = S.vcam && S.vcam.in_use ? `<span class="chip"${tipAttr('hudused')}>${I.cam}${S.vcam.in_use > 1 ? S.vcam.in_use + ' apps' : 'Webcam utilisée'}</span>` : '';
+    const used = S.vcam && S.vcam.in_use ? `<span class="chip"${tipAttr('hudused')}>${I.cam}${S.vcam.in_use > 1 ? t('{n} apps', { n: S.vcam.in_use }) : t('Webcam in use')}</span>` : '';
     $('#c-hudl').innerHTML = (live
-      ? '<span class="chip" style="color:#FFB3A6"><span class="rec"></span>EN DIRECT</span>'
-      : `<span class="chip">${I.pause}En pause</span>`) + `<span class="chip mono"${tipAttr('hudq')}>${qual}</span>` + used;
+      ? `<span class="chip" style="color:#FFB3A6"><span class="rec"></span>${t('LIVE')}</span>`
+      : `<span class="chip">${I.pause}${t('Paused')}</span>`) + `<span class="chip mono"${tipAttr('hudq')}>${qual}</span>` + used;
     const p = S.status;
     if (!S.device || !p) {
       $('#c-hudr').innerHTML = '';
@@ -1400,17 +1436,17 @@ const Cam = {
       const low = p.battery != null && p.battery < 15 && p.charge === 'unplugged';
       const bc = low ? '#FF7A66' : '#B9F25A';
       $('#c-hudr').innerHTML = `
-        <span class="chip" style="color:${bc}"${tipAttr('battery')}><span class="batt" aria-hidden="true"><i style="width:${p.battery ?? 0}%"></i></span><span class="mono">${p.battery ?? '—'} %</span>${p.charge !== 'unplugged' ? svg('<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>', ' aria-label="en charge"') : ''}</span>
-        <span class="chip"${tipAttr('heat')}><span class="tdot" style="background:${HEAT_COLOR[p.thermal] || '#868F9D'}"></span>${p.thermal ? HEAT[p.thermal] : 'inconnu'}</span>
-        <span class="chip"${tipAttr('ping')}>${onCable() ? I.cable : I.wifi}<span class="mono">${conn ? (S.latency_ms == null ? '—' : S.latency_ms + ' ms') : 'hors ligne'}</span></span>`;
+        <span class="chip" style="color:${bc}"${tipAttr('battery')}><span class="batt" aria-hidden="true"><i style="width:${p.battery ?? 0}%"></i></span><span class="mono">${p.battery == null ? '—' : perc(p.battery)}</span>${p.charge !== 'unplugged' ? svg('<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>', ` aria-label="${t('charging')}"`) : ''}</span>
+        <span class="chip"${tipAttr('heat')}><span class="tdot" style="background:${HEAT_COLOR[p.thermal] || '#868F9D'}"></span>${p.thermal ? t(HEAT[p.thermal]) : t('unknown')}</span>
+        <span class="chip"${tipAttr('ping')}>${onCable() ? I.cable : I.wifi}<span class="mono">${conn ? (S.latency_ms == null ? '—' : S.latency_ms + ' ms') : t('offline')}</span></span>`;
     }
     const e = S.cam.effective;
-    const why = { battery: 'Batterie faible', low_power: 'Mode économie d’iOS' }[e.reason];
+    const why = { battery: 'Low battery', low_power: 'iOS Low Power Mode' }[e.reason];
     $('#c-notice').innerHTML = !conn ? '' : e.alert
-      ? '<div class="notice hot">iPhone très chaud : 1080p 30 pour garder l’image</div>'
-      : e.lowered && e.reason === 'hot' ? '<div class="notice">iPhone chaud : 30 images/s pour garder l’image</div>'
-        : e.lowered && why ? `<div class="notice">${why} : 1080p 30 (profil Économie)</div>`
-          : e.reason === 'hot' ? '<div class="notice">iPhone chaud · ton profil garde la qualité</div>' : '';
+      ? `<div class="notice hot">${t('iPhone very hot: 1080p 30 to keep the picture')}</div>`
+      : e.lowered && e.reason === 'hot' ? `<div class="notice">${t('iPhone hot: 30 fps to keep the picture')}</div>`
+        : e.lowered && why ? `<div class="notice">${t('{why}: 1080p 30 (Saver profile)', { why: t(why) })}</div>`
+          : e.reason === 'hot' ? `<div class="notice">${t('iPhone hot · your profile keeps the quality')}</div>` : '';
   },
   update() {
     // The iPhone can switch lens or camera itself: the PC follows.
@@ -1441,65 +1477,65 @@ const Cam = {
     if (this.spark.length > 40) this.spark.shift();
     if (this.panel === 'info') this.paintInfo();
   },
-  // Infos du flux, in the side panel (the picture stays in view): a summary
+  // Stream info, in the side panel (the picture stays in view): a summary
   // first, then the picture, the delay step by step, the link, the iPhone.
   paintInfo(fresh) {
     const el = $('#c-adj');
     if (!el || this.panel !== 'info') return;
     if (fresh || !$('#c-info', el)) {
-      el.innerHTML = `<div class="ahd"><div class="aht">${I.info}Infos du flux</div>
-        <button class="ib" type="button" aria-label="Fermer" data-act="close"${tipAttr('adjclose')}>${I.close}</button></div>
+      el.innerHTML = `<div class="ahd"><div class="aht">${I.info}${t('Stream info')}</div>
+        <button class="ib" type="button" aria-label="${t('Close')}" data-act="close"${tipAttr('adjclose')}>${I.close}</button></div>
         <div class="abody" id="c-info"></div>`;
     }
     const st = S.cam.stats, q = S.cam.effective.quality, p = S.status || {}, ph = S.cam.phone, e = S.cam.effective;
     const conn = this.connected(), live = this.isLive() && conn;
     const sp = st.steps || {};
-    const ms = (v) => (v == null ? 'inconnu' : Math.round(v) + ' ms');
-    const steps = [['Compression', sp.encode_ms, 'i_enc', 'sa'], ['Trajet', sp.link_ms, 'i_link', 'sb'],
-      ['Décompression', Video.steps.decode, 'i_dec', 'sc'], ['Affichage', Video.steps.draw, 'i_draw', 'sd']];
+    const ms = (v) => (v == null ? t('unknown') : Math.round(v) + ' ms');
+    const steps = [[t('Compression'), sp.encode_ms, 'i_enc', 'sa'], [t('Network'), sp.link_ms, 'i_link', 'sb'],
+      [t('Decoding'), Video.steps.decode, 'i_dec', 'sc'], [t('Display'), Video.steps.draw, 'i_draw', 'sd']];
     const known = steps.every(([, v]) => v != null);
     const total = steps.reduce((a, [, v]) => a + (v || 0), 0);
     const asked = ph && ph.fps ? ph.fps : q.fps;
     // The summary, in plain words, with what to do.
-    const [state, title, say] = !conn ? ['off', 'iPhone hors ligne', 'Ouvre Hyphn sur l’iPhone : il se reconnecte tout seul.']
-      : !live ? ['off', 'En pause', 'Rien n’est envoyé. Appuie sur « Afficher la caméra ».']
-        : (sp.queue_ms || 0) > 30 ? ['bad', 'Le lien ne suit pas', onCable() ? 'Baisse le débit ou la taille de l’image.' : 'Branche le câble, ou baisse le débit ou la taille de l’image.']
-          : e.alert ? ['bad', 'iPhone très chaud', 'L’image est passée en 1080p 30 pour que la caméra ne soit pas coupée.']
-            : st.fps > 0 && st.fps < asked * 0.8 ? ['warn', 'Moins d’images que prévu', 'L’iPhone ou le lien ne suit pas : essaie 30 images/s.']
-              : ['ok', 'Tout va bien', known ? `Image fluide, ${Math.round(total)} ms de retard.` : 'Image fluide.'];
+    const [state, title, say] = !conn ? ['off', t('iPhone offline'), t('Open Hyphn on the iPhone: it reconnects by itself.')]
+      : !live ? ['off', t('Paused'), t('Nothing is sent. Press “Show camera”.')]
+        : (sp.queue_ms || 0) > 30 ? ['bad', t('The link can’t keep up'), t(onCable() ? 'Lower the bitrate or the picture size.' : 'Plug in the cable, or lower the bitrate or the picture size.')]
+          : e.alert ? ['bad', t('iPhone very hot'), t('The picture went down to 1080p 30 so the camera is not stopped.')]
+            : st.fps > 0 && st.fps < asked * 0.8 ? ['warn', t('Fewer pictures than planned'), t('The iPhone or the link can’t keep up: try 30 fps.')]
+              : ['ok', t('All good'), known ? t('Smooth picture, {n} ms of delay.', { n: Math.round(total) }) : t('Smooth picture.')];
     const max = Math.max(1, ...this.spark);
     const bars = Array.from({ length: 40 }, (_, i) => this.spark[i - (40 - this.spark.length)] ?? 0)
       .map((v) => `<i style="height:${Math.max(4, Math.round(v / max * 100))}%"></i>`).join('');
-    const tile = (k, v, t, sub) => `<div class="tile"><div class="k">${k}${tip(t)}</div><div class="v">${v}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
+    const tile = (k, v, tk, sub) => `<div class="tile"><div class="k">${k}${tip(tk)}</div><div class="v">${v}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
     const codec = Video.codec === 2 ? 'H.264' : Video.codec === 1 ? 'HEVC' : '—';
     const body = `
       <div class="health ${state}"><span class="hd"></span><div><b>${title}${tip('i_health')}</b><small>${say}</small></div></div>
-      <section class="isec"><h4>Image</h4>
+      <section class="isec"><h4>${t('Picture')}</h4>
         <div class="tiles">
-          ${tile('Image envoyée', ph && ph.height ? `${ph.width} × ${ph.height}` : resName(q.height), 'i_sent', `${resName(ph && ph.height ? Math.min(ph.width, ph.height) : q.height)} · ${ph && ph.fps ? ph.fps : q.fps} images/s`)}
-          ${tile('Compression', codec, 'i_codec', codec === 'HEVC' ? 'Le plus léger' : codec === 'H.264' ? 'Compatible' : '')}
-          ${tile('Images reçues', `${n1(st.fps)}<small> / s</small>`, 'i_fps', `sur ${asked} demandées`)}
-          ${tile('Débit', `${n1(st.bitrate_mbps)}<small> Mb/s</small>`, 'i_rate')}
+          ${tile(t('Picture sent'), ph && ph.height ? `${ph.width} × ${ph.height}` : resName(q.height), 'i_sent', t('{res} · {fps} fps', { res: resName(ph && ph.height ? Math.min(ph.width, ph.height) : q.height), fps: ph && ph.fps ? ph.fps : q.fps }))}
+          ${tile(t('Compression'), codec, 'i_codec', codec === 'HEVC' ? t('Lightest') : codec === 'H.264' ? t('Compatible') : '')}
+          ${tile(t('Pictures received'), `${n1(st.fps)}<small> / s</small>`, 'i_fps', t('of {n} asked', { n: asked }))}
+          ${tile(t('Bitrate'), `${n1(st.bitrate_mbps)}<small> Mb/s</small>`, 'i_rate')}
         </div>
         <div class="spark" aria-hidden="true">${bars}</div>
       </section>
-      <section class="isec"><h4>Retard de l’image${tip('i_delay')}</h4>
-        <div class="delay"><span class="mono">${known ? Math.round(total) : '—'}</span><small>ms au total</small></div>
+      <section class="isec"><h4>${t('Picture delay')}${tip('i_delay')}</h4>
+        <div class="delay"><span class="mono">${known ? Math.round(total) : '—'}</span><small>${t('ms in all')}</small></div>
         <div class="dbar" aria-hidden="true">${known && total > 0 ? steps.map(([, v, , c2]) => `<i class="${c2}" style="flex:${Math.max(v, 1)}"></i>`).join('') : '<i class="none"></i>'}</div>
-        <div class="dlist">${steps.map(([n, v, t, c2]) => `<div><span class="dot ${c2}"></span>${n}${tip(t)}<b class="mono">${ms(v)}</b></div>`).join('')}</div>
+        <div class="dlist">${steps.map(([n, v, tk, c2]) => `<div><span class="dot ${c2}"></span>${n}${tip(tk)}<b class="mono">${ms(v)}</b></div>`).join('')}</div>
       </section>
-      <section class="isec"><h4>Lien</h4>
+      <section class="isec"><h4>${t('Link')}</h4>
         <div class="tiles">
-          ${tile(onCable() ? 'Par câble' : 'En Wi-Fi', S.latency_ms == null ? 'inconnu' : `${S.latency_ms}<small> ms</small>`, 'i_ping', 'réponse du lien')}
-          ${tile('Attente dans l’iPhone', ms(sp.queue_ms), 'i_queue', (sp.queue_ms || 0) > 30 ? 'trop : baisse le débit' : 'rien ne bloque')}
-          ${tile('Images sautées', String(st.dropped + Video.drops), 'i_drop')}
-          ${tile('Images complètes', `${sp.keys_per_min ?? 0}<small> / min</small>`, 'i_keys')}
+          ${tile(t(onCable() ? 'By cable' : 'On Wi-Fi'), S.latency_ms == null ? t('unknown') : `${S.latency_ms}<small> ms</small>`, 'i_ping', t('link response'))}
+          ${tile(t('Waiting in the iPhone'), ms(sp.queue_ms), 'i_queue', t((sp.queue_ms || 0) > 30 ? 'too much: lower the bitrate' : 'nothing is stuck'))}
+          ${tile(t('Skipped pictures'), String(st.dropped + Video.drops), 'i_drop')}
+          ${tile(t('Full pictures'), `${sp.keys_per_min ?? 0}<small> / min</small>`, 'i_keys')}
         </div>
       </section>
       <section class="isec"><h4>iPhone${tip('i_phone')}</h4>
         <div class="tiles">
-          ${tile('Batterie', p.battery == null ? 'inconnu' : `${p.battery}<small> %</small>`, 'battery', p.charge ? CHARGE[p.charge] : '')}
-          ${tile('Chaleur', p.thermal ? HEAT[p.thermal] : 'inconnu', 'heat')}
+          ${tile(t('Battery'), p.battery == null ? t('unknown') : `${p.battery}<small>${LANG === 'fr' ? ' %' : '%'}</small>`, 'battery', p.charge ? t(CHARGE[p.charge]) : '')}
+          ${tile(t('Heat'), p.thermal ? t(HEAT[p.thermal]) : t('unknown'), 'heat')}
         </div>
       </section>`;
     $('#c-info').innerHTML = body;
@@ -1555,12 +1591,12 @@ const Cam = {
     const c = this.cs;
     const sign = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + n1(Math.abs(v));
     return {
-      ev: c.ev === 0 ? 'normal' : sign(c.ev),
+      ev: c.ev === 0 ? t('normal') : sign(c.ev),
       iso: 'ISO ' + c.iso,
       shutter: '1/' + Math.round(1e6 / c.shutter) + ' s',
-      focusP: c.focus + ' %',
+      focusP: perc(c.focus),
       wbK: c.wb + ' K',
-      tint: c.tint === 0 ? 'neutre' : (c.tint > 0 ? '+' : '−') + Math.abs(c.tint),
+      tint: c.tint === 0 ? t('neutral') : (c.tint > 0 ? '+' : '−') + Math.abs(c.tint),
       zoom: n1(c.zoom / 100) + '×',
     }[k] ?? '';
   },
@@ -1574,10 +1610,11 @@ const Cam = {
     const prev = $('.abody', el);
     const scroll = prev ? prev.scrollTop : 0;
     const changed = (k) => (RESETS[k] || []).some((f) => JSON.stringify(c[f]) !== JSON.stringify(CAM_DEFAULTS[f]));
-    const resetBtn = (k, label) => (changed(k) ? `<button type="button" class="rb" data-act="reset" data-k="${k}" aria-label="Remettre ${esc(label)}"${tipAttr('reset')}>${I.refresh}</button>` : '');
+    // Labels, captions and slider ends are written in English and shown through t().
+    const resetBtn = (k, label) => (changed(k) ? `<button type="button" class="rb" data-act="reset" data-k="${k}" aria-label="${esc(t('Reset {name}', { name: t(label) }))}"${tipAttr('reset')}>${I.refresh}</button>` : '');
     // Big choices with a short caption under each.
-    const opts = (k, list, cur = c[k], act = 'set') => `<div class="opts">${list.map(([v, n, sub]) => `<button type="button" class="opt${cur === v ? ' on' : ''}" data-act="${act}" data-k="${k}" data-v="${v}" aria-pressed="${cur === v}"><b>${esc(n)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</button>`).join('')}</div>`;
-    const tog = (k, on, off) => `<button class="tg" type="button" data-act="toggle" data-k="${k}" aria-pressed="${!!c[k]}"><span>${esc(c[k] ? on : off)}</span><span class="sw${c[k] ? ' on' : ''}"></span></button>`;
+    const opts = (k, list, cur = c[k], act = 'set') => `<div class="opts">${list.map(([v, n, sub]) => `<button type="button" class="opt${cur === v ? ' on' : ''}" data-act="${act}" data-k="${k}" data-v="${v}" aria-pressed="${cur === v}"><b>${esc(t(n))}</b>${sub ? `<small>${esc(t(sub))}</small>` : ''}</button>`).join('')}</div>`;
+    const tog = (k, on, off) => `<button class="tg" type="button" data-act="toggle" data-k="${k}" aria-pressed="${!!c[k]}"><span>${esc(t(c[k] ? on : off))}</span><span class="sw${c[k] ? ' on' : ''}"></span></button>`;
     // A slider with its words at both ends; `steps` makes it pick among those values.
     const range = (k, label, o) => {
       const steps = o.steps;
@@ -1585,78 +1622,78 @@ const Cam = {
       const lo = steps ? 0 : o.min, hi = steps ? steps.length - 1 : o.max;
       const p = hi > lo ? ((v - lo) / (hi - lo) * 100).toFixed(1) : 0;
       return `<div class="sl">
-          ${label ? `<div class="r"><span>${esc(label)}${tip(o.tip || VK[k] || k)}</span><span class="val" id="v-${k}">${esc(this.valueOf(VK[k] || k))}</span></div>` : ''}
-          <input type="range" min="${lo}" max="${hi}" step="${steps ? 1 : o.step}" value="${v}" data-input="slide" data-change="slid" data-k="${k}"${steps ? ` data-steps="${k}"` : ''} style="--p:${p}%" aria-label="${esc(label || o.aria)}">
-          ${o.ends ? `<div class="ends"><span>${esc(o.ends[0])}</span><span>${esc(o.ends[1])}</span></div>` : ''}
+          ${label ? `<div class="r"><span>${esc(t(label))}${tip(o.tip || VK[k] || k)}</span><span class="val" id="v-${k}">${esc(this.valueOf(VK[k] || k))}</span></div>` : ''}
+          <input type="range" min="${lo}" max="${hi}" step="${steps ? 1 : o.step}" value="${v}" data-input="slide" data-change="slid" data-k="${k}"${steps ? ` data-steps="${k}"` : ''} style="--p:${p}%" aria-label="${esc(t(label || o.aria))}">
+          ${o.ends ? `<div class="ends"><span>${esc(t(o.ends[0]))}</span><span>${esc(t(o.ends[1]))}</span></div>` : ''}
         </div>`;
     };
     const mode = (k) => {
       const [key, on] = AUTOS[k];
       const auto = c[key] === on;
-      return `<div class="seg2" role="group" aria-label="Auto ou manuel"${tipAttr('manual')}>
+      return `<div class="seg2" role="group" aria-label="${t('Auto or manual')}"${tipAttr('manual')}>
           <button type="button" class="${auto ? 'on' : ''}" data-act="auto" data-k="${k}" data-v="1" aria-pressed="${auto}">Auto</button>
-          <button type="button" class="${auto ? '' : 'on'}" data-act="auto" data-k="${k}" data-v="0" aria-pressed="${!auto}">Manuel</button></div>`;
+          <button type="button" class="${auto ? '' : 'on'}" data-act="auto" data-k="${k}" data-v="0" aria-pressed="${!auto}">${t('Manual')}</button></div>`;
     };
     // One setting of a category: name, value, Reset when changed, then its control.
     const row = (k, label, body, val = '') => `<div class="ar">
-        <div class="ah"><span class="an">${esc(label)}${tip(k)}</span>${val ? `<span class="av" id="v-${k}">${esc(val)}</span>` : ''}${resetBtn(k, label)}</div>
+        <div class="ah"><span class="an">${esc(t(label))}${tip(k)}</span>${val ? `<span class="av" id="v-${k}">${esc(val)}</span>` : ''}${resetBtn(k, label)}</div>
         ${body}</div>`;
-    // A category: its icon and name, the Auto / Manuel switch when it has one,
+    // A category: its icon and name, the Auto / Manual switch when it has one,
     // Reset when something in it changed, then its rows. Empty: not shown.
     const sec = (id, title, rows, head = '') => (!rows ? '' : `<section class="ag" id="cat-${id}" data-cat="${id}">
-        <div class="agh"><span class="gi">${I[CATS.find(([x]) => x === id)[2]]}</span><h3>${title}</h3>${tip('cat_' + id)}
-          ${GROUPS[id] && GROUPS[id].some(changed) ? `<button type="button" class="rb" data-act="greset" data-v="${id}" aria-label="Remettre ${esc(title)}"${tipAttr('greset')}>${I.refresh}</button>` : ''}
+        <div class="agh"><span class="gi">${I[CATS.find(([x]) => x === id)[2]]}</span><h3>${t(title)}</h3>${tip('cat_' + id)}
+          ${GROUPS[id] && GROUPS[id].some(changed) ? `<button type="button" class="rb" data-act="greset" data-v="${id}" aria-label="${esc(t('Reset {name}', { name: t(title) }))}"${tipAttr('greset')}>${I.refresh}</button>` : ''}
           ${head}</div>
         ${rows}</section>`);
     const zoomMax = this.caps() ? Math.max(100, this.caps().zoom_max_pct) : 500;
-    const profile = `<div class="pgrid">${PROFILES.map(([n, , , , d], i) => `<button type="button" class="pcard${c.prof === i ? ' on' : ''}" data-act="profile" data-v="${i}" aria-pressed="${c.prof === i}"><b>${n}</b><small>${d}</small></button>`).join('')}</div>
-      ${c.prof === CUSTOM ? '<div class="hint">Personnalisé : tu as changé la taille, la fluidité ou l’envoi à la main.</div>' : ''}`;
+    const profile = `<div class="pgrid">${PROFILES.map(([n, , , , d], i) => `<button type="button" class="pcard${c.prof === i ? ' on' : ''}" data-act="profile" data-v="${i}" aria-pressed="${c.prof === i}"><b>${t(n)}</b><small>${t(d)}</small></button>`).join('')}</div>
+      ${c.prof === CUSTOM ? `<div class="hint">${t('Custom: you changed the size, the smoothness or the sending by hand.')}</div>` : ''}`;
     const light = c.aeA || !this.can('exp')
-      ? range('ev', 'Plus sombre ou plus clair', { min: -2, max: 2, step: 0.1, ends: ['Plus sombre', 'Plus clair'] })
-      : range('iso', 'Sensibilité', { steps: this.isoStops(), ends: ['Moins de grain', 'Plus clair'] })
-        + range('shutter', 'Vitesse', { steps: this.shutterStops(), ends: ['Net quand ça bouge', 'Plus clair'] });
-    const sharp = (this.can('focus') && !c.afA ? range('focus', 'Distance', { min: 0, max: 100, step: 1, ends: ['Tout près', 'Au loin'] }) : '')
-      + (this.can('focus') && c.afA ? '<div class="hint">L’iPhone fait la netteté tout seul sur ce qui est devant lui.</div>' : '')
-      + (this.can('poi') ? row('poi', 'Point suivi', `<div class="hint">${c.poi ? 'Point choisi : clique ailleurs pour le déplacer.' : 'Clique sur l’image pour choisir ce qui doit être net et bien éclairé.'}</div>`, c.poi ? 'choisi' : 'centre') : '');
+      ? range('ev', 'Darker or brighter', { min: -2, max: 2, step: 0.1, ends: ['Darker', 'Brighter'] })
+      : range('iso', 'Sensitivity', { steps: this.isoStops(), ends: ['Less grain', 'Brighter'] })
+        + range('shutter', 'Shutter speed', { steps: this.shutterStops(), ends: ['Sharp when moving', 'Brighter'] });
+    const sharp = (this.can('focus') && !c.afA ? range('focus', 'Distance', { min: 0, max: 100, step: 1, ends: ['Very close', 'Far away'] }) : '')
+      + (this.can('focus') && c.afA ? `<div class="hint">${t('The iPhone focuses by itself on what is in front of it.')}</div>` : '')
+      + (this.can('poi') ? row('poi', 'Tracked point', `<div class="hint">${t(c.poi ? 'Point chosen: click elsewhere to move it.' : 'Click the picture to choose what must be sharp and well lit.')}</div>`, t(c.poi ? 'chosen' : 'center')) : '');
     const color = !this.can('wb') ? '' : c.wbA
-      ? '<div class="hint">L’iPhone suit la couleur de la lumière de la pièce.</div>'
-      : range('wb', 'Chaleur', { min: 2500, max: 8000, step: 100, ends: ['Plus bleu', 'Plus orange'] })
-        + (this.can('tint') ? range('tint', 'Teinte', { min: -150, max: 150, step: 5, ends: ['Plus vert', 'Plus rose'] }) : '');
+      ? `<div class="hint">${t('The iPhone follows the color of the room’s light.')}</div>`
+      : range('wb', 'Warmth', { min: 2500, max: 8000, step: 100, ends: ['Bluer', 'More orange'] })
+        + (this.can('tint') ? range('tint', 'Tint', { min: -150, max: 150, step: 5, ends: ['Greener', 'Pinker'] }) : '');
     const frame = (this.can('zoom') ? row('zoom', 'Zoom', range('zoom', '', { min: 100, max: zoomMax, step: 10, ends: ['1×', n1(zoomMax / 100) + '×'], aria: 'Zoom' }), this.valueOf('zoom')) : '')
-      + row('stab', 'Anti-tremblement', opts('stab', [[0, 'Coupé', 'Sur un pied'], [1, 'Léger', 'En main'], [2, 'Fort', 'En marchant']]))
-      + (this.can('hdr') ? row('hdr', 'Contre-jour', tog('hdr', 'Activé', 'Coupé')) : '')
-      + (this.can('torch') ? row('torch', 'Lampe', tog('torch', 'Allumée', 'Éteinte')) : '');
-    const stream = row('res', 'Taille de l’image', opts('res', RES_L.map((n, i) => [i, n, ['Le plus net', 'Très net', 'Appels', 'Léger', 'Très léger'][i]])))
-      + row('fps', 'Fluidité', opts('fps', FPS.map((n, i) => [i, String(n), ['Cinéma', 'Télé', 'Appel', 'Fluide', 'Très fluide'][i]])))
-      + row('power', 'Si l’iPhone chauffe', opts('power', POWER, c.power, 'power'))
-      + row('codec', 'Compression', opts('codec', [[0, 'HEVC', 'Conseillé'], [1, 'H.264', 'Compatible']]))
-      + row('rate', 'Débit', opts('rate', RATE.map((v, i) => [i, i ? String(v) : 'Auto', i ? 'Mb/s' : 'Conseillé'])));
+      + row('stab', 'Stabilization', opts('stab', [[0, 'Off', 'On a stand'], [1, 'Gentle', 'Handheld'], [2, 'Strong', 'Walking']]))
+      + (this.can('hdr') ? row('hdr', 'Backlight', tog('hdr', 'On', 'Off')) : '')
+      + (this.can('torch') ? row('torch', 'Flashlight', tog('torch', 'Light on', 'Light off')) : '');
+    const stream = row('res', 'Picture size', opts('res', RES_L.map((n, i) => [i, n, ['Sharpest', 'Very sharp', 'Calls', 'Small', 'Tiny'][i]])))
+      + row('fps', 'Smoothness', opts('fps', FPS.map((n, i) => [i, String(n), ['Cinema', 'TV', 'Call', 'Smooth', 'Very smooth'][i]])))
+      + row('power', 'If the iPhone gets hot', opts('power', POWER, c.power, 'power'))
+      + row('codec', 'Compression', opts('codec', [[0, 'HEVC', 'Recommended'], [1, 'H.264', 'Compatible']]))
+      + row('rate', 'Bitrate', opts('rate', RATE.map((v, i) => [i, i ? String(v) : 'Auto', i ? 'Mb/s' : 'Recommended'])));
     const tr = this.trState();
-    const wait = row('msg', 'Message', `<input class="txt" type="text" maxlength="60" value="${esc(c.msg)}" data-change="msg" aria-label="Message de pause">`)
-      + row('multi', 'Plusieurs langues', tog('multi', 'Oui', 'Non') + (c.multi && tr ? `<div class="hint${tr.bad ? ' warn' : ''}" id="c-tr">${esc(tr.text)}</div>` : ''))
-      + (c.multi ? row('langs', 'Langues', `<div class="hint">${chosenLangs(c).length} choisies sur ${ALL_LANGS.length}. Environ 25 Mo à télécharger par nouvelle langue, une seule fois.</div>
-          <div class="lchoice">${ALL_LANGS.map((l) => `<button type="button" class="lc${chosenLangs(c).includes(l) ? ' on' : ''}" data-act="lang" data-v="${l}" aria-pressed="${chosenLangs(c).includes(l)}" ${l === 'fr' ? 'disabled' : ''}><i aria-hidden="true"></i>${esc(LANG_NAMES[l])}</button>`).join('')}</div>
-          <div class="row" style="gap:6px"><button type="button" class="lc" data-act="langs" data-v="default">Les 18 de départ</button><button type="button" class="lc" data-act="langs" data-v="all">Toutes</button></div>`) : '')
-      + row('wst', 'Style', opts('wst', [[0, 'Animé', 'L’enseigne bouge'], [1, 'Calme', 'Immobile']]))
+    const wait = row('msg', 'Message', `<input class="txt" type="text" maxlength="60" value="${esc(c.msg)}" data-change="msg" aria-label="${t('Pause message')}">`)
+      + row('multi', 'Several languages', tog('multi', 'Yes', 'No') + (c.multi && tr ? `<div class="hint${tr.bad ? ' warn' : ''}" id="c-tr">${esc(tr.text)}</div>` : ''))
+      + (c.multi ? row('langs', 'Languages', `<div class="hint">${t('{n} chosen of {all}. About 25 MB to download per new language, just once.', { n: chosenLangs(c).length, all: ALL_LANGS.length })}</div>
+          <div class="lchoice">${ALL_LANGS.map((l) => `<button type="button" class="lc${chosenLangs(c).includes(l) ? ' on' : ''}" data-act="lang" data-v="${l}" aria-pressed="${chosenLangs(c).includes(l)}" ${l === 'fr' ? 'disabled' : ''}><i aria-hidden="true"></i>${esc(langName(l))}</button>`).join('')}</div>
+          <div class="row" style="gap:6px"><button type="button" class="lc" data-act="langs" data-v="default">${t('The 18 to start with')}</button><button type="button" class="lc" data-act="langs" data-v="all">${t('All')}</button></div>`) : '')
+      + row('wst', 'Style', opts('wst', [[0, 'Animated', 'The sign moves'], [1, 'Calm', 'Still']]))
       + `<div class="wprev">${waitScreen(c, '')}</div>`;
     const sections = [
-      sec('profile', 'Profil', profile),
-      sec('light', 'Lumière', light, this.can('exp') ? mode('exp') : ''),
-      sec('sharp', 'Netteté', sharp, this.can('focus') ? mode('focus') : ''),
-      sec('color', 'Couleurs', color, this.can('wb') ? mode('wb') : ''),
-      sec('frame', 'Cadrage', frame),
-      sec('stream', 'Envoi', stream),
+      sec('profile', 'Profile', profile),
+      sec('light', 'Lighting', light, this.can('exp') ? mode('exp') : ''),
+      sec('sharp', 'Focus', sharp, this.can('focus') ? mode('focus') : ''),
+      sec('color', 'Colors', color, this.can('wb') ? mode('wb') : ''),
+      sec('frame', 'Framing', frame),
+      sec('stream', 'Sending', stream),
       sec('wait', 'Pause', wait),
     ];
     const shown = CATS.filter((_, i) => sections[i]);
     el.innerHTML = `
-      <div class="ahd"><div class="aht">${I.sliders}Réglages</div>
-        <button class="ib" type="button" aria-label="Cacher les réglages" data-act="close"${tipAttr('adjclose')}>${I.close}</button></div>
-      <nav class="anav" aria-label="Catégories">${shown.map(([id, n, ic]) => `<button type="button" data-act="jump" data-v="${id}">${I[ic]}<span>${n}</span></button>`).join('')}</nav>
+      <div class="ahd"><div class="aht">${I.sliders}${t('Settings')}</div>
+        <button class="ib" type="button" aria-label="${t('Hide the settings')}" data-act="close"${tipAttr('adjclose')}>${I.close}</button></div>
+      <nav class="anav" aria-label="${t('Categories')}">${shown.map(([id, n, ic]) => `<button type="button" data-act="jump" data-v="${id}">${I[ic]}<span>${t(n)}</span></button>`).join('')}</nav>
       <div class="abody">
-        ${this.old() ? `<div class="upd">${I.info}<span>Mets à jour l’app iPhone pour avoir tous les réglages.</span>${tip('update')}</div>` : ''}
+        ${this.old() ? `<div class="upd">${I.info}<span>${t('Update the iPhone app to get every setting.')}</span>${tip('update')}</div>` : ''}
         ${sections.join('')}
-        <button type="button" class="allr" data-act="allreset"${tipAttr('allreset')}>${I.refresh}Tout remettre comme au départ</button>
+        <button type="button" class="allr" data-act="allreset"${tipAttr('allreset')}>${I.refresh}${t('Reset everything to the start')}</button>
       </div>`;
     const body = $('.abody', el);
     body.scrollTop = scroll;
@@ -1677,16 +1714,16 @@ const Cam = {
     const search = $('.fxsearch input', el);
     const focused = search && document.activeElement === search;
     const q = this.fxQuery || '';
-    const used = FX_TABS.filter(([t]) => fxChosen(f, t));
+    const used = FX_TABS.filter(([kind]) => fxChosen(f, kind));
     const chips = fxActive(f).map(([k, n]) => `<button type="button" class="fxchip" data-act="fxclear" data-k="${k}"${tipAttr('fx_chip')}><span>${esc(n)}</span>${I.close}</button>`).join('');
     el.innerHTML = `
-      <div class="ahd"><div class="aht">${I.wand}Effets</div>
-        <button class="ib" type="button" aria-label="Fermer les effets" data-act="close"${tipAttr('adjclose')}>${I.close}</button></div>
+      <div class="ahd"><div class="aht">${I.wand}${t('Effects')}</div>
+        <button class="ib" type="button" aria-label="${t('Close the effects')}" data-act="close"${tipAttr('adjclose')}>${I.close}</button></div>
       <div class="fxtop">
-        <label class="fxsearch"${tipAttr('fx_search')}>${I.search}<input type="search" placeholder="Chercher : chapeau, ciné, chat…" value="${esc(q)}" data-input="fxsearch" aria-label="Chercher un effet" autocomplete="off" spellcheck="false">
-          <button type="button" class="x${q ? '' : ' off'}" data-act="fxsearchclr" aria-label="Effacer la recherche"${tipAttr('fx_searchclr')}>${I.close}</button></label>
-        <nav class="fxtabs${q ? ' dim' : ''}" role="tablist" aria-label="Sortes d’effets">${FX_TABS.map(([t, n, ic, tk]) => `<button type="button" role="tab" aria-selected="${t === tab}" class="${t === tab ? 'on' : ''}" data-act="fxtab" data-v="${t}"${tipAttr(tk)}>${used.some(([u]) => u === t) ? '<i class="dot" aria-hidden="true"></i>' : ''}${I[ic]}<span>${n}</span></button>`).join('')}</nav>
-        <div class="fxchips">${chips || '<span class="fxnone">Aucun effet : l’image part telle quelle.</span>'}${chips ? `<button type="button" class="clr" data-act="fxoff"${tipAttr('fx_off')}>Tout enlever</button>` : ''}</div>
+        <label class="fxsearch"${tipAttr('fx_search')}>${I.search}<input type="search" placeholder="${t('Search: hat, cine, cat…')}" value="${esc(q)}" data-input="fxsearch" aria-label="${t('Search for an effect')}" autocomplete="off" spellcheck="false">
+          <button type="button" class="x${q ? '' : ' off'}" data-act="fxsearchclr" aria-label="${t('Clear the search')}"${tipAttr('fx_searchclr')}>${I.close}</button></label>
+        <nav class="fxtabs${q ? ' dim' : ''}" role="tablist" aria-label="${t('Kinds of effects')}">${FX_TABS.map(([kind, n, ic, tk]) => `<button type="button" role="tab" aria-selected="${kind === tab}" class="${kind === tab ? 'on' : ''}" data-act="fxtab" data-v="${kind}"${tipAttr(tk)}>${used.some(([u]) => u === kind) ? '<i class="dot" aria-hidden="true"></i>' : ''}${I[ic]}<span>${t(n)}</span></button>`).join('')}</nav>
+        <div class="fxchips">${chips || `<span class="fxnone">${t('No effect: the picture goes out as it is.')}</span>`}${chips ? `<button type="button" class="clr" data-act="fxoff"${tipAttr('fx_off')}>${t('Remove all')}</button>` : ''}</div>
       </div>
       <div class="abody fxbody"></div>
       <input type="file" accept="image/*" id="fx-file" hidden data-change="fxfile">`;
@@ -1714,59 +1751,62 @@ const Cam = {
     const tab = this.fxTab || 'filter';
     const q = fxFold(this.fxQuery || '');
     const fav = new Set(this.cs.fxFav || []);
-    const card = (t, [id, n, pic]) => {
-      const k = fxKey(t);
+    // Effect, family and tab names are written in English and shown through t().
+    const card = (kind, [id, n, pic]) => {
+      const k = fxKey(kind);
       const on = f[k] === id;
-      const star = `<button type="button" class="fav${fav.has(k + ':' + id) ? ' on' : ''}" data-act="fxfav" data-v="${k}:${id}" aria-label="Favori : ${esc(n)}" aria-pressed="${fav.has(k + ':' + id)}"${tipAttr('fx_fav')}>${I.star}</button>`;
-      const attrs = `role="button" tabindex="0" data-act="${id === 'image' ? 'fxpick' : 'fx'}" data-k="${k}" data-v="${id}" aria-pressed="${on}" aria-label="${esc(n)}"`;
-      if (t === 'filter') return `<div class="fcard${on ? ' on' : ''}" ${attrs}><canvas width="160" height="90" data-thumb="${id}"></canvas><b>${esc(n)}</b>${star}</div>`;
-      if (t === 'bg') {
+      const name = esc(t(n));
+      const star = `<button type="button" class="fav${fav.has(k + ':' + id) ? ' on' : ''}" data-act="fxfav" data-v="${k}:${id}" aria-label="${t('Favorite: {name}', { name })}" aria-pressed="${fav.has(k + ':' + id)}"${tipAttr('fx_fav')}>${I.star}</button>`;
+      const attrs = `role="button" tabindex="0" data-act="${id === 'image' ? 'fxpick' : 'fx'}" data-k="${k}" data-v="${id}" aria-pressed="${on}" aria-label="${name}"`;
+      if (kind === 'filter') return `<div class="fcard${on ? ' on' : ''}" ${attrs}><canvas width="160" height="90" data-thumb="${id}"></canvas><b>${name}</b>${star}</div>`;
+      if (kind === 'bg') {
         const icon = { blur: '💧', strong: '🌫️', image: '🖼️' }[id];
-        return `<div class="ecard${icon ? '' : ' photo'}${on ? ' on' : ''}" ${attrs}>${icon ? `<i aria-hidden="true">${icon}</i>` : `<img src="vendor/backgrounds/${id}.jpg" alt="" loading="lazy">`}<b>${esc(n)}</b>${star}</div>`;
+        return `<div class="ecard${icon ? '' : ' photo'}${on ? ' on' : ''}" ${attrs}>${icon ? `<i aria-hidden="true">${icon}</i>` : `<img src="vendor/backgrounds/${id}.jpg" alt="" loading="lazy">`}<b>${name}</b>${star}</div>`;
       }
-      return `<div class="ecard${t === '3d' ? ' m3' : ''}${on ? ' on' : ''}" ${attrs}><img src="${fxPicture(pic)}" alt="" loading="lazy"><b>${esc(n)}</b>${star}</div>`;
+      return `<div class="ecard${kind === '3d' ? ' m3' : ''}${on ? ' on' : ''}" ${attrs}><img src="${fxPicture(pic)}" alt="" loading="lazy"><b>${name}</b>${star}</div>`;
     };
-    const grid = (t, list) => `<div class="${t === 'filter' ? 'fgrid' : 'egrid'}">${list.map((it) => card(t, it)).join('')}</div>`;
-    const acc = (key, title, t, list, lead = '') => {
-      const k = fxKey(t);
+    const grid = (kind, list) => `<div class="${kind === 'filter' ? 'fgrid' : 'egrid'}">${list.map((it) => card(kind, it)).join('')}</div>`;
+    const acc = (key, title, kind, list, lead = '') => {
+      const k = fxKey(kind);
       const pick = list.find(([id]) => f[k] === id);
       const open = q || this.fxOpen.has(key);
       return `<section class="acc${open ? ' open' : ''}" data-acc="${esc(key)}">
           <button type="button" class="acch" data-act="fxacc" data-v="${esc(key)}" aria-expanded="${!!open}"${tipAttr('fx_group')}>
-            <span>${esc(title)}</span>${pick ? `<small>${esc(pick[1])}</small>` : ''}<em>${list.length}</em>${I.chev}</button>
-          <div class="accb"><div><div class="acci">${lead}${grid(t, list)}</div></div></div></section>`;
+            <span>${esc(t(title))}</span>${pick ? `<small>${esc(t(pick[1]))}</small>` : ''}<em>${list.length}</em>${I.chev}</button>
+          <div class="accb"><div><div class="acci">${lead}${grid(kind, list)}</div></div></div></section>`;
     };
-    const range = (k, label, ends) => `<div class="sl"><div class="r"><span>${esc(label)}${tip('fx_' + k)}</span><span class="val" id="fv-${k}">${f[k]} %</span></div>
-        <input type="range" min="0" max="100" step="1" value="${f[k]}" data-input="fxslide" data-change="fxslid" data-k="${k}" style="--p:${f[k]}%" aria-label="${esc(label)}">
-        <div class="ends"><span>${esc(ends[0])}</span><span>${esc(ends[1])}</span></div></div>`;
+    const range = (k, label, ends) => `<div class="sl"><div class="r"><span>${esc(t(label))}${tip('fx_' + k)}</span><span class="val" id="fv-${k}">${perc(f[k])}</span></div>
+        <input type="range" min="0" max="100" step="1" value="${f[k]}" data-input="fxslide" data-change="fxslid" data-k="${k}" style="--p:${f[k]}%" aria-label="${esc(t(label))}">
+        <div class="ends"><span>${esc(t(ends[0]))}</span><span>${esc(t(ends[1]))}</span></div></div>`;
     const status = Effects.error ? `<div class="hint warn">${esc(Effects.error)}</div>`
-      : (Effects.needsFace() || f.bg !== 'none') && !Effects.face ? '<div class="hint">Préparation de la détection du visage…</div>' : '';
+      : (Effects.needsFace() || f.bg !== 'none') && !Effects.face ? `<div class="hint">${t('Getting face detection ready…')}</div>` : '';
     const webcam = S && S.vcam && S.vcam.in_use
-      ? (S.vcam.fx_size ? `<div class="upd ok">${I.check}<span>Discord, Teams ou OBS voit ces effets.</span>${tip('fx_webcam')}</div>` : `<div class="upd">${I.info}<span>Cette webcam ne reçoit pas encore les effets : installe la nouvelle webcam (Réglages).</span></div>`)
+      ? (S.vcam.fx_size ? `<div class="upd ok">${I.check}<span>${t('Discord, Teams or OBS sees these effects.')}</span>${tip('fx_webcam')}</div>` : `<div class="upd">${I.info}<span>${t('This webcam does not get the effects yet: install the new webcam (Settings).')}</span></div>`)
       : '';
     let html = webcam + status;
     if (q) {
       // Everything whose name matches, kind by kind, or whose family starts
-      // with the word (« chapeau » finds the 3D hats, not every pair of glasses).
+      // with the word (« hat » finds the 3D hats, not every pair of glasses).
+      // Names are matched as shown, so French is searched in French.
       let found = 0;
-      for (const [t, n] of FX_TABS) {
-        if (t === 'touch') continue;
-        const list = fxGroups(t).flatMap(([g, items]) => items.filter(([, name]) => fxFold(name).includes(q) || fxFold(g).startsWith(q)));
+      for (const [kind, n] of FX_TABS) {
+        if (kind === 'touch') continue;
+        const list = fxGroups(kind).flatMap(([g, items]) => items.filter(([, name]) => fxFold(t(name)).includes(q) || fxFold(t(g)).startsWith(q)));
         found += list.length;
-        if (list.length) html += acc('q:' + t, n, t, list);
+        if (list.length) html += acc('q:' + kind, n, kind, list);
       }
-      if (!found) html += `<div class="fxempty">${I.search}<b>Rien pour « ${esc(this.fxQuery)} »</b><span>Essaie un autre mot : chapeau, chat, neige, ciné…</span></div>`;
+      if (!found) html += `<div class="fxempty">${I.search}<b>${t('Nothing for “{q}”', { q: esc(this.fxQuery) })}</b><span>${t('Try another word: hat, cat, snow, cine…')}</span></div>`;
     } else if (tab === 'touch') {
-      html += `<div class="fxcard">${range('smooth', 'Peau lisse', ['Naturel', 'Très lisse'])}${range('light', 'Lumière douce', ['Aucune', 'Forte'])}</div>`;
+      html += `<div class="fxcard">${range('smooth', 'Smooth skin', ['Natural', 'Smoothest'])}${range('light', 'Soft light', ['None', 'Bright'])}</div>`;
     } else {
       const k = fxKey(tab);
       const all = fxGroups(tab).flatMap(([, items]) => items);
       const byId = (id) => all.find(([x]) => x === id);
       const favs = (this.cs.fxFav || []).filter((x) => x.startsWith(k + ':')).map((x) => byId(x.slice(k.length + 1))).filter(Boolean);
       const recent = (this.cs.fxRecent || []).filter((x) => x.startsWith(k + ':')).map((x) => byId(x.slice(k.length + 1))).filter(Boolean).slice(0, 8);
-      if (tab === 'filter' && f.filter !== 'none') html += `<div class="fxcard">${range('amount', 'Force du filtre', ['Léger', 'Complet'])}</div>`;
-      if (favs.length) html += acc(tab + ':fav', '★ Favoris', tab, favs);
-      if (recent.length) html += acc(tab + ':recent', 'Récents', tab, recent);
+      if (tab === 'filter' && f.filter !== 'none') html += `<div class="fxcard">${range('amount', 'Filter strength', ['Subtle', 'Full'])}</div>`;
+      if (favs.length) html += acc(tab + ':fav', '★ Favorites', tab, favs);
+      if (recent.length) html += acc(tab + ':recent', 'Recent', tab, recent);
       for (const [g, items] of fxGroups(tab)) html += acc(tab + ':' + g, g, tab, items);
     }
     body.innerHTML = html;
@@ -1829,7 +1869,7 @@ const Cam = {
     }
     this.spied = on;
   },
-  // Res, fps, power, rate and codec as one of the profiles, or « Personnalisé ».
+  // Res, fps, power, rate and codec as one of the profiles, or « Custom ».
   matchProfile() {
     const c = this.cs;
     const i = PROFILES.findIndex(([, r, f, p]) => r === c.res && f === c.fps && p === c.power);
@@ -1951,14 +1991,14 @@ const Cam = {
     const c = this.cs, st = this.ls;
     if (this.trBusy) return { text: this.trBusy };
     if (st && st.current) {
-      const name = LANG_NAMES[st.current.lang] || st.current.lang;
-      return { text: st.current.op === 'install' ? `Installation de ${name}… La traduction suivra.` : `Suppression de ${name}…` };
+      const name = langName(st.current.lang);
+      return { text: st.current.op === 'install' ? t('Installing {name}… The translation will follow.', { name }) : t('Removing {name}…', { name }) };
     }
     if (this.trErr) return { text: this.trErr, bad: true };
     const n = waitLines(c).length, all = chosenLangs(c).length;
-    if (c.msg === CAM_DEFAULTS.msg && !untranslated(c).length) return { text: `Prêt dans ${n} langues.` };
-    if (!untranslated(c).length) return { text: `Prêt dans ${n} langues.` };
-    return { text: n > 1 ? `Prêt dans ${n} langues sur ${all} ; les autres arrivent.` : 'Pas encore traduit.' };
+    if (isDefaultMsg(c.msg) && !untranslated(c).length) return { text: t('Ready in {n} languages.', { n }) };
+    if (!untranslated(c).length) return { text: t('Ready in {n} languages.', { n }) };
+    return { text: n > 1 ? t('Ready in {n} languages of {all}; the others are coming.', { n, all }) : t('Not translated yet.') };
   },
   trStep(text) {
     this.trBusy = text;
@@ -1985,14 +2025,14 @@ const Cam = {
       const inst = c.op === 'install';
       Popup.item({
         icon: inst ? (c.stage === 0 ? 'down' : 'check') : 'trash',
-        name: LANG_NAMES[c.lang] || c.lang,
+        name: langName(c.lang),
         i: st.batch_done + 1,
         n: Math.max(st.batch_total, st.batch_done + 1),
-        steps: inst ? ['Téléchargement', 'Vérification', 'Installée'] : ['Suppression', 'Espace libéré'],
+        steps: inst ? [t('Download'), t('Check'), t('Installed')] : [t('Removal'), t('Space freed')],
         step: inst ? c.stage : c.stage >= 2 ? 1 : 0,
         pct: inst ? (c.stage === 0 ? (c.total ? (c.done / c.total) * 90 : 2) : c.stage === 1 ? 95 : 100) : c.stage >= 2 ? 100 : 45,
-        sub: inst ? (c.stage === 0 ? (c.total ? `${mo(c.done)} / ${mo(c.total)} Mo` : 'Connexion à Mozilla…') : c.stage === 1 ? 'Vérification de l’empreinte…' : 'Installée')
-          : c.stage >= 2 ? 'Fichiers effacés' : 'Suppression des fichiers…',
+        sub: inst ? (c.stage === 0 ? (c.total ? `${mo(c.done)} / ${mo(c.total)} ${t('MB')}` : t('Connecting to Mozilla…')) : c.stage === 1 ? t('Checking the fingerprint…') : t('Installed'))
+          : c.stage >= 2 ? t('Files deleted') : t('Deleting the files…'),
       });
       return;
     }
@@ -2000,9 +2040,9 @@ const Cam = {
     const key = [st.batch_total, st.batch_done, st.freed, st.failed.join()].join('|');
     if (!st.batch_total || st.batch_done < st.batch_total || key === this.lsSummary) return;
     this.lsSummary = key;
-    if (st.failed.length) Popup.show({ title: 'Certaines langues n’ont pas pu être ajoutées', text: langList(st.failed), bad: true });
-    else if (st.freed) Popup.show({ icon: 'trash', title: 'Espace libéré', text: `${mo(st.freed)} Mo libérés`, done: true });
-    else Popup.show({ title: 'Langues installées', text: 'La traduction du message suit.', done: true });
+    if (st.failed.length) Popup.show({ title: t('Some languages could not be added'), text: langList(st.failed), bad: true });
+    else if (st.freed) Popup.show({ icon: 'trash', title: t('Space freed'), text: t('{n} MB freed', { n: mo(st.freed) }), done: true });
+    else Popup.show({ title: t('Languages installed'), text: t('The message translation follows.'), done: true });
   },
   // The next step, only when nothing is going on: queued asks first, then
   // the chosen languages still missing, then the translation.
@@ -2070,7 +2110,7 @@ const Cam = {
     if (!need.length) return;
     const msg = c.msg;
     this.trErr = '';
-    this.trStep('Traduction du message…');
+    this.trStep(t('Translating the message…'));
     let ok = 0;
     const failed = [];
     try {
@@ -2078,35 +2118,35 @@ const Cam = {
         const l = need[i];
         if (this.cs.msg !== msg || !this.cs.multi) break;
         if (!chosenLangs(this.cs).includes(l)) continue;
-        const step = (k, pct, sub) => Popup.item({ icon: k ? 'check' : 'globe', name: LANG_NAMES[l], i: i + 1, n: need.length, steps: ['Traduction', 'Prête'], step: k, pct, sub });
-        step(0, 40, 'Traduction du message…');
-        this.trStep(`Traduction en ${LANG_NAMES[l]}… (${i + 1} sur ${need.length})`);
-        let t = null;
+        const step = (k, pct, sub) => Popup.item({ icon: k ? 'check' : 'globe', name: langName(l), i: i + 1, n: need.length, steps: [t('Translation'), t('Ready')], step: k, pct, sub });
+        step(0, 40, t('Translating the message…'));
+        this.trStep(t('Translating into {lang}… ({i} of {n})', { lang: langName(l), i: i + 1, n: need.length }));
+        let out = null;
         try {
-          t = await Translator.one(msg, l);
+          out = await Translator.one(trSource(msg), l);
         } catch (e) {
-          this.trErr = 'Une langue n’a pas pu être traduite : ' + (e && e.message ? e.message : String(e));
+          this.trErr = t('One language could not be translated: {why}', { why: e && e.message ? t(e.message) : String(e) });
         }
-        if (t == null || this.cs.msg !== msg) {
+        if (out == null || this.cs.msg !== msg) {
           failed.push(l);
           continue;
         }
-        this.cs.tr = { msg, t: Object.assign({}, this.cs.tr && this.cs.tr.msg === msg ? this.cs.tr.t : {}, { [l]: t }) };
+        this.cs.tr = { msg, t: Object.assign({}, this.cs.tr && sameMsg(this.cs.tr.msg, msg) ? this.cs.tr.t : {}, { [l]: out }) };
         ok++;
         this.save();
         if (page === Cam) {
           this.overlayKey = '';
           this.paintWait();
         }
-        step(1, 100, 'Prête');
+        step(1, 100, t('Ready'));
         await new Promise((r) => setTimeout(r, 300));
       }
       Popup.show(failed.length && !ok
-        ? { title: 'Traduction impossible', text: langList(failed), bad: true }
-        : { title: 'Message traduit', text: `${waitLines(this.cs).length} langues prêtes`, done: true });
+        ? { title: t('Translation failed'), text: langList(failed), bad: true }
+        : { title: t('Message translated'), text: t('{n} languages ready', { n: waitLines(this.cs).length }), done: true });
     } catch (e) {
-      this.trErr = 'Traduction impossible : ' + (e && e.message ? e.message : String(e));
-      Popup.show({ title: 'Traduction impossible', text: this.trErr, bad: true });
+      this.trErr = t('Translation failed: {why}', { why: e && e.message ? t(e.message) : String(e) });
+      Popup.show({ title: t('Translation failed'), text: this.trErr, bad: true });
     }
     this.trBusy = '';
     if (page === Cam) this.changed(false);
@@ -2151,7 +2191,7 @@ const Cam = {
       Cam.matchProfile();
       Cam.changed(true, false);
     },
-    // Auto / Manuel of a category.
+    // Auto / Manual of a category.
     auto: (el) => {
       const [key, on] = AUTOS[el.dataset.k];
       Cam.cs[key] = el.dataset.v === '1' ? on : !on;
@@ -2278,7 +2318,7 @@ const Cam = {
       Cam.cs.fx[el.dataset.k] = Number(el.value);
       el.style.setProperty('--p', el.value + '%');
       const v = $('#fv-' + el.dataset.k);
-      if (v) v.textContent = el.value + ' %';
+      if (v) v.textContent = perc(el.value);
       Effects.set(Cam.cs.fx);
     },
     fxslid: () => Cam.fxChanged(),
@@ -2286,7 +2326,7 @@ const Cam = {
       Cam.cs.fx = Object.assign({}, FX_DEFAULTS, { bgImg: Cam.cs.fx.bgImg });
       Cam.fxChanged();
     },
-    // « Ton image »: the one already chosen, or a file to pick.
+    // « Your picture »: the one already chosen, or a file to pick.
     fxpick: () => {
       if (Cam.cs.fx.bgImg && Cam.cs.fx.bg !== 'image') {
         Cam.cs.fx.bg = 'image';
@@ -2344,15 +2384,19 @@ const Cam = {
 // (the first time: folder, then sorting, then the answer); then the send in
 // progress (E10) and its result. Rebuilt only when the state changes; the
 // numbers are filled in place every second.
+// Names, steps and sort words are shown through t().
 const SORTS = [
-  ['year_month', 'Année, puis mois', '2026 › 10 › IMG_1234.HEIC', true],
-  ['year', 'Année', '2026 › IMG_1234.HEIC', false],
-  ['flat', 'Tout ensemble', 'IMG_1234.HEIC', false],
+  ['year_month', 'Year, then month', '2026 › 10 › IMG_1234.HEIC', true],
+  ['year', 'Year', '2026 › IMG_1234.HEIC', false],
+  ['flat', 'All together', 'IMG_1234.HEIC', false],
 ];
 // Time on each step; the CSS animations follow (--simd in app.css).
 const SIM_MS = 4500;
-const SIM_STEPS = ['Ouvre Drop sur l’iPhone', 'Choisis : photos, album, fichiers…', 'Vois l’aperçu et envoie', 'Confirme sur ce PC', 'C’est rangé et vérifié'];
-const SORT_NAME = { year_month: 'par année puis par mois', year: 'par année', flat: 'tous ensemble' };
+const SIM_STEPS = ['Open Drop on the iPhone', 'Pick: photos, album, files…', 'See the preview and send', 'Confirm on this PC', 'Sorted and checked'];
+const SORT_NAME = { year_month: 'by year then by month', year: 'by year', flat: 'all together' };
+// What a send holds: « 3 photos · 1 video ».
+const kindsOf = (d) => [[d.photos, '{n} photo', '{n} photos'], [d.videos, '{n} video', '{n} videos'], [d.docs, '{n} file', '{n} files']]
+  .filter(([n]) => n).map(([n, one, many]) => plural(n, one, many)).join(' · ');
 const Drop = {
   key: () => '',
   mount(root) {
@@ -2375,12 +2419,12 @@ const Drop = {
     if (shape !== this.shape) {
       this.shape = shape;
       this.root.innerHTML = `<main class="wrap enter">
-        <header><h1 class="h1">Drop</h1><p class="sub">Les photos, vidéos et fichiers de l’iPhone, en qualité d’origine, vérifiés et sans doublon.</p></header>
+        <header><h1 class="h1">Drop</h1><p class="sub">${t('The iPhone’s photos, videos and files, in original quality, checked and with no duplicates.')}</p></header>
         <section class="card drop-now${view === 'rest' ? ' dsim-card' : ''}"><div class="dstage">${this.body(view, d)}</div></section>
         <section class="card">
           <div class="row" style="justify-content:space-between">
-            <div><span class="lbl">Rangées dans</span><div class="mono" style="margin-top:8px;font-size:15px">${settings.drop_setup_done ? esc(settings.photos_dir) : 'Choisi au premier envoi'}</div></div>
-            <div class="row">${settings.drop_setup_done ? `<button class="btn sm" type="button" data-act="open">${I.folder}Ouvrir</button>` : ''}<a class="btn sm" href="#settings">Changer</a></div>
+            <div><span class="lbl">${t('Sorted into')}</span><div class="mono" style="margin-top:8px;font-size:15px">${settings.drop_setup_done ? esc(settings.photos_dir) : t('Chosen on the first send')}</div></div>
+            <div class="row">${settings.drop_setup_done ? `<button class="btn sm" type="button" data-act="open">${I.folder}${t('Open')}</button>` : ''}<a class="btn sm" href="#settings">${t('Change')}</a></div>
           </div>
           <div class="months" id="d-months"></div>
         </section>
@@ -2430,57 +2474,57 @@ const Drop = {
         <div class="dring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="bg" cx="60" cy="60" r="52"/><circle class="fg" id="d-ring" cx="60" cy="60" r="52" pathLength="100" stroke-dasharray="0 100"/></svg>
           <div class="dpct"><span class="mono" id="d-pct">0</span><small>%</small></div></div>
         <div class="dsend-r">
-          <span class="lbl">Réception depuis ${esc(devName())}</span>
-          <div class="dflow" aria-hidden="true"><span class="node">${I.phone}<em>iPhone</em></span>${wire}<span class="node pc">${I.pc}<em>Vérifié</em></span>${wire}<span class="node fold">${I.folder}<em>Rangé</em></span></div>
+          <span class="lbl">${t('Receiving from {name}', { name: esc(devName()) })}</span>
+          <div class="dflow" aria-hidden="true"><span class="node">${I.phone}<em>iPhone</em></span>${wire}<span class="node pc">${I.pc}<em>${t('Checked')}</em></span>${wire}<span class="node fold">${I.folder}<em>${t('Sorted')}</em></span></div>
           <div class="dfacts">
-            <div><small>Reçu</small><b class="mono" id="d-bytes">—</b></div>
-            <div><small>Éléments</small><b class="mono" id="d-items">—</b></div>
-            <div><small>Vitesse</small><b class="mono" id="d-rate">—</b></div>
-            <div><small>Reste</small><b class="mono" id="d-left">—</b></div>
+            <div><small>${t('Received')}</small><b class="mono" id="d-bytes">—</b></div>
+            <div><small>${t('Items')}</small><b class="mono" id="d-items">—</b></div>
+            <div><small>${t('Speed')}</small><b class="mono" id="d-rate">—</b></div>
+            <div><small>${t('Left')}</small><b class="mono" id="d-left">—</b></div>
           </div>
           <div class="dcur"><span class="dlive"></span><span id="d-cur"></span><span class="sub" id="d-already" style="margin:0 0 0 auto"></span></div>
-          <div class="row" style="margin-top:16px"><button class="btn sm bad" type="button" data-act="cancel">${I.close}Annuler</button></div>
+          <div class="row" style="margin-top:16px"><button class="btn sm bad" type="button" data-act="cancel">${I.close}${t('Cancel')}</button></div>
         </div>
       </div>`;
     }
     if (view === 'result') {
       const ok = d.state === 'done';
-      const kept = `${d.items_done} élément${d.items_done > 1 ? 's' : ''} · ${bytes(d.bytes_done)}`;
-      const extra = [d.already ? `${d.already} déjà sur le PC` : '', d.failed ? `${d.failed} non envoyé${d.failed > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ');
+      const kept = `${plural(d.items_done, '{n} item', '{n} items')} · ${bytes(d.bytes_done)}`;
+      const extra = [d.already ? t('{n} already on the PC', { n: d.already }) : '', d.failed ? plural(d.failed, '{n} item not sent', '{n} items not sent') : ''].filter(Boolean).join(' · ');
       const head = ok
-        ? `<div class="dresult"><span class="dpop">${I.check}</span><div><div class="dtitle">${d.items_done ? `${kept} · vérifiés` : 'Tout est déjà sur le PC'}</div><div class="sub">${extra || 'Rangés par date de prise.'}</div></div></div>`
-        : `<div class="ban bad">${I.alert}<span>${esc(d.message)}${d.items_done ? ` <strong>Déjà rangés : ${kept}.</strong>` : ''}</span></div>`;
+        ? `<div class="dresult"><span class="dpop">${I.check}</span><div><div class="dtitle">${d.items_done ? t('{kept} · checked', { kept }) : t('Everything is already on the PC')}</div><div class="sub">${extra || t('Sorted by the date taken.')}</div></div></div>`
+        : `<div class="ban bad">${I.alert}<span>${esc(d.message)}${d.items_done ? ` <strong>${t('Already sorted: {kept}.', { kept })}</strong>` : ''}</span></div>`;
       return `${head}<div class="row" style="margin-top:20px">
-        ${d.files_done ? `<button class="btn cy" type="button" data-act="openLast">${I.folder}Ouvrir le dossier</button>` : ''}
+        ${d.files_done ? `<button class="btn cy" type="button" data-act="openLast">${I.folder}${t('Open the folder')}</button>` : ''}
         <button class="btn" type="button" data-act="seen">OK</button></div>`;
     }
     // At rest: a quick simulation of the steps, iPhone to PC (ADR-0030).
     const wait = d.state === 'preparing' || d.state === 'asking';
-    const status = !S.device ? '<span class="dlive off"></span>Relie d’abord ton iPhone'
-      : wait ? `<span class="dlive"></span>${esc(devName())} prépare un envoi…`
-        : S.connected ? `<span class="dlive"></span>${esc(devName())} est prêt` : '<span class="dlive off"></span>iPhone hors ligne : ouvre Hyphn dessus';
+    const status = !S.device ? `<span class="dlive off"></span>${t('Pair your iPhone first')}`
+      : wait ? `<span class="dlive"></span>${t('{name} is getting a send ready…', { name: esc(devName()) })}`
+        : S.connected ? `<span class="dlive"></span>${t('{name} is ready', { name: esc(devName()) })}` : `<span class="dlive off"></span>${t('iPhone offline: open Hyphn on it')}`;
     const tiles = '<i></i>'.repeat(6);
     return `<div class="dsim" id="d-sim" data-s="0">
         <div class="dsim-head">
-          <div><span class="lbl">Pour commencer</span><h2 class="dtitle dlg">Tout part de ton iPhone</h2></div>
+          <div><span class="lbl">${t('To start')}</span><h2 class="dtitle dlg">${t('It all starts on your iPhone')}</h2></div>
           <span class="dstatus">${status}</span>
         </div>
         <div class="sim-stage" aria-hidden="true">
           <div class="sim-phone"><div class="scr">
-            <div class="sc s0"><div class="h">Hyphn</div><div class="m">Accueil · Cam · Drop</div><div class="tabs4"><i></i><i></i><i class="on"></i><i></i></div><span class="tap"></span></div>
-            <div class="sc s1"><div class="h">Que veux-tu envoyer ?</div><div class="rows4"><i></i><i></i><i></i><i></i></div><span class="tap"></span></div>
-            <div class="sc s2"><div class="h">Envoyer 48 éléments ?</div><div class="thumbs6">${tiles}</div><div class="m">32 photos · 16 vidéos · 1,2 Go</div><div class="sbtn">Envoyer</div><span class="tap"></span></div>
-            <div class="sc s3"><div class="swait">${I.pc}</div><div class="h" style="text-align:center">Confirme sur ton PC</div></div>
-            <div class="sc s4"><div class="h">Envoi en cours</div><div class="sim-big">64 %</div><div class="sbar"><b></b></div><div class="m">38 Mo/s · reste ≈ 1 min</div></div>
+            <div class="sc s0"><div class="h">Hyphn</div><div class="m">${t('Home')} · Cam · Drop</div><div class="tabs4"><i></i><i></i><i class="on"></i><i></i></div><span class="tap"></span></div>
+            <div class="sc s1"><div class="h">${t('What do you want to send?')}</div><div class="rows4"><i></i><i></i><i></i><i></i></div><span class="tap"></span></div>
+            <div class="sc s2"><div class="h">${t('Send 48 items?')}</div><div class="thumbs6">${tiles}</div><div class="m">${t('32 photos · 16 videos · 1.2 GB')}</div><div class="sbtn">${t('Send')}</div><span class="tap"></span></div>
+            <div class="sc s3"><div class="swait">${I.pc}</div><div class="h" style="text-align:center">${t('Confirm on your PC')}</div></div>
+            <div class="sc s4"><div class="h">${t('Sending now')}</div><div class="sim-big">${perc(64)}</div><div class="sbar"><b></b></div><div class="m">${t('38 MB/s · ≈ 1 min left')}</div></div>
           </div></div>
-          <div class="sim-link"><em>Wi-Fi · chiffré</em><span></span><span></span><span></span></div>
+          <div class="sim-link"><em>${t('Wi-Fi · encrypted')}</em><span></span><span></span><span></span></div>
           <div class="sim-pc"><div class="mon"><div class="scr">
-            <div class="sc p0"><div class="pidle"><span class="plogo"></span><div class="h">Hyphn</div><div class="m">En attente de l’iPhone</div></div></div>
-            <div class="sc p3"><div class="pdlg"><div class="m">${esc(devName())} veut envoyer</div><div class="h">48 éléments · 1,2 Go</div><div class="thumbs6">${tiles}</div><div class="pbtns"><b>Accepter</b><b>Refuser</b></div></div><span class="tap"></span></div>
-            <div class="sc p4"><div class="pfolder"><div class="m">${esc(settings.drop_setup_done ? settings.photos_dir : 'Images › Hyphn')} › 2026 › 10</div><div class="drop6">${tiles}</div><div class="h">Vérifiés · sans doublon</div></div></div>
+            <div class="sc p0"><div class="pidle"><span class="plogo"></span><div class="h">Hyphn</div><div class="m">${t('Waiting for the iPhone')}</div></div></div>
+            <div class="sc p3"><div class="pdlg"><div class="m">${t('{name} wants to send', { name: esc(devName()) })}</div><div class="h">${t('48 items · 1.2 GB')}</div><div class="thumbs6">${tiles}</div><div class="pbtns"><b>${t('Accept')}</b><b>${t('Decline')}</b></div></div><span class="tap"></span></div>
+            <div class="sc p4"><div class="pfolder"><div class="m">${esc(settings.drop_setup_done ? settings.photos_dir : t('Pictures › Hyphn'))} › 2026 › 10</div><div class="drop6">${tiles}</div><div class="h">${t('Checked · no duplicates')}</div></div></div>
           </div></div><div class="stand"></div><div class="base"></div></div>
         </div>
-        <ol class="sim-rail">${SIM_STEPS.map((n, i) => `<li data-act="simGo" data-v="${i}"><b>0${i + 1}</b><span>${n}</span></li>`).join('')}</ol>
+        <ol class="sim-rail">${SIM_STEPS.map((n, i) => `<li data-act="simGo" data-v="${i}"><b>0${i + 1}</b><span>${t(n)}</span></li>`).join('')}</ol>
       </div>`;
   },
   // E10: what arrived, over the page, until « OK ».
@@ -2504,17 +2548,17 @@ const Drop = {
     const list = d.items_done > all.length ? all.slice(0, 7) : all;
     const rest = d.items_done - list.length;
     const thumbs = list.map((src, i) => `<img src="${src}" alt="" style="animation-delay:${(0.25 + i * 0.06).toFixed(2)}s">`).join('');
-    const kinds = [[d.photos, 'photo'], [d.videos, 'vidéo'], [d.docs, 'fichier']].filter(([n]) => n).map(([n, w]) => `${n} ${w}${n > 1 ? 's' : ''}`).join(' · ');
-    const extra = [d.already ? `${d.already} déjà sur le PC` : '', d.failed ? `${d.failed} non envoyé${d.failed > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ');
+    const kinds = kindsOf(d);
+    const extra = [d.already ? t('{n} already on the PC', { n: d.already }) : '', d.failed ? plural(d.failed, '{n} item not sent', '{n} items not sent') : ''].filter(Boolean).join(' · ');
     layer.innerHTML = `<div class="scrim" style="cursor:default"></div>
-      <div class="modal dask ddone" role="dialog" aria-label="Transfert terminé">
+      <div class="modal dask ddone" role="dialog" aria-label="${t('Transfer done')}">
         <div class="dask-head"><span class="dpop">${I.check}</span>
-          <div><span class="lbl">Reçu de ${esc(devName())}</span>
-            <div class="dtitle dlg">${d.items_done ? `${d.items_done} élément${d.items_done > 1 ? 's' : ''} · ${bytes(d.bytes_done)}` : 'Tout était déjà là'}</div></div></div>
+          <div><span class="lbl">${t('Received from {name}', { name: esc(devName()) })}</span>
+            <div class="dtitle dlg">${d.items_done ? `${plural(d.items_done, '{n} item', '{n} items')} · ${bytes(d.bytes_done)}` : t('Everything was already there')}</div></div></div>
         ${thumbs && d.items_done ? `<div class="dthumbs">${thumbs}${rest > 0 ? `<i>+${rest}</i>` : ''}</div>` : ''}
-        <div class="sub dkinds">${[d.items_done ? `${kinds ? kinds + ' · ' : ''}vérifiés un par un` : '', extra, d.folder ? `Dans ${esc(d.folder)}` : ''].filter(Boolean).join('<br>')}</div>
+        <div class="sub dkinds">${[d.items_done ? `${kinds ? kinds + ' · ' : ''}${t('checked one by one')}` : '', extra, d.folder ? t('In {folder}', { folder: esc(d.folder) }) : ''].filter(Boolean).join('<br>')}</div>
         <div class="row" style="margin-top:22px">
-          ${d.files_done ? `<button class="btn cy" type="button" data-act="openLast">${I.folder}Ouvrir le dossier</button>` : ''}
+          ${d.files_done ? `<button class="btn cy" type="button" data-act="openLast">${I.folder}${t('Open the folder')}</button>` : ''}
           <button class="btn" type="button" data-act="seen">OK</button>
         </div>
       </div>`;
@@ -2542,67 +2586,67 @@ const Drop = {
     const shape = [this.ask, this.folder && this.folder.path, (this.thumbs || []).length].join('|');
     if (shape === this.askShape) return;
     this.askShape = shape;
-    const names = settings.drop_setup_done && this.ask === 'accept' ? [] : ['Dossier', 'Rangement', 'Accord'];
+    const names = settings.drop_setup_done && this.ask === 'accept' ? [] : [t('Folder'), t('Sorting'), t('Approval')];
     const at = { folder: 0, confirm: 0, sort: 1, accept: 2 }[this.ask];
     const dots = names.length ? `<ol class="dsteps sm">${names.map((n, k) => `<li class="${k < at ? 'done' : k === at ? 'on' : ''}"><b>${k < at ? I.check : k + 1}</b>${n}</li>`).join('')}</ol>` : '';
     layer.innerHTML = `<div class="scrim" style="cursor:default"></div>
-      <div class="modal dask" role="dialog" aria-label="Confirmer l’envoi">${dots}<div class="dstage">${this.askBody(d)}</div></div>`;
+      <div class="modal dask" role="dialog" aria-label="${t('Confirm the send')}">${dots}<div class="dstage">${this.askBody(d)}</div></div>`;
   },
   askBody(d) {
     const who = esc(devName());
     if (this.ask === 'folder') {
-      return `<div class="dq"><span class="lbl">Première fois · ${who} veut envoyer</span><h2 class="dtitle dlg">Où ranger tes photos sur ce PC ?</h2></div>
+      return `<div class="dq"><span class="lbl">${t('First time · {name} wants to send', { name: who })}</span><h2 class="dtitle dlg">${t('Where should your photos go on this PC?')}</h2></div>
         <div class="choices">
-          <button class="choice dtip" type="button" data-act="suggest"><span class="ic">${I.bolt}</span><span><b>Laisser Hyphn choisir</b><small>Un dossier propre, sur le disque qui a le plus de place.</small></span><em>Conseillé</em></button>
-          <button class="choice" type="button" data-act="pickDir"><span class="ic">${I.folder}</span><span><b>Choisir un dossier</b><small>Tu le choisis dans Windows.</small></span></button>
+          <button class="choice dtip" type="button" data-act="suggest"><span class="ic">${I.bolt}</span><span><b>${t('Let Hyphn choose')}</b><small>${t('A clean folder, on the drive with the most space.')}</small></span><em>${t('Recommended')}</em></button>
+          <button class="choice" type="button" data-act="pickDir"><span class="ic">${I.folder}</span><span><b>${t('Choose a folder')}</b><small>${t('You pick it in Windows.')}</small></span></button>
         </div>
-        <div class="row" style="margin-top:18px"><button class="btn sm bad" type="button" data-act="refuse">Refuser l’envoi</button></div>`;
+        <div class="row" style="margin-top:18px"><button class="btn sm bad" type="button" data-act="refuse">${t('Decline the send')}</button></div>`;
     }
     if (this.ask === 'confirm') {
       const f = this.folder || {};
-      return `<div class="dq"><span class="lbl">Dossier</span><h2 class="dtitle dlg">C’est bon pour toi ?</h2></div>
-        <div class="dpath"><span class="ic">${I.folder}</span><div><div class="mono">${esc(f.path)}</div><div class="sub">${f.free != null ? `${bytes(f.free)} libres sur ce disque` : 'Place libre inconnue'}</div></div></div>
+      return `<div class="dq"><span class="lbl">${t('Folder')}</span><h2 class="dtitle dlg">${t('Is this OK for you?')}</h2></div>
+        <div class="dpath"><span class="ic">${I.folder}</span><div><div class="mono">${esc(f.path)}</div><div class="sub">${f.free != null ? t('{size} free on this drive', { size: bytes(f.free) }) : t('Free space unknown')}</div></div></div>
         <div class="row" style="margin-top:22px">
-          <button class="btn cy" type="button" data-act="okDir">${I.check}C’est bon</button>
-          <button class="btn" type="button" data-act="pickDir">Choisir un autre</button>
+          <button class="btn cy" type="button" data-act="okDir">${I.check}${t('Looks good')}</button>
+          <button class="btn" type="button" data-act="pickDir">${t('Choose another')}</button>
         </div>`;
     }
     if (this.ask === 'sort') {
-      return `<div class="dq"><span class="lbl">Rangement</span><h2 class="dtitle dlg">Comment les ranger ?</h2></div>
-        <div class="choices three">${SORTS.map(([k, n, ex, tip]) => `<button class="choice${tip ? ' dtip' : ''}" type="button" data-act="sort" data-v="${k}"><span><b>${n}</b><small class="mono">${ex}</small></span>${tip ? '<em>Conseillé</em>' : ''}</button>`).join('')}</div>
-        <p class="sub" style="margin-top:16px">Selon la date où la photo a été prise. Tu pourras changer ça dans les Réglages.</p>`;
+      return `<div class="dq"><span class="lbl">${t('Sorting')}</span><h2 class="dtitle dlg">${t('How should they be sorted?')}</h2></div>
+        <div class="choices three">${SORTS.map(([k, n, ex, best]) => `<button class="choice${best ? ' dtip' : ''}" type="button" data-act="sort" data-v="${k}"><span><b>${t(n)}</b><small class="mono">${ex}</small></span>${best ? `<em>${t('Recommended')}</em>` : ''}</button>`).join('')}</div>
+        <p class="sub" style="margin-top:16px">${t('By the date the photo was taken. You can change this in Settings.')}</p>`;
     }
-    const kinds = [[d.photos, 'photo'], [d.videos, 'vidéo'], [d.docs, 'fichier']].filter(([n]) => n).map(([n, w]) => `${n} ${w}${n > 1 ? 's' : ''}`).join(' · ');
-    const more = [kinds, d.already ? `${d.already} déjà sur le PC, pas renvoyé${d.already > 1 ? 's' : ''}` : '', `Vers ${esc(settings.photos_dir)}, ${SORT_NAME[settings.sort] || ''}`].filter(Boolean);
+    const kinds = kindsOf(d);
+    const more = [kinds, d.already ? plural(d.already, '{n} item already on the PC, not resent', '{n} items already on the PC, not resent') : '', t('To {dir}, {sort}', { dir: esc(settings.photos_dir), sort: SORT_NAME[settings.sort] ? t(SORT_NAME[settings.sort]) : '' })].filter(Boolean);
     // One line of 8: the last tile counts the rest.
     const all = this.thumbs || [];
     const list = d.items > all.length ? all.slice(0, 7) : all;
     const thumbs = list.map((src, i) => `<img src="${src}" alt="" style="animation-delay:${(i * 0.05).toFixed(2)}s">`).join('');
     const rest = d.items - list.length;
     return `<div class="dask-head"><span class="ic">${I.phone}</span>
-        <div><span class="lbl">Aperçu · ${who} veut envoyer</span>
-          <div class="dtitle dlg">${d.items} élément${d.items > 1 ? 's' : ''} · ${bytes(d.bytes)}</div></div></div>
+        <div><span class="lbl">${t('Preview · {name} wants to send', { name: who })}</span>
+          <div class="dtitle dlg">${plural(d.items, '{n} item', '{n} items')} · ${bytes(d.bytes)}</div></div></div>
       ${thumbs ? `<div class="dthumbs">${thumbs}${rest > 0 ? `<i>+${rest}</i>` : ''}</div>` : ''}
       <div class="sub dkinds">${more.join('<br>')}</div>
       <div class="row" style="margin-top:22px">
-        <button class="btn cy" type="button" data-act="accept">${I.check}Accepter</button>
-        <button class="btn" type="button" data-act="refuse">Refuser</button>
+        <button class="btn cy" type="button" data-act="accept">${I.check}${t('Accept')}</button>
+        <button class="btn" type="button" data-act="refuse">${t('Decline')}</button>
       </div>`;
   },
   fill(d) {
-    const set = (id, t) => { const el = $(id); if (el && el.textContent !== t) el.textContent = t; };
+    const set = (id, text) => { const el = $(id); if (el && el.textContent !== text) el.textContent = text; };
     if (d.state === 'sending') {
       const pct = d.bytes ? Math.min(100, Math.floor(d.bytes_done / d.bytes * 100)) : 0;
       set('#d-pct', String(pct));
       const ring = $('#d-ring');
       if (ring) ring.setAttribute('stroke-dasharray', `${pct} 100`);
-      set('#d-bytes', `${bytes(d.bytes_done)} sur ${bytes(d.bytes)}`);
-      set('#d-items', `${d.items_done} sur ${d.items}`);
-      set('#d-rate', d.rate ? `${bytes(d.rate)}/s` : 'calcul…');
+      set('#d-bytes', t('{done} of {total}', { done: bytes(d.bytes_done), total: bytes(d.bytes) }));
+      set('#d-items', t('{done} of {total}', { done: d.items_done, total: d.items }));
+      set('#d-rate', d.rate ? `${bytes(d.rate)}/s` : t('working out…'));
       const left = d.rate ? Math.max(0, d.bytes - d.bytes_done) / d.rate : 0;
-      set('#d-left', !d.rate ? 'calcul…' : left < 60 ? '< 1 min' : `≈ ${Math.ceil(left / 60)} min`);
-      set('#d-cur', d.current ? d.current : 'Le transfert démarre…');
-      set('#d-already', d.already ? `${d.already} déjà sur le PC` : '');
+      set('#d-left', !d.rate ? t('working out…') : left < 60 ? '< 1 min' : `≈ ${Math.ceil(left / 60)} min`);
+      set('#d-cur', d.current ? d.current : t('The transfer is starting…'));
+      set('#d-already', d.already ? t('{n} already on the PC', { n: d.already }) : '');
     }
     const months = S.drop_months || [];
     const key = JSON.stringify(months);
@@ -2610,8 +2654,8 @@ const Drop = {
     if (box && box.dataset.k !== key) {
       box.dataset.k = key;
       box.innerHTML = months.length
-        ? months.map((m) => `<div class="month"><span>${esc(m.label)}</span><span class="mono sub" style="margin:0">${m.files} fichier${m.files > 1 ? 's' : ''} · ${bytes(m.bytes)}</span></div>`).join('')
-        : '<div class="sub">Rien encore.</div>';
+        ? months.map((m) => `<div class="month"><span>${esc(m.label)}</span><span class="mono sub" style="margin:0">${plural(m.files, '{n} file', '{n} files')} · ${bytes(m.bytes)}</span></div>`).join('')
+        : `<div class="sub">${t('Nothing yet.')}</div>`;
     }
   },
   askStep(step) {
@@ -2668,11 +2712,14 @@ const Drop = {
 };
 
 // ===================================================================
-// Réglages
+// Settings
 // ===================================================================
 // The PC settings: a menu of categories on the left, one list on the right.
-const SET_CATS = [['iphone', 'iPhone', 'phone'], ['webcam', 'Webcam et OBS', 'cam'], ['drop', 'Drop', 'swap'],
-  ['general', 'Général', 'pc'], ['alerts', 'Alertes', 'bolt'], ['privacy', 'Confidentialité', 'shield']];
+// Names are shown through t().
+const SET_CATS = [['iphone', 'iPhone', 'phone'], ['webcam', 'Webcam and OBS', 'cam'], ['drop', 'Drop', 'swap'],
+  ['general', 'General', 'pc'], ['alerts', 'Alerts', 'bolt'], ['privacy', 'Privacy', 'shield']];
+// The window's languages, each named in its own language (ADR-0042).
+const UI_LANGS = [['en', 'English'], ['fr', 'Fran\u00e7ais']];
 const Settings = {
   key: () => (S && S.device ? S.device.fingerprint : 'none'),
   mount(root) {
@@ -2686,7 +2733,7 @@ const Settings = {
     this.paint();
     try {
       await invoke('vcam_install', { uninstall });
-      toast(uninstall ? 'Webcam retirée' : 'Webcam Windows prête');
+      toast(t(uninstall ? 'Webcam removed' : 'Windows webcam ready'));
     } catch (e) {
       toast(String(e), 'info');
     }
@@ -2697,50 +2744,52 @@ const Settings = {
   paint() {
     const s = settings;
     const d = S && S.device;
-    const row = (title, desc, ctl, t = '') => `<div class="srow"><div class="stx"><b>${title}${tip(t)}</b>${desc ? `<small>${desc}</small>` : ''}</div><div class="sct">${ctl}</div></div>`;
+    const row = (title, desc, ctl, tk = '') => `<div class="srow"><div class="stx"><b>${title}${tip(tk)}</b>${desc ? `<small>${desc}</small>` : ''}</div><div class="sct">${ctl}</div></div>`;
     const sw = (k, label) => `<button class="swb" type="button" data-act="toggle" data-k="${k}" aria-pressed="${!!s[k]}" aria-label="${esc(label)}"><span class="sw${s[k] ? ' on' : ''}"></span></button>`;
     const sec = (id, body) => {
       const [, name, ic] = SET_CATS.find(([x]) => x === id);
-      return `<section class="ssec" id="s-${id}"><h2><span class="gi">${I[ic]}</span>${name}</h2><div class="slist">${body}</div></section>`;
+      return `<section class="ssec" id="s-${id}"><h2><span class="gi">${I[ic]}</span>${t(name)}</h2><div class="slist">${body}</div></section>`;
     };
     const p = (S && S.status) || {};
     const iphone = d
       ? `<div class="dcard">
           <span class="dic${S.connected ? ' on' : ''}">${I.phone}</span>
-          <div class="dtx"><b>${esc(d.name)}</b><small><span class="led${S.connected ? '' : ' off'}"></span>${S.connected ? 'Relié ' + linkName() + (S.latency_ms == null ? '' : ` · répond en ${S.latency_ms} ms`) : 'En attente de l’iPhone'}</small></div>
-          ${p.battery == null ? '' : `<div class="dbat"><span class="mono">${p.battery} %</span><small>${CHARGE[p.charge] || ''}</small></div>`}
+          <div class="dtx"><b>${esc(d.name)}</b><small><span class="led${S.connected ? '' : ' off'}"></span>${!S.connected ? t('Waiting for the iPhone') : S.latency_ms == null ? t('Linked {via}', { via: linkName() }) : t('Linked {via} · answers in {n} ms', { via: linkName(), n: S.latency_ms })}</small></div>
+          ${p.battery == null ? '' : `<div class="dbat"><span class="mono">${perc(p.battery)}</span><small>${p.charge ? t(CHARGE[p.charge]) : ''}</small></div>`}
         </div>`
-        + row('Reconnecter', 'Si quelque chose bloque, refait la liaison.', `<button class="btn" type="button" data-act="reconnect">${I.refresh}Reconnecter</button>`, 'reconnect')
-        + (S.cable_service === false ? row('Câble USB', 'Installe « Apple Devices » (Microsoft Store) ou iTunes pour relier l’iPhone par câble. Le Wi-Fi marche sans.', '') : '')
-        + row('Relier un autre iPhone', 'Il remplacera celui-ci.', '<a class="btn" href="#pair">Relier</a>')
-        + row('Oublier cet iPhone', `Relié le ${dateFr(d.paired_at)}. Empreinte <span class="mono">${esc(d.fingerprint)}</span>${tip('fingerprint')}`, `<button class="btn bad" type="button" data-act="ask">Oublier</button>`, 'forget')
-        + (this.asking ? `<div class="confirm" role="alertdialog" aria-label="Confirmer l’oubli">
-            <span><strong>Oublier ${esc(d.name)} ?</strong> Il faudra scanner un nouveau QR code pour le relier.</span>
-            <div class="row" style="gap:8px"><button class="btn badf" type="button" data-act="forget">Oublier</button><button class="btn" type="button" data-act="cancel">Annuler</button></div>
+        + row(t('Reconnect'), t('If something is stuck, redo the link.'), `<button class="btn" type="button" data-act="reconnect">${I.refresh}${t('Reconnect')}</button>`, 'reconnect')
+        + (S.cable_service === false ? row(t('USB cable'), t('Install “Apple Devices” (Microsoft Store) or iTunes to link the iPhone by cable. Wi-Fi works without it.'), '') : '')
+        + row(t('Pair another iPhone'), t('It will replace this one.'), `<a class="btn" href="#pair">${t('Pair')}</a>`)
+        + row(t('Forget this iPhone'), t('Paired on {date}. Fingerprint {fp}', { date: dateStr(d.paired_at), fp: `<span class="mono">${esc(d.fingerprint)}</span>` }) + tip('fingerprint'), `<button class="btn bad" type="button" data-act="ask">${t('Forget')}</button>`, 'forget')
+        + (this.asking ? `<div class="confirm" role="alertdialog" aria-label="${t('Confirm forgetting')}">
+            <span><strong>${t('Forget {name}?', { name: esc(d.name) })}</strong> ${t('You will need to scan a new QR code to pair it again.')}</span>
+            <div class="row" style="gap:8px"><button class="btn badf" type="button" data-act="forget">${t('Forget')}</button><button class="btn" type="button" data-act="cancel">${t('Cancel')}</button></div>
           </div>` : '')
-      : row('Aucun iPhone relié', 'Un QR code à scanner, une seule fois.', '<a class="btn pri" href="#pair">Relier un iPhone</a>');
-    const sorts = [['year_month', 'Par mois', '2026 › 11'], ['year', 'Par année', '2026'], ['flat', 'Tout ensemble', 'un dossier']];
+      : row(t('No iPhone paired'), t('One QR code to scan, just once.'), `<a class="btn pri" href="#pair">${t('Pair an iPhone')}</a>`);
+    const sorts = [['year_month', 'By month', '2026 › 11'], ['year', 'By year', '2026'], ['flat', 'All together', 'one folder']];
+    const seg = (label, act, cur, list) => `<div class="seg" role="group" aria-label="${label}">${list.map(([k, n]) => `<button type="button" class="${cur === k ? 'on' : ''}" data-act="${act}" data-v="${k}">${n}</button>`).join('')}</div>`;
     this.root.innerHTML = `
       <main class="wrap setw enter">
-        <h1 class="h1">Réglages</h1>
+        <h1 class="h1">${t('Settings')}</h1>
         <div class="sgrid2">
-          <nav class="snav" aria-label="Catégories">${SET_CATS.map(([id, n, ic], i) => `<button type="button" class="${i === (this.cat || 0) ? 'on' : ''}" data-act="jump" data-v="${id}" data-i="${i}">${I[ic]}${n}</button>`).join('')}</nav>
+          <nav class="snav" aria-label="${t('Categories')}">${SET_CATS.map(([id, n, ic], i) => `<button type="button" class="${i === (this.cat || 0) ? 'on' : ''}" data-act="jump" data-v="${id}" data-i="${i}">${I[ic]}${t(n)}</button>`).join('')}</nav>
           <div class="scol">
             ${sec('iphone', iphone)}
-            ${sec('webcam', this.vcamRows(row) + row('Réglages de l’image', 'Lumière, couleurs, taille, écran de pause…', `<a class="btn" href="#cam">${I.sliders}Ouvrir Cam</a>`))}
-            ${sec('drop', row('Dossier', 'Où arrivent les photos et fichiers.', `<button class="btn mono path" type="button" data-act="pick" title="${esc(s.photos_dir)}">${I.folder}<span>${esc(s.photos_dir)}</span></button>`, 'photos_dir')
-              + row('Rangement', 'Comment les photos sont classées dans le dossier.', `<div class="opts sm">${sorts.map(([k, n, ex]) => `<button type="button" class="opt${s.sort === k ? ' on' : ''}" data-act="sort" data-v="${k}" aria-pressed="${s.sort === k}"><b>${n}</b><small>${ex}</small></button>`).join('')}</div>`, 'sort'))}
-            ${sec('general', row('Démarrer avec Windows', 'Hyphn se lance tout seul, discret près de l’horloge.', sw('launch_at_startup', 'Démarrer avec Windows'), 'launch_at_startup')
-              + row('Garder près de l’horloge', 'Fermer la fenêtre laisse la webcam marcher.', sw('close_to_tray', 'Garder près de l’horloge'), 'close_to_tray')
-              + row('Apparence', '', `<div class="seg" role="group" aria-label="Apparence">${[['system', 'Comme Windows'], ['dark', 'Sombre'], ['light', 'Clair']].map(([k, n]) => `<button type="button" class="${s.theme === k ? 'on' : ''}" data-act="theme" data-v="${k}">${n}</button>`).join('')}</div>`, 'theme'))}
-            ${sec('alerts', row('Batterie faible', 'Prévenir sous 15 %, quand l’iPhone n’est pas en charge.', sw('low_battery_alert', 'Batterie faible'), 'low_battery_alert'))}
+            ${sec('webcam', this.vcamRows(row) + row(t('Picture settings'), t('Lighting, colors, size, pause screen…'), `<a class="btn" href="#cam">${I.sliders}${t('Open Cam')}</a>`))}
+            ${sec('drop', row(t('Folder'), t('Where photos and files arrive.'), `<button class="btn mono path" type="button" data-act="pick" title="${esc(s.photos_dir)}">${I.folder}<span>${esc(s.photos_dir)}</span></button>`, 'photos_dir')
+              + row(t('Sorting'), t('How photos are sorted in the folder.'), `<div class="opts sm">${sorts.map(([k, n, ex]) => `<button type="button" class="opt${s.sort === k ? ' on' : ''}" data-act="sort" data-v="${k}" aria-pressed="${s.sort === k}"><b>${t(n)}</b><small>${t(ex)}</small></button>`).join('')}</div>`, 'sort'))}
+            ${sec('general', row(t('Language'), '', seg(t('Language'), 'lang', LANG, UI_LANGS), 'lang')
+              + row(t('Start with Windows'), t('Hyphn starts by itself, quietly near the clock.'), sw('launch_at_startup', t('Start with Windows')), 'launch_at_startup')
+              + row(t('Keep near the clock'), t('Closing the window keeps the webcam running.'), sw('close_to_tray', t('Keep near the clock')), 'close_to_tray')
+              + row(t('Appearance'), '', seg(t('Appearance'), 'theme', s.theme, [['system', t('Like Windows')], ['dark', t('Dark')], ['light', t('Light')]]), 'theme'))}
+            ${sec('alerts', row(t('Low battery'), t('Warn below {pct}, when the iPhone is not charging.', { pct: perc(15) }), sw('low_battery_alert', t('Low battery')), 'low_battery_alert'))}
             ${sec('privacy', `<div class="priv2">
                 <span class="shield">${I.shield}</span>
-                <div><b>Rien ne sort de chez toi.</b><small>Hyphn parle seulement à ton iPhone, sur ton réseau, et tout est chiffré.</small></div>
-                <div class="pills"><span class="pl"><b>0</b>compte</span><span class="pl"><b>0</b>serveur</span><span class="pl"><b>0</b>donnée envoyée</span></div>
+                <div><b>${t('Nothing leaves your home.')}</b><small>${t('Hyphn only talks to your iPhone, on your network, and everything is encrypted.')}</small></div>
+                <div class="pills"><span class="pl"><b>0</b>${t('account')}</span><span class="pl"><b>0</b>${t('server')}</span><span class="pl"><b>0</b>${t('data sent')}</span></div>
               </div>
-              <div class="scred"><b>Crédits</b> Traduction : moteur et modèles de Firefox (Mozilla, MPL-2.0). Effets : MediaPipe (Google, Apache-2.0), three.js (MIT), méthode de MindAR (MIT), Fluent Emoji (Microsoft, MIT). Modèles 3D (CC-BY-4.0) : « Thug Life | Cool glasses » par MR EXPERT, « Clown Hat » par PatelDev, « Earring Jade » par Softmind Game Factory (Sketchfab) ; 27 objets 3D de Poly Pizza (CC-BY 3.0 : Poly by Google, J-Toastie, jeremy, Michael Fuchs ; CC0 : Quaternius, iPoly3D), liste complète dans vendor/models3d/CREDITS.txt. Décors : photos CC0 et domaine public (Wikimedia Commons, NASA).</div>
-              <div class="sver mono">Hyphn ${S ? esc(S.version) : ''} · ${esc(S ? S.pc_name : '')} · empreinte du PC ${esc(S ? S.pc_fingerprint : '')}</div>`)}
+              <div class="scred"><b>${t('Credits')}</b> ${t('Translation: Firefox’s engine and models (Mozilla, MPL-2.0). Effects: MediaPipe (Google, Apache-2.0), three.js (MIT), MindAR’s method (MIT), Fluent Emoji (Microsoft, MIT). 3D models (CC-BY-4.0): “Thug Life | Cool glasses” by MR EXPERT, “Clown Hat” by PatelDev, “Earring Jade” by Softmind Game Factory (Sketchfab); 27 3D objects from Poly Pizza (CC-BY 3.0: Poly by Google, J-Toastie, jeremy, Michael Fuchs; CC0: Quaternius, iPoly3D), full list in vendor/models3d/CREDITS.txt. Backgrounds: CC0 and public domain photos (Wikimedia Commons, NASA).')}</div>
+              <div class="sver mono">Hyphn ${S ? esc(S.version) : ''} · ${esc(S ? S.pc_name : '')} · ${t('PC fingerprint {fp}', { fp: esc(S ? S.pc_fingerprint : '') })}</div>`)}
           </div>
         </div>
       </main>`;
@@ -2752,12 +2801,12 @@ const Settings = {
     const busy = this.installing;
     const ok = (t) => `<span class="okc">${I.check}${t}</span>`;
     const cam = v.camera
-      ? row('Webcam Windows', v.in_use ? (v.in_use > 1 ? v.in_use + ' apps l’utilisent en ce moment.' : 'Une app l’utilise en ce moment.') : '« Hyphn » dans Discord, Teams, OBS…', ok('Prête'), 'vcam')
+      ? row(t('Windows webcam'), v.in_use ? (v.in_use > 1 ? t('{n} apps are using it right now.', { n: v.in_use }) : t('An app is using it right now.')) : t('“Hyphn” in Discord, Teams, OBS…'), ok(t('Ready')), 'vcam')
       : v.installed
-        ? row('Webcam Windows', esc(v.error || 'Démarrage…'), `<button class="btn" type="button" data-act="vinstall" ${busy ? 'disabled' : ''}>Réparer</button>`, 'vcam')
-        : row('Webcam Windows', v.can_install ? 'Windows demande l’accord administrateur, une seule fois.' : 'Fichiers de la webcam absents de cette version.', `<button class="btn pri" type="button" data-act="vinstall" ${busy || !v.can_install ? 'disabled' : ''}>${busy ? 'Installation…' : 'Installer'}</button>`, 'vcam');
-    const obs = !v.obs_present ? '' : row('OBS', v.obs ? 'Source « Hyphn » dans OBS.' : 'S’installe avec la webcam.', v.obs ? ok('Prêt') : '', 'obs');
-    const remove = v.installed ? row('Retirer', 'Enlève la webcam et le plugin OBS de ce PC.', `<button class="btn bad" type="button" data-act="vremove" ${busy ? 'disabled' : ''}>Retirer</button>`) : '';
+        ? row(t('Windows webcam'), v.error ? esc(v.error) : t('Starting…'), `<button class="btn" type="button" data-act="vinstall" ${busy ? 'disabled' : ''}>${t('Repair')}</button>`, 'vcam')
+        : row(t('Windows webcam'), t(v.can_install ? 'Windows asks for administrator approval, just once.' : 'The webcam files are missing from this version.'), `<button class="btn pri" type="button" data-act="vinstall" ${busy || !v.can_install ? 'disabled' : ''}>${t(busy ? 'Installing…' : 'Install')}</button>`, 'vcam');
+    const obs = !v.obs_present ? '' : row('OBS', t(v.obs ? '“Hyphn” source in OBS.' : 'Installed with the webcam.'), v.obs ? ok(t('Ready to use')) : '', 'obs');
+    const remove = v.installed ? row(t('Remove'), t('Removes the webcam and the OBS plugin from this PC.'), `<button class="btn bad" type="button" data-act="vremove" ${busy ? 'disabled' : ''}>${t('Remove')}</button>`) : '';
     return cam + obs + remove;
   },
   update() {
@@ -2782,6 +2831,12 @@ const Settings = {
       await saveSettings();
       settings = await invoke('get_settings');
       Settings.paint();
+    },
+    // The whole window is drawn again in the new language; the route (#settings) stays.
+    lang: async (el) => {
+      settings.lang = el.dataset.v;
+      await saveSettings();
+      location.reload();
     },
     theme: async (el) => {
       settings.theme = el.dataset.v;
@@ -2839,9 +2894,9 @@ const Update = {
     el.className = 'pop upd';
     el.setAttribute('role', 'dialog');
     el.innerHTML = `<span class="pic">${I.down}</span>
-      <div class="ptx"><b>Hyphn ${esc(u.version)} est disponible</b><small>Tes réglages et ton iPhone sont gardés.</small>
-        <div class="pact"><button class="btn sm" type="button" data-k="later"${tipAttr('upd_later')}>Plus tard</button>
-        <button class="btn sm pri" type="button" data-k="go"${tipAttr('upd_go')}>Installer</button></div></div>`;
+      <div class="ptx"><b>${t('Hyphn {version} is available', { version: esc(u.version) })}</b><small>${t('Your settings and iPhone are kept.')}</small>
+        <div class="pact"><button class="btn sm" type="button" data-k="later"${tipAttr('upd_later')}>${t('Later')}</button>
+        <button class="btn sm pri" type="button" data-k="go"${tipAttr('upd_go')}>${t('Install')}</button></div></div>`;
     document.body.appendChild(el);
     void el.offsetWidth;
     el.classList.add('on');
@@ -2852,7 +2907,7 @@ const Update = {
     });
   },
   async install(el, version) {
-    $('.ptx', el).innerHTML = `<b>Installation de ${esc(version)}…</b><small>Hyphn va se fermer puis se rouvrir.</small><div class="pbar"><i></i></div>`;
+    $('.ptx', el).innerHTML = `<b>${t('Installing {version}…', { version: esc(version) })}</b><small>${t('Hyphn will close and open again.')}</small><div class="pbar"><i></i></div>`;
     listen('update_progress', (e) => {
       const [done, total] = e.payload;
       if (total) $('.pbar i', el).style.width = Math.max(3, (100 * done) / total) + '%';
@@ -2877,29 +2932,37 @@ function onSnapshot(snap) {
 
 (async function start() {
   settings = await invoke('get_settings');
+  // The language first: everything below is drawn in it.
+  LANG = settings.lang === 'fr' ? 'fr' : 'en';
+  document.documentElement.lang = LANG;
+  CAM_DEFAULTS.msg = BUILTIN[LANG];
+  translateStatic();
   applyTheme();
   S = await invoke('get_snapshot');
   paintHeader();
   mount(true);
   listen('snapshot', (e) => onSnapshot(e.payload));
   listen('pair', (e) => Pair.onPair(e.payload));
-  // Installed by itself at launch (one admin « Oui »).
-  listen('vcam_installed', () => toast('Webcam Windows prête'));
+  // Installed by itself at launch (one admin « Yes »).
+  listen('vcam_installed', () => toast(t('Windows webcam ready')));
   Update.check();
   listen('langs', (e) => {
-    Cam.cs = Cam.cs || Object.assign({}, CAM_DEFAULTS, settings.cam || {});
+    Cam.cs = Cam.cs || camSettings();
     Cam.onLangs(e.payload);
   });
   // Installs or a translation left half done (app closed, reload): picked up.
-  Cam.cs = Cam.cs || Object.assign({}, CAM_DEFAULTS, settings.cam || {});
+  Cam.cs = Cam.cs || camSettings();
+  // The language changed with a default waiting message: the webcam gets
+  // the new language's default too (ADR-0033).
+  if (settings.cam && settings.cam.msg !== Cam.cs.msg) Cam.save();
   Cam.langsFetch();
-  // « Afficher » touched on the iPhone: the PC shows the picture at once.
+  // « Show » touched on the iPhone: the PC shows the picture at once.
   listen('cam_phone_live', () => { if (route() !== 'cam') go('cam'); });
   // The iPhone asks to send (ADR-0030): its confirmation shows here.
   listen('drop_ask', () => { if (route() !== 'drop') go('drop'); });
   // Evan picked a quality on the iPhone: the PC keeps it (spec `Cam - Flux v1`, E4).
   listen('cam_quality', (e) => {
-    const c = Object.assign({}, CAM_DEFAULTS, settings.cam || {});
+    const c = camSettings();
     const r = RES.indexOf(e.payload.height), f = FPS.indexOf(e.payload.fps);
     if (r >= 0) c.res = r;
     if (f >= 0) c.fps = f;

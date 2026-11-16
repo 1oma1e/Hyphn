@@ -86,7 +86,7 @@ final class Dropper: ObservableObject {
     private static let chunk = 1 << 20
     /// Bytes allowed to wait in the socket before reading more.
     private static let backlog = 8 << 20
-    private static let lostText = "Liaison perdue : relance l’envoi."
+    private static let lostText = L("Link lost: start the send again.", "Liaison perdue : relance l’envoi.")
 
     var busy: Bool {
         switch phase {
@@ -119,7 +119,7 @@ final class Dropper: ObservableObject {
         answerAlready(nil)
         conn?.sendAndClose(.dropCancel)
         conn = nil
-        finish(.failed("Envoi annulé."))
+        finish(.failed(L("Send cancelled.", "Envoi annulé.")))
     }
 
     /// Hyphn left the foreground: iOS cuts the connection soon anyway (E5).
@@ -127,7 +127,7 @@ final class Dropper: ObservableObject {
         guard busy else { return }
         confirmReview(false)
         answerAlready(nil)
-        finish(.failed("Envoi arrêté : Hyphn est passé en arrière-plan. Relance-le en gardant Hyphn ouvert."))
+        finish(.failed(L("Send stopped: Hyphn went to the background. Start it again and keep Hyphn open.", "Envoi arrêté : Hyphn est passé en arrière-plan. Relance-le en gardant Hyphn ouvert.")))
     }
 
     /// Back to « Que veux-tu envoyer ? ».
@@ -156,12 +156,12 @@ final class Dropper: ObservableObject {
         default:
             guard await Self.askPhotos() else {
                 needsAccess = true
-                return finish(.failed("Hyphn a besoin de tes photos pour les envoyer."))
+                return finish(.failed(L("Hyphn needs your photos to send them.", "Hyphn a besoin de tes photos pour les envoyer.")))
             }
             (ids, failed) = Self.identifiers(source)
         }
 
-        guard let c = link?.openDrop() else { return finish(.failed("Le PC n’est pas joignable : ouvre Hyphn sur le PC.")) }
+        guard let c = link?.openDrop() else { return finish(.failed(L("Can't reach the PC: open Hyphn on the PC.", "Le PC n’est pas joignable : ouvre Hyphn sur le PC."))) }
         conn = c
         inbox = []
         // Only this send's connection speaks: the « closed » of a cancelled
@@ -181,7 +181,7 @@ final class Dropper: ObservableObject {
         }
         c.start()
         let first = await next()
-        guard case .ready = first else { return lost("connexion", first) }
+        guard case .ready = first else { return lost(L("connection", "connexion"), first) }
 
         // E6: the PC says which items it lacks; the others are not even exported.
         var missing = ids
@@ -191,7 +191,7 @@ final class Dropper: ObservableObject {
             case let .msg(.dropMissing(m)): missing = m
             // The PC refused at once (already receiving…): its own words.
             case let .msg(.dropAck(false, reason, _)): return finish(.failed(reason))
-            case let other: return lost("liste", other)
+            case let other: return lost(L("list", "liste"), other)
             }
         }
         // E6: already sent to this PC: Evan decides (he may have deleted them
@@ -241,7 +241,7 @@ final class Dropper: ObservableObject {
                                   previews: thumbs, photos: UInt32(photos), videos: UInt32(videos), docs: UInt32(docs))))
         phase = .waitingPC
         let answer = await next()
-        guard case let .msg(.dropAck(ok, reason, _)) = answer else { return lost("accord", answer) }
+        guard case let .msg(.dropAck(ok, reason, _)) = answer else { return lost(L("approval", "accord"), answer) }
         guard ok else { return finish(.failed(reason)) }
 
         phase = .sending
@@ -364,12 +364,12 @@ final class Dropper: ObservableObject {
                 }
                 guard ok else { return .stop(reason) }
             case .msg(.dropCancel):
-                return .stop("Envoi annulé sur le PC.")
+                return .stop(L("Send cancelled on the PC.", "Envoi annulé sur le PC."))
             case let other:
-                return .stop(Self.detail("fichier", other))
+                return .stop(Self.detail(L("file", "fichier"), other))
             }
             guard await stream(url, to: c) else {
-                return .stop(peerCancelled ? "Envoi annulé sur le PC." : Self.lostText)
+                return .stop(peerCancelled ? L("Send cancelled on the PC.", "Envoi annulé sur le PC.") : Self.lostText)
             }
             c.send(.dropEnd(sha256: sha, lastOfItem: last))
             switch await next() {
@@ -377,12 +377,13 @@ final class Dropper: ObservableObject {
                 if ok { return .sent }
                 bytesDone -= size
                 // A wrong hash is sent once more; anything else stops the send.
-                guard reason.contains("empreinte") else { return .stop(reason) }
+                // The PC writes it in its own language (English or French).
+                guard reason.contains("checksum") || reason.contains("empreinte") else { return .stop(reason) }
                 if attempt == 1 { return .skipped }
             case .msg(.dropCancel):
-                return .stop("Envoi annulé sur le PC.")
+                return .stop(L("Send cancelled on the PC.", "Envoi annulé sur le PC."))
             case let other:
-                return .stop(Self.detail("vérification", other))
+                return .stop(Self.detail(L("check", "vérification"), other))
             }
         }
         return .skipped
@@ -481,26 +482,26 @@ final class Dropper: ObservableObject {
 
     /// « Liaison perdue », with the step and what happened, to find the cause.
     private func lost(_ step: String, _ e: Event) {
-        finish(.failed(peerCancelled ? "Envoi annulé sur le PC." : Self.detail(step, e)))
+        finish(.failed(peerCancelled ? L("Send cancelled on the PC.", "Envoi annulé sur le PC.") : Self.detail(step, e)))
     }
 
     private static func detail(_ step: String, _ e: Event) -> String {
         let what: String
         switch e {
-        case let .closed(why): what = why ?? "fermée"
-        case .ready: what = "prête"
+        case let .closed(why): what = why ?? L("closed", "fermée")
+        case .ready: what = L("ready", "prête")
         case let .msg(m): what = String("message \(m)".prefix(60))
         }
-        return "Liaison perdue (\(step) · \(what)) : relance l’envoi."
+        return L("Link lost (\(step) · \(what)): start the send again.", "Liaison perdue (\(step) · \(what)) : relance l’envoi.")
     }
 
     private static func why(_ f: PinnedConnection.Failure?) -> String? {
         switch f {
         case .none: return nil
-        case .wrongFingerprint: return "PC inconnu"
-        case .localNetworkDenied: return "réseau local refusé"
+        case .wrongFingerprint: return L("unknown PC", "PC inconnu")
+        case .localNetworkDenied: return L("local network denied", "réseau local refusé")
         case let .network(s): return s
-        case .closed: return "fermée par le PC"
+        case .closed: return L("closed by the PC", "fermée par le PC")
         }
     }
 

@@ -40,61 +40,61 @@ const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
 
 // [group, [[id, name, colour function, vignette 0..1]]]
 const FX_LOOK_GROUPS = [
-  ['Cinéma', [
-    ['tealorange', 'Bleu-orange', (c) => lk.contrast(lk.sat(lk.split(c, hex('#1F6F80'), hex('#F0A060'), 0.6), 1.12), 1.25), 0.3],
+  ['Cinema', [
+    ['tealorange', 'Teal and orange', (c) => lk.contrast(lk.sat(lk.split(c, hex('#1F6F80'), hex('#F0A060'), 0.6), 1.12), 1.25), 0.3],
     ['blockbuster', 'Blockbuster', (c) => lk.contrast(lk.split(lk.sat(c, 0.9), hex('#24515E'), hex('#E8B27A'), 1.1), 1.45), 0.4],
-    ['bleach', 'Sans blanchiment', (c) => lk.contrast(lk.mix(c, lk.bw(c), 0.55), 1.55), 0.25],
-    ['matrix', 'Matrice', (c) => lk.contrast(lk.levels(lk.sat(c, 0.6), [0, 0.03, 0], [0.82, 1, 0.78]), 1.3), 0.35],
-    ['nuit', 'Nuit américaine', (c) => lk.gamma(lk.levels(lk.sat(c, 0.45), [0, 0.02, 0.06], [0.55, 0.7, 0.95]), 0.85), 0.45],
+    ['bleach', 'Bleach bypass', (c) => lk.contrast(lk.mix(c, lk.bw(c), 0.55), 1.55), 0.25],
+    ['matrix', 'Matrix', (c) => lk.contrast(lk.levels(lk.sat(c, 0.6), [0, 0.03, 0], [0.82, 1, 0.78]), 1.3), 0.35],
+    ['nuit', 'Day for night', (c) => lk.gamma(lk.levels(lk.sat(c, 0.45), [0, 0.02, 0.06], [0.55, 0.7, 0.95]), 0.85), 0.45],
     ['western', 'Western', (c) => lk.contrast(lk.split(lk.sat(c, 0.6), hex('#5A3A1E'), hex('#F3C77E'), 1), 1.2), 0.4],
-    ['polar', 'Polar', (c) => lk.contrast(lk.split(lk.sat(c, 0.5), hex('#203540'), hex('#B7C9C2'), 0.9), 1.35), 0.45],
+    ['polar', 'Crime film', (c) => lk.contrast(lk.split(lk.sat(c, 0.5), hex('#203540'), hex('#B7C9C2'), 0.9), 1.35), 0.45],
     ['technicolor', 'Technicolor', (c) => lk.contrast(lk.sat(lk.levels(c, [0.02, 0, 0.03], [1, 0.96, 0.92]), 1.55), 1.15), 0.2],
     ['superhuit', 'Super 8', (c) => lk.contrast(lk.split(lk.levels(lk.sat(c, 0.85), [0.08, 0.06, 0.04], [0.98, 0.92, 0.8]), hex('#3B2A55'), hex('#FFD08A'), 0.6), 1.1), 0.5],
     ['cyberpunk', 'Cyberpunk', (c) => lk.contrast(lk.split(lk.sat(c, 1.2), hex('#1A2BD9'), hex('#FF3FB0'), 0.75), 1.25), 0.35],
-    ['annees80', 'Années 80', (c) => lk.split(lk.sat(lk.levels(c, [0.05, 0.02, 0.08], [1, 0.95, 1]), 1.25), hex('#3F2A8C'), hex('#FF7AB8'), 0.7), 0.25],
-    ['annees70', 'Années 70', (c) => lk.split(lk.levels(lk.sat(c, 0.8), [0.06, 0.05, 0.02], [1, 0.93, 0.78]), hex('#5C4A1A'), hex('#F6B26B'), 0.8), 0.35],
+    ['annees80', '80s', (c) => lk.split(lk.sat(lk.levels(c, [0.05, 0.02, 0.08], [1, 0.95, 1]), 1.25), hex('#3F2A8C'), hex('#FF7AB8'), 0.7), 0.25],
+    ['annees70', '70s', (c) => lk.split(lk.levels(lk.sat(c, 0.8), [0.06, 0.05, 0.02], [1, 0.93, 0.78]), hex('#5C4A1A'), hex('#F6B26B'), 0.8), 0.35],
   ]],
-  ['Pellicules', [
-    ['diapo', 'Diapositive', (c) => lk.contrast(lk.sat(c, 1.35), 1.3), 0.15],
-    ['delave', 'Film délavé', (c) => lk.levels(lk.sat(c, 0.75), [0.12, 0.11, 0.13], [0.95, 0.94, 0.9]), 0.1],
-    ['crossprocess', 'Traitement croisé', (c) => lk.levels(lk.gamma(c, [1.25, 1.1, 0.75]), [0.02, 0, 0.12], [1, 1, 0.82]), 0.2],
+  ['Film rolls', [
+    ['diapo', 'Slide film', (c) => lk.contrast(lk.sat(c, 1.35), 1.3), 0.15],
+    ['delave', 'Faded film', (c) => lk.levels(lk.sat(c, 0.75), [0.12, 0.11, 0.13], [0.95, 0.94, 0.9]), 0.1],
+    ['crossprocess', 'Cross process', (c) => lk.levels(lk.gamma(c, [1.25, 1.1, 0.75]), [0.02, 0, 0.12], [1, 1, 0.82]), 0.2],
     ['lomo', 'Lomo', (c) => lk.contrast(lk.sat(lk.gamma(c, [1.05, 1.1, 0.9]), 1.3), 1.35), 0.6],
-    ['polaroid', 'Instantané', (c) => lk.split(lk.levels(lk.sat(c, 0.85), [0.07, 0.07, 0.1], [0.97, 0.95, 0.88]), hex('#2F5F73'), hex('#FFE0A8'), 0.5), 0.2],
-    ['portra', 'Portrait doux', (c) => lk.split(lk.levels(lk.sat(c, 0.92), [0.04, 0.03, 0.03], [1, 0.97, 0.93]), hex('#4A5A66'), hex('#F7C9A2'), 0.45), 0.1],
-    ['infrarouge', 'Infrarouge', (c) => lk.contrast(lk.sat([c[1], c[0], c[2]], 1.1), 1.15), 0.2],
-    ['negatif', 'Négatif', (c) => c.map((v) => 1 - v), 0],
+    ['polaroid', 'Instant', (c) => lk.split(lk.levels(lk.sat(c, 0.85), [0.07, 0.07, 0.1], [0.97, 0.95, 0.88]), hex('#2F5F73'), hex('#FFE0A8'), 0.5), 0.2],
+    ['portra', 'Soft portrait', (c) => lk.split(lk.levels(lk.sat(c, 0.92), [0.04, 0.03, 0.03], [1, 0.97, 0.93]), hex('#4A5A66'), hex('#F7C9A2'), 0.45), 0.1],
+    ['infrarouge', 'Infrared', (c) => lk.contrast(lk.sat([c[1], c[0], c[2]], 1.1), 1.15), 0.2],
+    ['negatif', 'Negative', (c) => c.map((v) => 1 - v), 0],
   ]],
-  ['Saisons et lumières', [
-    ['heuredoree', 'Heure dorée', (c) => lk.split(lk.sat(lk.gamma(c, [0.92, 1, 1.15]), 1.1), hex('#5A3A2A'), hex('#FFC46B'), 0.9), 0.2],
-    ['heurebleue', 'Heure bleue', (c) => lk.split(lk.gamma(c, [1.12, 1.02, 0.9]), hex('#1D3B7A'), hex('#B9D4FF'), 0.9), 0.25],
-    ['coucher', 'Coucher de soleil', (c) => lk.split(lk.sat(c, 1.2), hex('#5B2A6E'), hex('#FF9A4D'), 1.1), 0.3],
-    ['printemps', 'Printemps', (c) => lk.split(lk.sat(lk.levels(c, [0.03, 0.04, 0.03], [1, 1, 0.97]), 1.15), hex('#4C7A55'), hex('#FFE3EE'), 0.5), 0],
-    ['ete', 'Été', (c) => lk.contrast(lk.sat(lk.gamma(c, [0.95, 0.97, 1.08]), 1.3), 1.1), 0.1],
-    ['automne', 'Automne', (c) => lk.split(lk.sat(lk.gamma(c, [0.9, 1, 1.2]), 1.05), hex('#5E3A1A'), hex('#F0A040'), 0.8), 0.3],
-    ['hiver', 'Hiver', (c) => lk.split(lk.sat(lk.levels(c, [0.04, 0.05, 0.08], [0.95, 0.98, 1]), 0.7), hex('#3A5B80'), hex('#E8F2FF'), 0.6), 0.15],
-    ['foret', 'Forêt', (c) => lk.split(lk.contrast(lk.sat(c, 0.9), 1.15), hex('#21402A'), hex('#E9E0B0'), 0.7), 0.35],
-    ['ocean', 'Océan', (c) => lk.split(lk.sat(c, 1.05), hex('#0F3D5E'), hex('#9FE6E0'), 0.8), 0.25],
-    ['desert', 'Désert', (c) => lk.contrast(lk.split(lk.sat(c, 0.75), hex('#6A4A2A'), hex('#F5D9A0'), 0.9), 1.15), 0.3],
-    ['bougie', 'Bougie', (c) => lk.gamma(lk.levels(lk.sat(c, 0.9), [0.03, 0.01, 0], [1, 0.82, 0.55]), 0.95), 0.45],
-    ['neons', 'Néons de la ville', (c) => lk.contrast(lk.split(lk.sat(c, 1.35), hex('#00C2D1'), hex('#FF4FD8'), 1), 1.2), 0.4],
+  ['Seasons and light', [
+    ['heuredoree', 'Golden hour', (c) => lk.split(lk.sat(lk.gamma(c, [0.92, 1, 1.15]), 1.1), hex('#5A3A2A'), hex('#FFC46B'), 0.9), 0.2],
+    ['heurebleue', 'Blue hour', (c) => lk.split(lk.gamma(c, [1.12, 1.02, 0.9]), hex('#1D3B7A'), hex('#B9D4FF'), 0.9), 0.25],
+    ['coucher', 'Sunset', (c) => lk.split(lk.sat(c, 1.2), hex('#5B2A6E'), hex('#FF9A4D'), 1.1), 0.3],
+    ['printemps', 'Spring', (c) => lk.split(lk.sat(lk.levels(c, [0.03, 0.04, 0.03], [1, 1, 0.97]), 1.15), hex('#4C7A55'), hex('#FFE3EE'), 0.5), 0],
+    ['ete', 'Summer', (c) => lk.contrast(lk.sat(lk.gamma(c, [0.95, 0.97, 1.08]), 1.3), 1.1), 0.1],
+    ['automne', 'Autumn', (c) => lk.split(lk.sat(lk.gamma(c, [0.9, 1, 1.2]), 1.05), hex('#5E3A1A'), hex('#F0A040'), 0.8), 0.3],
+    ['hiver', 'Winter', (c) => lk.split(lk.sat(lk.levels(c, [0.04, 0.05, 0.08], [0.95, 0.98, 1]), 0.7), hex('#3A5B80'), hex('#E8F2FF'), 0.6), 0.15],
+    ['foret', 'Forest', (c) => lk.split(lk.contrast(lk.sat(c, 0.9), 1.15), hex('#21402A'), hex('#E9E0B0'), 0.7), 0.35],
+    ['ocean', 'Ocean', (c) => lk.split(lk.sat(c, 1.05), hex('#0F3D5E'), hex('#9FE6E0'), 0.8), 0.25],
+    ['desert', 'Desert', (c) => lk.contrast(lk.split(lk.sat(c, 0.75), hex('#6A4A2A'), hex('#F5D9A0'), 0.9), 1.15), 0.3],
+    ['bougie', 'Candle', (c) => lk.gamma(lk.levels(lk.sat(c, 0.9), [0.03, 0.01, 0], [1, 0.82, 0.55]), 0.95), 0.45],
+    ['neons', 'City neon', (c) => lk.contrast(lk.split(lk.sat(c, 1.35), hex('#00C2D1'), hex('#FF4FD8'), 1), 1.2), 0.4],
   ]],
-  ['Noir et blanc', [
-    ['nbdoux', 'Doux', (c) => lk.levels(lk.bw(c), [0.06, 0.06, 0.06], [0.96, 0.96, 0.96]), 0.15],
-    ['nbfort', 'Fort', (c) => lk.contrast(lk.bw(c, [0.4, 0.5, 0.1]), 1.7), 0.35],
-    ['nbrouge', 'Filtre rouge', (c) => lk.contrast(lk.bw(c, [0.9, 0.15, -0.05]), 1.3), 0.3],
-    ['selenium', 'Sélénium', (c) => lk.split(lk.contrast(lk.bw(c), 1.2), hex('#3A3550'), hex('#EFE8DC'), 0.5), 0.3],
-    ['sepia', 'Sépia', (c) => lk.ramp(c, [hex('#1A120B'), hex('#7A5634'), hex('#E8D2A8'), hex('#FFF6E4')]), 0.3],
+  ['Black and white', [
+    ['nbdoux', 'Soft', (c) => lk.levels(lk.bw(c), [0.06, 0.06, 0.06], [0.96, 0.96, 0.96]), 0.15],
+    ['nbfort', 'Strong', (c) => lk.contrast(lk.bw(c, [0.4, 0.5, 0.1]), 1.7), 0.35],
+    ['nbrouge', 'Red filter', (c) => lk.contrast(lk.bw(c, [0.9, 0.15, -0.05]), 1.3), 0.3],
+    ['selenium', 'Selenium', (c) => lk.split(lk.contrast(lk.bw(c), 1.2), hex('#3A3550'), hex('#EFE8DC'), 0.5), 0.3],
+    ['sepia', 'Sepia', (c) => lk.ramp(c, [hex('#1A120B'), hex('#7A5634'), hex('#E8D2A8'), hex('#FFF6E4')]), 0.3],
     ['cyanotype', 'Cyanotype', (c) => lk.ramp(c, [hex('#06213F'), hex('#1E5A8C'), hex('#A9CDEB'), hex('#F2F8FF')]), 0.2],
   ]],
-  ['Couleurs folles', [
-    ['rougeseul', 'Seulement le rouge', (c) => lk.only(c, 0, 40), 0],
-    ['bleuseul', 'Seulement le bleu', (c) => lk.only(c, 215, 45), 0],
-    ['duoviolet', 'Duo violet-jaune', (c) => lk.ramp(c, [hex('#2A0F5C'), hex('#B23A8F'), hex('#FFE066')]), 0],
-    ['duorose', 'Duo bleu-rose', (c) => lk.ramp(c, [hex('#0B1F5C'), hex('#3D7BFF'), hex('#FF8FC7')]), 0],
-    ['thermique', 'Caméra thermique', (c) => lk.ramp(c, [hex('#000010'), hex('#2B00A0'), hex('#C0007A'), hex('#FF5A00'), hex('#FFE000'), hex('#FFFFFF')]), 0],
+  ['Crazy colors', [
+    ['rougeseul', 'Only red', (c) => lk.only(c, 0, 40), 0],
+    ['bleuseul', 'Only blue', (c) => lk.only(c, 215, 45), 0],
+    ['duoviolet', 'Purple-yellow duo', (c) => lk.ramp(c, [hex('#2A0F5C'), hex('#B23A8F'), hex('#FFE066')]), 0],
+    ['duorose', 'Blue-pink duo', (c) => lk.ramp(c, [hex('#0B1F5C'), hex('#3D7BFF'), hex('#FF8FC7')]), 0],
+    ['thermique', 'Thermal camera', (c) => lk.ramp(c, [hex('#000010'), hex('#2B00A0'), hex('#C0007A'), hex('#FF5A00'), hex('#FFE000'), hex('#FFFFFF')]), 0],
     ['popart', 'Pop art', (c) => lk.poster(lk.sat(c, 1.8), 3), 0],
-    ['bonbon', 'Bonbon', (c) => lk.split(lk.sat(lk.levels(c, [0.08, 0.04, 0.08], [1, 0.95, 1]), 1.3), hex('#7B3FBF'), hex('#FFB3D9'), 0.9), 0],
-    ['menthe', 'Menthe', (c) => lk.split(lk.sat(c, 0.9), hex('#1E5A4A'), hex('#C8FFE6'), 0.8), 0.1],
+    ['bonbon', 'Candy', (c) => lk.split(lk.sat(lk.levels(c, [0.08, 0.04, 0.08], [1, 0.95, 1]), 1.3), hex('#7B3FBF'), hex('#FFB3D9'), 0.9), 0],
+    ['menthe', 'Mint', (c) => lk.split(lk.sat(c, 0.9), hex('#1E5A4A'), hex('#C8FFE6'), 0.8), 0.1],
   ]],
 ];
 const FX_LOOKS = FX_LOOK_GROUPS.flatMap(([, list]) => list);
@@ -126,7 +126,7 @@ function makeLooks(n) {
   const luts = {};
   const init = () => {
     gl = cv.getContext('webgl', { alpha: false, antialias: false, depth: false, premultipliedAlpha: false });
-    if (!gl) throw new Error('WebGL absent');
+    if (!gl) throw new Error(t('WebGL missing'));
     const sh = (type, src) => {
       const s = gl.createShader(type);
       gl.shaderSource(s, src);
@@ -202,7 +202,7 @@ function makeLooks(n) {
         return cv;
       } catch (e) {
         broken = true;
-        if (typeof Effects !== 'undefined') Effects.error = 'Looks cinéma indisponibles : ' + (e && e.message ? e.message : e);
+        if (typeof Effects !== 'undefined') Effects.error = t('Movie looks unavailable: {why}', { why: e && e.message ? e.message : e });
         return null;
       }
     },

@@ -31,25 +31,127 @@ Pair your iPhone with your Windows PC with a QR code. Use it as a 4K60 webcam in
 | 🔋 **Phone status** | Battery, temperature and storage of the iPhone, right on the PC. |
 | 🔒 **Private by design** | QR code pairing, TLS 1.3 with pinned keys, local network or USB cable only. No account, no server, no telemetry. |
 | 🔄 **Auto updates** | The PC app offers each new release in one click. SideStore shows iPhone updates. |
+| 🌍 **English and French** | English by default. The PC app switches to French in Settings; the iPhone app follows the iPhone's language. |
 
 ## Install
 
-You need a **Windows 11 PC**, an **iPhone on iOS 17 or later**, a USB cable for the first setup, and a free Apple ID.
+**What you need:** a Windows 11 PC, an iPhone on iOS 17 or later, its USB cable, and about 30 minutes. Everything is free. You only do this once.
 
-**PC**
-1. Download `Hyphn_<version>_x64-setup.exe` from the [latest release](https://github.com/1oma1e/Hyphn/releases/latest) and run it.
-2. Windows SmartScreen: **More info** → **Run anyway** (the app is not code-signed yet). Accept the admin prompt once: it installs the webcam.
+Hyphn is not on the App Store: the iPhone app is installed with **SideStore**, using a free Apple account made just for it.
 
-**iPhone** (Hyphn is not on the App Store, it is installed with [SideStore](https://sidestore.io))
-1. Install SideStore once with [iloader](https://iloader.app) from your PC.
-2. In SideStore, add this source to get Hyphn and its updates:
+### 1. Create a spare Apple account (on the PC)
+
+This account is only used to install Hyphn. Your real Apple account is never used.
+
+1. Go to [account.apple.com](https://account.apple.com) and click **Create Your Apple Account**.
+2. Fill in your name, country, birth date, a **new email address**, a new password and your phone number.
+3. Type the code you get by email, then the one you get by text message.
+
+✅ Your Apple ID is this email. Write it down with the password.
+
+### 2. Install Hyphn on the PC
+
+1. Open the [latest release](https://github.com/1oma1e/Hyphn/releases/latest).
+2. Under **Assets**, download `Hyphn_<version>_x64-setup.exe` and open it.
+3. Blue window "Windows protected your PC"? Click **More info**, then **Run anyway**.
+4. Click **Yes**, then **Next**, **Install** and **Finish**.
+5. A firewall window? Click **Allow**.
+6. Open the **Microsoft Store**, search for **Apple Devices** and click **Get**. (It lets the PC talk to the iPhone over the cable.)
+
+### 3. Get the iPhone ready
+
+1. The iPhone needs a passcode: **Settings** › **Face ID & Passcode**.
+2. Plug the iPhone into the PC. On the iPhone, tap **Trust**, then type your passcode.
+
+### 4. Install SideStore (on the PC)
+
+1. Download **iloader** from [iloader.app](https://iloader.app) and install it.
+2. Open iloader and sign in with the email and password from step 1.
+3. Got a 6-digit code? Type it in iloader.
+4. Choose **SideStore (Stable)** in the installers list.
+5. Wait for the message that SideStore is installed.
+
+### 5. Allow SideStore (on the iPhone)
+
+1. **Settings** › **Privacy & Security** › **Developer Mode**: turn it on, then tap **Restart**.
+2. After the restart, tap **Turn On** and type your passcode.
+3. **Settings** › **General** › **VPN & Device Management**.
+4. Tap your email, then **Trust**, and **Trust** again.
+
+### 6. Local VPN (on the iPhone)
+
+SideStore needs it. Nothing goes to the internet: it stays on your iPhone.
+
+1. Install **LocalDevVPN** from the App Store.
+2. Open it, tap connect, then **Allow** and type your passcode.
+
+✅ "VPN" shows at the top of the screen.
+
+### 7. Install Hyphn (on the iPhone)
+
+1. Open **SideStore**, go to the **Sources** tab and tap **+**.
+2. Paste this address and confirm:
    ```
    https://raw.githubusercontent.com/1oma1e/Hyphn/main/source.json
    ```
-3. Install **Hyphn** from the source, open it and scan the QR code shown by the PC app.
+3. Go to the **Browse** tab, tap **Hyphn**, then **FREE**.
 
-> [!NOTE]
-> With a free Apple ID, iOS asks for a refresh of sideloaded apps every 7 days. SideStore does it in one tap (**Refresh All**).
+✅ Hyphn is on your home screen.
+
+### 8. Pair the PC and the iPhone
+
+1. PC: open Hyphn and click **Pair an iPhone**. A QR code shows up.
+2. iPhone: open Hyphn. It says **Scan your PC's QR code**: point it at the code on the PC.
+3. Allow **Local Network** and **Camera** when asked.
+4. Check that the PC and the iPhone show the same 4-digit code, then tap **Yes, Pair** on the iPhone.
+
+✅ They are paired, and they reconnect on their own from now on.
+
+### 9. Use it in Discord
+
+**User Settings** › **Voice & Video** › **Camera** › **Hyphn**. Teams, OBS and other apps work the same way.
+
+### Good to know
+
+- ⏰ **Every 7 days**, apps installed with a free Apple account must be refreshed: connect LocalDevVPN, then **SideStore** › **My Apps** › **Refresh All**. If you forget, Hyphn won't open, but nothing is lost: **Refresh All** fixes it. To never think about it, set up the shortcut below.
+- 💻 **PC updates**: a card shows up when Hyphn starts › **Install**.
+- 📱 **iPhone updates**: **SideStore** › **My Apps** › **Update**.
+- 🔑 Always keep the **same Apple account** in SideStore.
+- 🌍 Hyphn is in English. To switch the PC app to French: **Settings** › **Language** › **Français**. The iPhone app follows the iPhone's language.
+
+<details>
+<summary><b>🔁 Refresh Hyphn automatically (5 minutes, once)</b></summary>
+
+This shortcut does the 7-day refresh for you, twice a week.
+
+**1. Create the shortcut**
+1. Open the **Shortcuts** app, **Shortcuts** tab, tap **+** at the top right.
+2. Tap the name at the top › **Rename** › type `Refresh Hyphn`.
+3. Add these 5 actions in this order (use the search bar at the bottom):
+   1. **Set VPN**: tap **VPN** and pick **LocalDevVPN**, set it to **Connect**.
+   2. **Wait**: **3** seconds.
+   3. **Refresh All Apps** (from SideStore).
+   4. **Set VPN** again: **LocalDevVPN**, **Disconnect**.
+   5. **Show Notification**, with the text `✅ Hyphn refreshed for 7 days`.
+4. Tap **Done**.
+
+**2. Test it once**
+
+Tap the **Refresh Hyphn** shortcut.
+✅ The VPN turns on, SideStore refreshes, the VPN turns off, then the notification shows up.
+If iOS asks for access to SideStore or the VPN: **Always Allow**.
+
+**3. Make it run on its own**
+1. **Shortcuts** › **Automation** tab › **+**.
+2. **Time of Day** › **20:00** › **Weekly** › tick **Monday** and **Thursday**.
+3. Choose **Run Immediately**.
+4. Turn off **Notify When Run** (your own notification is enough).
+5. **Next** › pick **Refresh Hyphn**.
+
+✅ The refresh now happens twice a week without you touching anything.
+
+⚠️ If one day the ✅ notification does not come: open **SideStore** › **My Apps** › **Refresh All** by hand.
+</details>
 
 ## How it works
 

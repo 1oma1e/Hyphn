@@ -95,7 +95,7 @@ final class PinnedConnection {
 
     /// The PC did not open it in time.
     func giveUpWaiting() {
-        if nw == nil { finish(.network("Câble : le PC n’a pas ouvert la connexion.")) }
+        if nw == nil { finish(.network(L("Cable: the PC didn't open the connection.", "Câble : le PC n’a pas ouvert la connexion."))) }
     }
 
     convenience init(host: String, port: UInt16, pinned: Data, identity: DeviceIdentity, serviceClass: NWParameters.ServiceClass = .responsiveData) {

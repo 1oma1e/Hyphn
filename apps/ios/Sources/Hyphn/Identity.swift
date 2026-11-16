@@ -192,9 +192,9 @@ struct PairOffer {
 
         var message: String {
             switch self {
-            case .notHyphn: "Ce QR code ne vient pas de Hyphn."
-            case .malformed: "Ce QR code est abîmé."
-            case .wrongVersion: "Versions différentes : mets à jour Hyphn sur le PC et l’iPhone."
+            case .notHyphn: L("This QR code isn't from Hyphn.", "Ce QR code ne vient pas de Hyphn.")
+            case .malformed: L("This QR code is damaged.", "Ce QR code est abîmé.")
+            case .wrongVersion: L("Different versions: update Hyphn on the PC and the iPhone.", "Versions différentes : mets à jour Hyphn sur le PC et l’iPhone.")
             }
         }
     }

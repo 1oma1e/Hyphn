@@ -37,7 +37,7 @@ struct Lang {
     bool whole;
 };
 const Lang kLangs[] = {
-    {L"Je reviens bientôt", L"fr-fr", false}, {L"Be right back", L"en-us", false},
+    {L"Be right back", L"en-us", false},      {L"Je reviens bientôt", L"fr-fr", false},
     {L"Vuelvo enseguida", L"es-es", false},   {L"Bin gleich zurück", L"de-de", false},
     {L"Torno subito", L"it-it", false},       {L"Volto já", L"pt-pt", false},
     {L"Ben zo terug", L"nl-nl", false},       {L"Zaraz wracam", L"pl-pl", false},
@@ -1106,7 +1106,7 @@ HRESULT Feed::DrawWait(const WaitState& st, bool /*videoExpected*/) {
 
     const bool own = st.lines.size() >= 2;
     const int lineCount = own ? static_cast<int>(st.lines.size()) : kLangCount;
-    if (!(st.multi && (st.message == kLangs[0].text || own))) {
+    if (!(st.multi && (st.message == kLangs[0].text || st.message == kLangs[1].text || own))) {
         // A message of the user's own: still, wrapped if long.
         if (auto f = format(L"fr-fr", size)) {
             f->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);

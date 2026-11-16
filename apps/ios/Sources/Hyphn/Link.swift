@@ -92,12 +92,12 @@ final class PCLink: ObservableObject {
         endBackgroundTask()
         info.start()
         if let identity { cable.start(identity: identity) }
-        log("Hyphn au premier plan")
+        log(L("Hyphn in the foreground", "Hyphn au premier plan"))
         if session != nil {
             // The PC pings every 5 s: quiet for longer, the link died while
             // away (sleep, Wi-Fi): start again now, not after the watchdog.
             if Date().timeIntervalSince(lastHeard) > 7 {
-                log("Liaison muette au retour : reconnexion")
+                log(L("Link silent on return: reconnecting", "Liaison muette au retour : reconnexion"))
                 reconnectNow()
                 return
             }
@@ -113,7 +113,7 @@ final class PCLink: ObservableObject {
     /// link closes cleanly before the app is suspended.
     func enterBackground() {
         foreground = false
-        log("Hyphn en arrière-plan")
+        log(L("Hyphn in the background", "Hyphn en arrière-plan"))
         info.stop()
         stopSearch()
         retry?.cancel()
@@ -131,7 +131,7 @@ final class PCLink: ObservableObject {
 
     private func backgroundExpired() {
         if !foreground {
-            log("Arrière-plan trop long : liaison fermée")
+            log(L("Background too long: link closed", "Arrière-plan trop long : liaison fermée"))
             session?.close()
             session = nil
             viaCable = false
@@ -188,7 +188,7 @@ final class PCLink: ObservableObject {
             return
         }
         guard let identity else {
-            pairStep = .failed("Hyphn n’a pas pu créer son certificat sur cet iPhone.")
+            pairStep = .failed(L("Hyphn couldn't create its certificate on this iPhone.", "Hyphn n’a pas pu créer son certificat sur cet iPhone."))
             return
         }
         pairStep = .connecting(host: offer.host, secured: false)
@@ -207,7 +207,7 @@ final class PCLink: ObservableObject {
             guard !Task.isCancelled, let self, self.pairing?.conn === c, case .connecting = self.pairStep else { return }
             self.pairing = nil
             c.close()
-            self.pairStep = .failed("Le PC ne répond pas. Vérifie que Hyphn est ouvert sur le PC et que les deux sont sur le même Wi-Fi.")
+            self.pairStep = .failed(L("The PC isn't answering. Check that Hyphn is open on the PC and that both are on the same Wi-Fi.", "Le PC ne répond pas. Vérifie que Hyphn est ouvert sur le PC et que les deux sont sur le même Wi-Fi."))
         }
     }
 
@@ -249,7 +249,7 @@ final class PCLink: ObservableObject {
         case let .refused(_, message):
             pairing = nil
             c.close()
-            pairStep = .failed(message.isEmpty ? "Le PC a refusé." : message)
+            pairStep = .failed(message.isEmpty ? L("The PC refused.", "Le PC a refusé.") : message)
         default:
             break
         }
@@ -293,7 +293,7 @@ final class PCLink: ObservableObject {
         retry?.cancel()
         stopSearch()
         phase = .searching
-        log("Recherche du PC…")
+        log(L("Looking for the PC…", "Recherche du PC…"))
         // E3: the last known address (none yet after a pairing by cable)...
         if !pc.host.isEmpty {
             tryConnect(PinnedConnection(host: pc.host, port: pc.port, pinned: pc.fingerprint, identity: identity))
@@ -310,8 +310,8 @@ final class PCLink: ObservableObject {
             try? await Task.sleep(for: .seconds(10))
             guard !Task.isCancelled, let self, self.session == nil else { return }
             self.stopSearch()
-            self.log("PC introuvable en 10 s, nouvel essai dans 5 s")
-            self.phase = .offline("PC introuvable. Vérifie que Hyphn est ouvert sur le PC et que les deux sont sur le même Wi-Fi.")
+            self.log(L("PC not found in 10 s, trying again in 5 s", "PC introuvable en 10 s, nouvel essai dans 5 s"))
+            self.phase = .offline(L("PC not found. Check that Hyphn is open on the PC and that both are on the same Wi-Fi.", "PC introuvable. Vérifie que Hyphn est ouvert sur le PC et que les deux sont sur le même Wi-Fi."))
             self.scheduleRetry()
         }
     }
@@ -367,7 +367,7 @@ final class PCLink: ObservableObject {
             if failure == .wrongFingerprint, self.session == nil {
                 // Spec `Core - Reconnexion`, E4: never accept silently.
                 self.stopSearch()
-                self.phase = .offline("Ce PC a changé : relie-le à nouveau avec un QR.")
+                self.phase = .offline(L("This PC has changed: pair it again with a QR code.", "Ce PC a changé : relie-le à nouveau avec un QR."))
             }
         }
         c.start()
@@ -396,7 +396,7 @@ final class PCLink: ObservableObject {
         }
         let c = PinnedConnection(cable: nw)
         if pc != nil {
-            log("Câble : PC trouvé")
+            log(L("Cable: PC found", "Câble : PC trouvé"))
             tryConnect(c)
             return
         }
@@ -404,11 +404,11 @@ final class PCLink: ObservableObject {
         // stay. From the welcome or the scan screen: RootView opens the scan
         // screen, where the code is shown.
         guard pairing == nil, case .idle = pairStep else {
-            log("Câble : PC refusé (appairage déjà en cours)")
+            log(L("Cable: PC refused (pairing already in progress)", "Câble : PC refusé (appairage déjà en cours)"))
             nw.cancel()
             return
         }
-        log("Câble : PC trouvé, appairage")
+        log(L("Cable: PC found, pairing", "Câble : PC trouvé, appairage"))
         pairing = (c, nil)
         pairStep = .connecting(host: Self.cableHost, secured: false)
         c.onReady = { [weak self] in
@@ -457,7 +457,7 @@ final class PCLink: ObservableObject {
         if !attempts.contains(where: { $0 === c }) { attempts.append(c) }
         c.onMessage = { [weak self] m in self?.handle(m) }
         c.onClose = { [weak self] failure in self?.sessionClosed(c, failure) }
-        log(c.viaCable ? "Relié à \(pcName) par câble" : "Relié à \(pcName) en Wi-Fi")
+        log(c.viaCable ? L("Linked to \(pcName) by cable", "Relié à \(pcName) par câble") : L("Linked to \(pcName) over Wi-Fi", "Relié à \(pcName) en Wi-Fi"))
         watch(c)
         stopSearch()
         phase = .online
@@ -479,7 +479,7 @@ final class PCLink: ObservableObject {
                 try? await Task.sleep(for: .seconds(5))
                 guard let self, self.session === c else { return }
                 if Date().timeIntervalSince(self.lastHeard) > 15 {
-                    self.log("Rien reçu du PC depuis 15 s : liaison fermée")
+                    self.log(L("Nothing from the PC for 15 s: link closed", "Rien reçu du PC depuis 15 s : liaison fermée"))
                     c.close()
                     return
                 }
@@ -491,16 +491,16 @@ final class PCLink: ObservableObject {
         attempts.removeAll { $0 === c }
         guard session === c else { return }
         switch failure {
-        case let .network(e): log("Liaison coupée (\(e))")
-        case .closed: log("Liaison fermée par le PC")
-        default: log("Liaison fermée")
+        case let .network(e): log(L("Link cut (\(e))", "Liaison coupée (\(e))"))
+        case .closed: log(L("Link closed by the PC", "Liaison fermée par le PC"))
+        default: log(L("Link closed", "Liaison fermée"))
         }
         session = nil
         viaCable = false
-        if c.viaCable { log("Câble débranché : retour au Wi-Fi") }
+        if c.viaCable { log(L("Cable unplugged: back to Wi-Fi", "Câble débranché : retour au Wi-Fi")) }
         camera?.stopStreaming()
         if foreground, pc != nil {
-            phase = .offline("Connexion perdue.")
+            phase = .offline(L("Connection lost.", "Connexion perdue."))
             reconnect()
         }
     }
@@ -518,7 +518,7 @@ final class PCLink: ObservableObject {
             camera?.requestKey()
         case .forget:
             session?.close()
-            forgetLocally(notice: "\(pcName) a oublié cet iPhone.")
+            forgetLocally(notice: L("\(pcName) forgot this iPhone.", "\(pcName) a oublié cet iPhone."))
         default:
             break
         }
@@ -584,12 +584,12 @@ final class PCLink: ObservableObject {
 
     static func text(for failure: PinnedConnection.Failure?, pairing: Bool) -> String {
         switch failure {
-        case .wrongFingerprint: return "Ce QR ne vient pas de ce PC. Scanne celui affiché par Hyphn sur ton PC."
-        case .localNetworkDenied: return "Autorise le réseau local dans Settings › Hyphn › Local Network, sinon le PC reste invisible."
+        case .wrongFingerprint: return L("This QR code isn't from this PC. Scan the one Hyphn shows on your PC.", "Ce QR ne vient pas de ce PC. Scanne celui affiché par Hyphn sur ton PC.")
+        case .localNetworkDenied: return L("Allow Local Network in Settings › Hyphn › Local Network, or the PC stays invisible.", "Autorise le réseau local dans Settings › Hyphn › Local Network, sinon le PC reste invisible.")
         case .network, .none, .closed:
             return pairing
-                ? "Je n’arrive pas à joindre ton PC. Vérifie que l’iPhone et le PC sont sur le même Wi-Fi."
-                : "Connexion perdue."
+                ? L("Can't reach your PC. Check that the iPhone and the PC are on the same Wi-Fi.", "Je n’arrive pas à joindre ton PC. Vérifie que l’iPhone et le PC sont sur le même Wi-Fi.")
+                : L("Connection lost.", "Connexion perdue.")
         }
     }
 }

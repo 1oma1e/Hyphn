@@ -28,7 +28,7 @@ pub async fn update_check(app: AppHandle) -> Result<Option<Available>, String> {
 /// setup closes Hyphn itself; elsewhere it restarts here.
 #[tauri::command]
 pub async fn update_install(app: AppHandle) -> Result<(), String> {
-    let update = newer(&app).await?.ok_or("Hyphn est déjà à jour.")?;
+    let update = newer(&app).await?.ok_or(crate::i18n::tr("Hyphn is already up to date.", "Hyphn est déjà à jour."))?;
     let mut done: u64 = 0;
     update
         .download_and_install(
