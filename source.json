@@ -21,6 +21,15 @@
       "category": "photo-video",
       "versions": [
         {
+          "version": "0.10.0",
+          "buildVersion": "17",
+          "date": "2026-11-16",
+          "localizedDescription": "Hyphn is now in English. On the PC, switch to French in Settings > Language; the iPhone app follows the iPhone's language. Fixed the pairing steps shown on the PC.",
+          "downloadURL": "https://github.com/1oma1e/Hyphn/releases/download/v0.3.0/Hyphn_0.10.0.ipa",
+          "size": 2953137,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.9.1",
           "buildVersion": "16",
           "date": "2026-11-16",
