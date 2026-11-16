@@ -1086,20 +1086,20 @@ HRESULT Feed::DrawWait(const WaitState& st, bool /*videoExpected*/) {
     IDWriteFontCollection* family = fonts_ ? fonts_.Get() : nullptr;
     const float size = std::min(92 * s, W * 0.074f);
     const float textY = 495 * s;
-    auto format = [&](const wchar_t* locale) {
+    auto format = [&](const wchar_t* locale, float sz) {
         ComPtr<IDWriteTextFormat> f;
         if (SUCCEEDED(dwrite_->CreateTextFormat(family ? L"Geist" : L"Segoe UI", family, DWRITE_FONT_WEIGHT_EXTRA_LIGHT, DWRITE_FONT_STYLE_NORMAL,
-                                                DWRITE_FONT_STRETCH_NORMAL, size, locale, &f))) {
+                                                DWRITE_FONT_STRETCH_NORMAL, sz, locale, &f))) {
             f->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
             f->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
         }
         return f;
     };
-    auto layoutOf = [&](IDWriteTextFormat* f, const wchar_t* text, UINT32 n, float boxW) {
+    auto layoutOf = [&](IDWriteTextFormat* f, const wchar_t* text, UINT32 n, float boxW, float sz) {
         ComPtr<IDWriteTextLayout> l;
-        if (SUCCEEDED(dwrite_->CreateTextLayout(text, n, f, boxW, size * 1.6f, &l))) {
+        if (SUCCEEDED(dwrite_->CreateTextLayout(text, n, f, boxW, sz * 1.6f, &l))) {
             ComPtr<IDWriteTextLayout1> l1;
-            if (SUCCEEDED(l.As(&l1))) l1->SetCharacterSpacing(0, -0.04f * size, 0, DWRITE_TEXT_RANGE{0, n});
+            if (SUCCEEDED(l.As(&l1))) l1->SetCharacterSpacing(0, -0.04f * sz, 0, DWRITE_TEXT_RANGE{0, n});
         }
         return l;
     };
@@ -1108,7 +1108,7 @@ HRESULT Feed::DrawWait(const WaitState& st, bool /*videoExpected*/) {
     const int lineCount = own ? static_cast<int>(st.lines.size()) : kLangCount;
     if (!(st.multi && (st.message == kLangs[0].text || own))) {
         // A message of the user's own: still, wrapped if long.
-        if (auto f = format(L"fr-fr")) {
+        if (auto f = format(L"fr-fr", size)) {
             f->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
             f->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
             ComPtr<IDWriteTextLayout> l;
@@ -1135,25 +1135,39 @@ HRESULT Feed::DrawWait(const WaitState& st, bool /*videoExpected*/) {
             const wchar_t* locale = own ? st.lines[li].locale.c_str() : kLangs[li].locale;
             const bool whole = own ? st.lines[li].whole : kLangs[li].whole;
             const double local = ph + back * kLangSeconds;
-            auto f = format(locale);
-            if (!f) continue;
             const UINT32 n = static_cast<UINT32>(wcslen(text));
             if (!n) continue;
-            auto full = layoutOf(f.Get(), text, n, 100000.f);
-            if (!full) continue;
-            // Per letter: [start, length] in the text and its advance.
+            // Per letter: [start, length] in the text and its advance, at font size sz.
+            float sz = size;
+            ComPtr<IDWriteTextFormat> f;
             std::vector<DWRITE_CLUSTER_METRICS> clusters(n);
             UINT32 count = 0;
-            if (whole || FAILED(full->GetClusterMetrics(clusters.data(), n, &count))) {
-                DWRITE_TEXT_METRICS m{};
-                full->GetMetrics(&m);
-                clusters.assign(1, DWRITE_CLUSTER_METRICS{});
-                clusters[0].width = m.widthIncludingTrailingWhitespace;
-                clusters[0].length = static_cast<UINT16>(n);
-                count = 1;
-            }
             float lineW = 0;
-            for (UINT32 i = 0; i < count; ++i) lineW += clusters[i].width;
+            auto measure = [&]() {
+                f = format(locale, sz);
+                auto full = f ? layoutOf(f.Get(), text, n, 100000.f, sz) : nullptr;
+                if (!full) return false;
+                clusters.assign(n, DWRITE_CLUSTER_METRICS{});
+                if (whole || FAILED(full->GetClusterMetrics(clusters.data(), n, &count))) {
+                    DWRITE_TEXT_METRICS m{};
+                    full->GetMetrics(&m);
+                    clusters.assign(1, DWRITE_CLUSTER_METRICS{});
+                    clusters[0].width = m.widthIncludingTrailingWhitespace;
+                    clusters[0].length = static_cast<UINT16>(n);
+                    count = 1;
+                }
+                lineW = 0;
+                for (UINT32 i = 0; i < count; ++i) lineW += clusters[i].width;
+                return true;
+            };
+            if (!measure()) continue;
+            // A sentence wider than the picture shrinks until it fits, on one
+            // line, like in the Hyphn window (fitWait in app.js).
+            const float maxW = W * 0.92f;
+            if (lineW > maxW) {
+                sz = size * maxW / lineW;
+                if (!measure()) continue;
+            }
             float x = cx - lineW / 2;
             UINT32 pos = 0;
             for (UINT32 i = 0; i < count; ++i) {
@@ -1172,9 +1186,9 @@ HRESULT Feed::DrawWait(const WaitState& st, bool /*videoExpected*/) {
                     dy = static_cast<float>(-e * 11 * s);
                 }
                 if (a > 0.003f) {
-                    auto one = layoutOf(f.Get(), text + pos, c.length, c.width + size);
+                    auto one = layoutOf(f.Get(), text + pos, c.length, c.width + sz, sz);
                     if (one)
-                        if (auto br = solid(0xF1F3F6, a)) dc_->DrawTextLayout(D2D1::Point2F(x, textY - size * 0.8f + dy), one.Get(), br.Get(), D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+                        if (auto br = solid(0xF1F3F6, a)) dc_->DrawTextLayout(D2D1::Point2F(x, textY - sz * 0.8f + dy), one.Get(), br.Get(), D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
                 }
                 x += c.width;
                 pos += c.length;

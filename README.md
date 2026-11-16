@@ -12,6 +12,7 @@ Pair your iPhone with your Windows PC with a QR code. Use it as a 4K60 webcam in
 ![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?style=flat-square&logo=windows11&logoColor=white)
 ![iOS 17+](https://img.shields.io/badge/iOS-17%2B-111?style=flat-square&logo=apple&logoColor=white)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB?style=flat-square&logo=tauri&logoColor=white)
+[![License: PolyForm Strict](https://img.shields.io/badge/license-PolyForm%20Strict-lightgrey?style=flat-square)](LICENSE.md)
 
 [**Download**](https://github.com/1oma1e/Hyphn/releases/latest) · [Install](#install) · [Features](#features) · [Build from source](#build-from-source)
 
@@ -111,6 +112,16 @@ tools               Build, release and docs scripts
 ## Status
 
 Personal project, in active development. Tested on an iPhone 16 Pro Max and Windows 11. Android may come later.
+
+## License
+
+Hyphn is **source-available, not open source**: [PolyForm Strict 1.0.0](LICENSE.md).
+
+- ✅ You may download, install and use Hyphn for free, for any non-commercial purpose.
+- ✅ You may read the code to learn from it.
+- ❌ You may not redistribute it, modify it, build on it, or sell it.
+
+Copyright © 2026 [1oma1e](https://github.com/1oma1e). For any other use, open an issue to ask.
 
 ## Credits
 

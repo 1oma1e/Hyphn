@@ -99,33 +99,36 @@ fn for_desktop(r: &Record) -> bool {
     r.filter_expression.is_empty() || r.filter_expression == "env.appinfo.OS != 'Android'"
 }
 
-/// The newest file of each kind for one pair.
-fn pick(records: &[Record], from: &str, to: &str) -> Vec<Record> {
-    let mut best: BTreeMap<&str, &Record> = BTreeMap::new();
-    for r in records.iter().filter(|r| r.source == from && r.target == to && for_desktop(r)) {
-        match best.get(r.file_type.as_str()) {
-            Some(b) if version(&b.version) >= version(&r.version) => {}
-            _ => {
-                best.insert(&r.file_type, r);
-            }
-        }
-    }
-    best.into_values().cloned().collect()
+/// A set of files a model can run with: the model and its vocabulary
+/// (one shared file, or one per language).
+fn whole_set(rs: &[Record]) -> bool {
+    let has = |k: &str| rs.iter().any(|r| r.file_type == k);
+    has("model") && (has("vocab") || (has("srcvocab") && has("trgvocab")))
 }
 
-/// The files of one pair to use: those already whole on disk, so a newer
+/// The newest whole set of files for one pair, all of one version (the kinds
+/// of files change between versions): a PC one first, else Android's, since
+/// Mozilla sometimes lists a PC model without its vocabulary (English → Russian
+/// 3.0, 2026-11-16). Empty when the pair has no whole set.
+fn pick(records: &[Record], from: &str, to: &str) -> Vec<Record> {
+    let mut sets: BTreeMap<(bool, (u32, u32)), BTreeMap<&str, &Record>> = BTreeMap::new();
+    for r in records.iter().filter(|r| r.source == from && r.target == to) {
+        sets.entry((for_desktop(r), version(&r.version))).or_default().entry(r.file_type.as_str()).or_insert(r);
+    }
+    sets.into_values()
+        .rev()
+        .map(|set| set.into_values().cloned().collect::<Vec<_>>())
+        .find(|set| whole_set(set))
+        .unwrap_or_default()
+}
+
+/// The files of one pair to use: a whole set already on disk, so a newer
 /// version published by Mozilla never makes an installed language download
 /// again; else the newest (to download).
 fn choose(dir: &Path, records: &[Record], from: &str, to: &str) -> Vec<Record> {
-    let newest = pick(records, from, to);
     let on_disk: Vec<Record> = records.iter().filter(|r| local(dir, r).exists()).cloned().collect();
     let have = pick(&on_disk, from, to);
-    let same_kinds = |a: &[Record], b: &[Record]| a.iter().all(|x| b.iter().any(|y| y.file_type == x.file_type));
-    if !have.is_empty() && have.iter().any(|r| r.file_type == "model") && same_kinds(&newest, &have) {
-        have
-    } else {
-        newest
-    }
+    if have.is_empty() { pick(records, from, to) } else { have }
 }
 
 /// The engine: the newest one on disk, else the newest published.
@@ -292,12 +295,9 @@ pub fn known(dir: &Path) -> Vec<String> {
     let Ok(models) = records(dir, MODELS, false) else {
         return vec![];
     };
-    let mut out: BTreeSet<String> = models
-        .iter()
-        .filter(|r| r.source == PIVOT && r.file_type == "model" && for_desktop(r))
-        .map(|r| lang_of(&r.target))
-        .collect();
-    if models.iter().any(|r| r.source == SOURCE && r.target == PIVOT && r.file_type == "model") {
+    let targets: BTreeSet<&str> = models.iter().filter(|r| r.source == PIVOT).map(|r| r.target.as_str()).collect();
+    let mut out: BTreeSet<String> = targets.into_iter().filter(|t| !pick(&models, PIVOT, t).is_empty()).map(lang_of).collect();
+    if !pick(&models, SOURCE, PIVOT).is_empty() {
         out.insert(PIVOT.to_string());
     }
     out.into_iter().collect()
@@ -390,6 +390,36 @@ mod tests {
     }
 
     #[test]
+    fn a_pc_model_without_vocabulary_takes_the_whole_android_set() {
+        let android = "env.appinfo.OS == 'Android'";
+        let pc = "env.appinfo.OS != 'Android'";
+        let r = vec![
+            rec("model.enru.3.0", "model", "3.0", "en", "ru", pc),
+            rec("lex.enru.3.0", "lex", "3.0", "en", "ru", pc),
+            rec("model.enru.3.1", "model", "3.1", "en", "ru", android),
+            rec("lex.enru.3.1", "lex", "3.1", "en", "ru", android),
+            rec("vocab.enru.3.1", "vocab", "3.1", "en", "ru", android),
+        ];
+        let names: Vec<_> = pick(&r, "en", "ru").into_iter().map(|r| r.name).collect();
+        assert_eq!(names, vec!["lex.enru.3.1", "model.enru.3.1", "vocab.enru.3.1"]);
+    }
+
+    #[test]
+    fn files_of_two_versions_are_never_mixed() {
+        let r = vec![
+            rec("model.enja.1", "model", "1.0", "en", "ja", ""),
+            rec("vocab.enja.1", "vocab", "1.0", "en", "ja", ""),
+            rec("model.enja.2", "model", "2.0", "en", "ja", ""),
+            rec("srcvocab.enja.2", "srcvocab", "2.0", "en", "ja", ""),
+            rec("trgvocab.enja.2", "trgvocab", "2.0", "en", "ja", ""),
+        ];
+        let names: Vec<_> = pick(&r, "en", "ja").into_iter().map(|r| r.name).collect();
+        assert_eq!(names, vec!["model.enja.2", "srcvocab.enja.2", "trgvocab.enja.2"]);
+        // Nothing whole: nothing picked, the language keeps the typed text.
+        assert!(pick(&r[2..3], "en", "ja").is_empty());
+    }
+
+    #[test]
     fn installed_is_read_from_the_disk_and_remove_really_deletes() {
         let dir = std::env::temp_dir().join("hyphn-translate-remove");
         let _ = std::fs::remove_dir_all(&dir);
@@ -400,6 +430,8 @@ mod tests {
             rec("model.ende", "model", "3.0", "en", "de", ""),
             rec("vocab.ende", "vocab", "3.0", "en", "de", ""),
             rec("model.enzh", "model", "3.0", "en", "zh-Hans", ""),
+            rec("vocab.enzh", "vocab", "3.0", "en", "zh-Hans", ""),
+            rec("vocab.fren", "vocab", "3.0", "fr", "en", ""),
         ];
         for (i, x) in r.iter_mut().enumerate() {
             x.decompressed_hash = format!("{i:0>64}");
@@ -413,12 +445,12 @@ mod tests {
         std::fs::remove_file(local(&dir, &r[3])).unwrap();
         assert_eq!(installed(&dir), vec!["en", "zh"]);
         // Removing Chinese deletes its file; English stays while it is needed.
-        assert_eq!(remove(&dir, "zh").unwrap(), 5);
+        assert_eq!(remove(&dir, "zh").unwrap(), 10);
         assert!(!local(&dir, &r[4]).exists());
         assert_eq!(remove(&dir, "de").unwrap(), 5);
         assert_eq!(installed(&dir), vec!["en"]);
         // The last one: English and the engine go too.
-        assert_eq!(remove(&dir, "en").unwrap(), 10);
+        assert_eq!(remove(&dir, "en").unwrap(), 15);
         assert!(installed(&dir).is_empty());
         assert!(plan(&dir, &["de".to_string()]).is_err());
     }
@@ -433,6 +465,7 @@ mod tests {
             rec("model.fren", "model", "3.0", "fr", "en", ""),
             rec("model.ende", "model", "3.0", "en", "de", ""),
             rec("vocab.ende", "vocab", "3.0", "en", "de", ""),
+            rec("vocab.fren", "vocab", "3.0", "fr", "en", ""),
         ];
         for (i, x) in old.iter_mut().enumerate() {
             x.decompressed_hash = format!("{i:0>64}");

@@ -1040,6 +1040,29 @@ Video.detect();
 
 const LENS_L = ['0,5×', '1×', '2×', '5×'];
 
+// A sentence wider than the picture shrinks until it fits, on one line, like
+// the webcam does (feed.cpp). Runs whenever a waiting screen is put on screen.
+function fitWait(root) {
+  for (const wl of root.querySelectorAll('.wmsg .wl:not(.still)')) {
+    wl.style.transform = '';
+    let l = Infinity, r = -Infinity;
+    for (const ch of wl.children) {
+      const b = ch.getBoundingClientRect();
+      l = Math.min(l, b.left);
+      r = Math.max(r, b.right);
+    }
+    const k = wl.getBoundingClientRect().width / (r - l);
+    if (k < 1) wl.style.transform = `scale(${k.toFixed(3)})`;
+  }
+}
+new MutationObserver((list) => {
+  for (const m of list) {
+    for (const n of m.addedNodes) {
+      if (n.nodeType === 1 && (n.classList.contains('wait2') || n.querySelector('.wait2'))) document.fonts.ready.then(() => fitWait(n));
+    }
+  }
+}).observe(document.body, { childList: true, subtree: true });
+
 // The waiting screen (ADR-0018): what Discord and OBS see while paused. The
 // Windows webcam draws the same design itself (apps/desktop-vcam).
 function waitScreen(c, sub) {

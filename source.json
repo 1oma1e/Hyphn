@@ -24,7 +24,7 @@
           "version": "0.9.1",
           "buildVersion": "16",
           "date": "2026-11-16",
-          "localizedDescription": "Automatic updates: Hyphn now offers new versions by itself on the PC, and SideStore shows iPhone updates.",
+          "localizedDescription": "Automatic updates on the PC and in SideStore. Fixes: Russian translation, long waiting messages shrink to fit, settings switches.",
           "downloadURL": "https://github.com/1oma1e/Hyphn/releases/download/v0.2.0/Hyphn_0.9.1.ipa",
           "size": 2933386,
           "minOSVersion": "17.0"
